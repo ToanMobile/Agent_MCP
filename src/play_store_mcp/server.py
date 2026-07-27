@@ -28,6 +28,7 @@ from starlette.responses import JSONResponse
 from play_store_mcp.analytics_client import AnalyticsDataClient
 from play_store_mcp.bigquery_client import BigQueryClient
 from play_store_mcp.client import PlayStoreClient, PlayStoreClientError
+from play_store_mcp.crashlytics_client import CrashlyticsClient
 from play_store_mcp.reporting_client import ReportingClient, _parse_reporting_rows
 
 # Configure structured logging to stderr (stdout is reserved for MCP JSON-RPC)
@@ -100,6 +101,36 @@ def get_reporting_client_from_context() -> ReportingClient:
     return reporting_client
 
 
+def get_crashlytics_client_from_context() -> CrashlyticsClient:
+    """Resolve a Firebase Crashlytics client for the current request."""
+    headers = get_http_headers() or {}
+
+    if "x-google-credentials" in headers:
+        try:
+            credentials_json = json.loads(headers["x-google-credentials"])
+        except json.JSONDecodeError as e:
+            raise PlayStoreClientError(f"Invalid JSON in X-Google-Credentials header: {e}") from e
+        return CrashlyticsClient(credentials_json=credentials_json)
+
+    if "x-google-credentials-base64" in headers:
+        try:
+            credentials_bytes = base64.b64decode(headers["x-google-credentials-base64"])
+            credentials_json = json.loads(credentials_bytes.decode("utf-8"))
+        except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise PlayStoreClientError(
+                f"Invalid base64 or JSON in X-Google-Credentials-Base64 header: {e}"
+            ) from e
+        return CrashlyticsClient(credentials_json=credentials_json)
+
+    crashlytics_client: CrashlyticsClient | None = _shared_state.get("crashlytics_client")
+    if crashlytics_client is not None:
+        return crashlytics_client
+
+    crashlytics_client = CrashlyticsClient()
+    _shared_state["crashlytics_client"] = crashlytics_client
+    return crashlytics_client
+
+
 def get_bigquery_client_from_context() -> BigQueryClient:
     """Resolve a BigQueryClient (raw event/crash/session data) for the current request.
 
@@ -138,6 +169,7 @@ _shared_state: dict[str, Any] = {
     "client": None,
     "credentials_updated": False,
     "reporting_client": None,
+    "crashlytics_client": None,
     "bigquery_client": None,
     "analytics_client": None,
 }
@@ -834,6 +866,39 @@ def get_error_reports(
         "reports": reports,
         "totalReports": len(reports),
     }
+
+
+@mcp.tool()
+def close_crashlytics_issue(
+    project_id: str,
+    app_id: str,
+    issue_id: str,
+) -> dict[str, Any]:
+    """Close a Firebase Crashlytics issue, including fatal crashes and Android ANRs.
+
+    This changes the issue state in Firebase Crashlytics to CLOSED. It does not
+    close the similarly named Android Vitals issue in Google Play Console,
+    because the public Play Developer Reporting API only supports searching
+    those issues and exposes no state-update endpoint.
+
+    Disabled in read-only mode.
+
+    Args:
+        project_id: Firebase/Google Cloud project ID
+        app_id: Firebase app ID (for example, 1:1234567890:android:abcdef)
+        issue_id: Crashlytics issue ID, not the full resource name
+
+    Returns:
+        The updated Firebase Crashlytics issue with state CLOSED
+    """
+    if blocked := _read_only_block("close_crashlytics_issue"):
+        return blocked
+    client = get_crashlytics_client_from_context()
+    return client.close_issue(
+        project_id=project_id,
+        app_id=app_id,
+        issue_id=issue_id,
+    )
 
 
 @mcp.tool()
@@ -4205,6 +4270,9 @@ async def update_credentials(request: Request) -> JSONResponse:
 
         # Update the client in the shared state
         _shared_state["client"] = new_client
+        _shared_state["crashlytics_client"] = CrashlyticsClient(
+            credentials_json=new_client._credentials_json
+        )
         _shared_state["credentials_updated"] = True
 
         logger.info("Credentials updated successfully via HTTP endpoint")

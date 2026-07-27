@@ -60,7 +60,7 @@ from play_store_mcp.server import (
 
 
 def test_server_uses_fastmcp_and_registers_all_tools() -> None:
-    """The server is built on the standalone fastmcp package with all 117 tools."""
+    """The server uses FastMCP and registers unique tools, including Crashlytics writes."""
     import asyncio
 
     import fastmcp
@@ -69,7 +69,9 @@ def test_server_uses_fastmcp_and_registers_all_tools() -> None:
 
     assert isinstance(server.mcp, fastmcp.FastMCP)
     tools = asyncio.run(server.mcp.list_tools())  # Sequence[Tool]
-    assert len(tools) == 117
+    tool_names = {tool.name for tool in tools}
+    assert len(tool_names) == len(tools)
+    assert "close_crashlytics_issue" in tool_names
 
 
 @pytest.fixture

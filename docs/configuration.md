@@ -133,7 +133,7 @@ Per-request credentials are isolated — each request uses only the credentials 
 
 ## Read-Only Mode
 
-Enable read-only mode to guarantee the server performs no writes against the Play Developer API — useful for demos, audits, or pointing at a production app. When active, all write/mutating tools (deploy, promote, rollout control, review replies, listing/tester updates, catalog create/update/delete, purchase management, uploads, etc.) return an error and never contact the API; all read and validation tools work normally.
+Enable read-only mode to guarantee the server performs no writes against the Play Developer or Firebase Crashlytics APIs — useful for demos, audits, or pointing at a production app. When active, all write/mutating tools (deploy, promote, rollout control, review replies, Crashlytics issue closing, listing/tester updates, catalog create/update/delete, purchase management, uploads, etc.) return an error and never contact the API; all read and validation tools work normally.
 
 Enable it with the CLI flag:
 

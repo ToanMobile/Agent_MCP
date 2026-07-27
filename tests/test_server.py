@@ -40,6 +40,7 @@ class TestServerTools:
             "get_app_details",
             "get_reviews",
             "reply_to_review",
+            "close_crashlytics_issue",
             "list_subscriptions",
             "get_subscription_status",
             "list_voided_purchases",

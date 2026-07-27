@@ -11,8 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added `close_crashlytics_issue`, backed by the Firebase Crashlytics v1alpha
+  issue `patch` API, to close fatal-crash and Android-ANR issues. It supports
+  file, environment, per-request header, and `/credentials` service-account
+  credentials and is blocked by read-only mode.
+
 ### Planned
-- Consolidate and reduce the MCP tool surface (now 117 tools) by grouping
+- Consolidate and reduce the MCP tool surface by grouping
   related operations, to lower per-request tool-list overhead — with no planned
   loss of functionality.
 

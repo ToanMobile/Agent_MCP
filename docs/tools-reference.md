@@ -34,6 +34,27 @@ Complete reference for all MCP tools provided by the Play Store MCP server.
 | [`get_review`](tools/reviews.md#get_review) | Fetch a single review by ID |
 | [`reply_to_review`](tools/reviews.md#reply_to_review) | Reply to a user review |
 
+## App Health and Crashlytics Tools
+
+| Tool | Description |
+|---|---|
+| `get_crash_rate` | Fetch daily Android Vitals crash rate from Google Play |
+| `get_anr_rate` | Fetch daily Android Vitals ANR rate from Google Play |
+| `get_vitals_summary` | Summarize crash and ANR rates by version code |
+| `list_error_issues` | List recent Google Play Android Vitals error issues |
+| `get_error_reports` | Fetch Google Play error reports and stack traces |
+| `close_crashlytics_issue` | Close a Firebase Crashlytics crash or ANR issue (write) |
+
+`close_crashlytics_issue` requires `project_id`, the Firebase `app_id`, and the
+Crashlytics `issue_id`. The service account needs
+`roles/firebasecrashlytics.admin` (or another role containing
+`firebasecrashlytics.issues.update`). It is blocked when the server is in
+read-only mode.
+
+Google Play's public Developer Reporting API does not expose an issue state
+update method, so `list_error_issues` remains read-only and Firebase issue state
+changes are not mirrored to Play Console.
+
 ## Subscription Tools
 
 | Tool | Description |

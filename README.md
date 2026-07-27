@@ -28,6 +28,7 @@ An MCP (Model Context Protocol) server that connects to the Google Play Develope
 - 📈 **Release Management** — Promote releases between tracks, manage staged rollouts
 - 👥 **Tester Management** — Add and manage testers for testing tracks
 - ⭐ **Review Management** — Fetch and reply to user reviews
+- 🔥 **Crashlytics Issue Management** — Close Firebase crash and ANR issues after they are fixed
 - 💳 **Subscription Management** — List subscriptions and check purchase status
 - 🛒 **In-App Products** — List and manage in-app products
 - 📦 **Expansion Files** — Manage APK expansion files for large apps
@@ -84,6 +85,16 @@ Set the path to your service account key:
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 ```
+
+To use `close_crashlytics_issue`, enable the Firebase Crashlytics API and grant
+the service account **Firebase Crashlytics Admin**
+(`roles/firebasecrashlytics.admin`). The tool accepts the Firebase project ID,
+app ID, and issue ID, and closes both fatal-crash and Android-ANR issues.
+
+Google Play Android Vitals issues remain read-only: the public Play Developer
+Reporting API only exposes issue search and has no endpoint for changing an
+issue state. Closing a Firebase Crashlytics issue does not close the
+corresponding-looking issue in Play Console.
 
 ### Running with HTTP Transport
 

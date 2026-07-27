@@ -47,6 +47,7 @@ async def test_update_credentials_with_json_object(mock_credentials):
         data = json.loads(response.body)
         assert data["success"] is True
         assert "updated successfully" in data["message"]
+        assert isinstance(server._shared_state["crashlytics_client"], server.CrashlyticsClient)
 
 
 @pytest.mark.asyncio
