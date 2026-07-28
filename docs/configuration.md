@@ -108,6 +108,10 @@ For multi-tenant deployments, clients can pass their own Google service account 
 | `X-Google-Credentials-Base64` | Base64-encoded service account JSON key (recommended) |
 | `X-Google-Credentials` | Raw JSON service account key string |
 
+Either header applies to every tool, across all five API clients — Publisher, Crashlytics,
+Vitals/Reporting, BigQuery and Analytics. A request that carries one never falls back to the
+server's own ambient credentials for some subset of tools.
+
 To encode your credentials:
 
 ```bash

@@ -30,11 +30,12 @@ def _issues(service: MagicMock) -> MagicMock:
     return service.projects.return_value.apps.return_value.issues.return_value
 
 
+ISSUE_ID = "c07d6e046632025ecd72f628ee1bf2ce"
+ISSUE_NAME = f"projects/my-project/apps/1:123:android:abc/issues/{ISSUE_ID}"
+
+
 def test_issue_resource_name() -> None:
-    assert (
-        _issue_resource_name("my-project", "1:123:android:abc", "issue-42")
-        == "projects/my-project/apps/1:123:android:abc/issues/issue-42"
-    )
+    assert _issue_resource_name("my-project", "1:123:android:abc", ISSUE_ID) == ISSUE_NAME
 
 
 @pytest.mark.parametrize(
@@ -49,13 +50,29 @@ def test_issue_resource_name_rejects_invalid_segments(
     message: str,
 ) -> None:
     with pytest.raises(PlayStoreClientError, match=message):
-        _issue_resource_name(field_value, "app", "issue")
+        _issue_resource_name(field_value, "app", ISSUE_ID)
+
+
+@pytest.mark.parametrize(
+    "issue_id",
+    [
+        "c07d6e04",  # truncated prefix
+        f"{ISSUE_ID}0",  # too long
+        "C07D6E046632025ECD72F628EE1BF2CE",  # uppercase
+        "g07d6e046632025ecd72f628ee1bf2cz",  # non-hex characters
+        "issue-42",
+    ],
+)
+def test_issue_resource_name_rejects_malformed_issue_id(issue_id: str) -> None:
+    """The API answers a malformed issue ID with 500 INTERNAL, so reject it locally."""
+    with pytest.raises(PlayStoreClientError, match="32-character lowercase hex"):
+        _issue_resource_name("my-project", "1:123:android:abc", issue_id)
 
 
 def test_close_issue_sets_closed_state() -> None:
     service = MagicMock()
     expected = {
-        "name": "projects/my-project/apps/1:123:android:abc/issues/issue-42",
+        "name": ISSUE_NAME,
         "state": "CLOSED",
         "errorType": "ANR",
     }
@@ -63,14 +80,14 @@ def test_close_issue_sets_closed_state() -> None:
     client = CrashlyticsClient(credentials_json={"type": "service_account"})
     client._service = service
 
-    result = client.close_issue("my-project", "1:123:android:abc", "issue-42")
+    result = client.close_issue("my-project", "1:123:android:abc", ISSUE_ID)
 
     assert result == expected
     _issues(service).patch.assert_called_once_with(
-        name="projects/my-project/apps/1:123:android:abc/issues/issue-42",
+        name=ISSUE_NAME,
         updateMask="state",
         body={
-            "name": "projects/my-project/apps/1:123:android:abc/issues/issue-42",
+            "name": ISSUE_NAME,
             "state": "CLOSED",
         },
     )
@@ -86,7 +103,22 @@ def test_close_issue_wraps_http_error() -> None:
         PlayStoreClientError,
         match="Failed to close Firebase Crashlytics issue: denied",
     ):
-        client.close_issue("my-project", "1:123:android:abc", "issue-42")
+        client.close_issue("my-project", "1:123:android:abc", ISSUE_ID)
+
+
+def test_close_issue_does_not_retry_server_errors() -> None:
+    """An unknown issue ID yields 500 INTERNAL; retrying it only wastes the backoff."""
+    service = MagicMock()
+    error = _make_http_error("Internal error encountered.")
+    error.resp.status = 500
+    _issues(service).patch.return_value.execute.side_effect = error
+    client = CrashlyticsClient(credentials_json={"type": "service_account"})
+    client._service = service
+
+    with pytest.raises(PlayStoreClientError):
+        client.close_issue("my-project", "1:123:android:abc", ISSUE_ID)
+
+    assert _issues(service).patch.return_value.execute.call_count == 1
 
 
 def test_get_service_uses_firebase_scope_and_discovery_api() -> None:
@@ -94,8 +126,7 @@ def test_get_service_uses_firebase_scope_and_discovery_api() -> None:
     service = MagicMock()
     with (
         patch(
-            "play_store_mcp.crashlytics_client.service_account.Credentials"
-            ".from_service_account_info",
+            "play_store_mcp.credentials.service_account.Credentials.from_service_account_info",
             return_value=credentials,
         ) as from_info,
         patch(
@@ -111,11 +142,15 @@ def test_get_service_uses_firebase_scope_and_discovery_api() -> None:
         {"type": "service_account"},
         scopes=CRASHLYTICS_SCOPES,
     )
+    # static_discovery must be False: firebasecrashlytics v1alpha has no bundled
+    # discovery document, so the google-api-python-client 2.x default raises
+    # UnknownApiNameOrVersion before any request is made.
     build.assert_called_once_with(
         "firebasecrashlytics",
         "v1alpha",
         credentials=credentials,
         cache_discovery=False,
+        static_discovery=False,
     )
 
 
@@ -141,14 +176,14 @@ def test_close_crashlytics_issue_tool() -> None:
         result = server.close_crashlytics_issue(
             "my-project",
             "1:123:android:abc",
-            "issue-42",
+            ISSUE_ID,
         )
 
     assert result == {"state": "CLOSED", "errorType": "FATAL"}
     client.close_issue.assert_called_once_with(
         project_id="my-project",
         app_id="1:123:android:abc",
-        issue_id="issue-42",
+        issue_id=ISSUE_ID,
     )
 
 

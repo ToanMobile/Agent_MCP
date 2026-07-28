@@ -136,8 +136,13 @@ else:
    `Authorization: Bearer` header. Proxy-level auth (e.g. `auth_basic`) is a useful extra
    layer but must not be the *only* gate.
 3. **Network isolation**: Run the server in a private network or use VPN
-4. **Credential rotation**: Regularly rotate service account keys and the admin token
-5. **Audit logging**: Monitor credential update requests
+4. **Credential rotation**: Regularly rotate service account keys and the admin token.
+   A successful `POST /credentials` replaces *every* cached client (Publisher, Crashlytics,
+   Vitals/Reporting, BigQuery, Analytics), so no client keeps serving requests with the
+   rotated-out key.
+5. **Audit logging**: Monitor credential update requests. Note that server logs deliberately
+   omit traceback locals — the credential-loading frames hold the parsed service account, so
+   rendering them would write `private_key` into the log stream.
 6. **Use a strong token and rate-limit**: Generate a high-entropy token (e.g.
    `openssl rand -hex 32`) and throttle repeated invalid `Authorization` attempts at the
    reverse proxy (e.g. nginx `limit_req`), since the endpoint itself does not rate-limit.

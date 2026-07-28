@@ -46,7 +46,8 @@ Complete reference for all MCP tools provided by the Play Store MCP server.
 | `close_crashlytics_issue` | Close a Firebase Crashlytics crash or ANR issue (write) |
 
 `close_crashlytics_issue` requires `project_id`, the Firebase `app_id`, and the
-Crashlytics `issue_id`. The service account needs
+Crashlytics `issue_id` — the full 32-character lowercase hex ID (for example,
+`c07d6e046632025ecd72f628ee1bf2ce`), not a truncated prefix. The service account needs
 `roles/firebasecrashlytics.admin` (or another role containing
 `firebasecrashlytics.issues.update`). It is blocked when the server is in
 read-only mode.

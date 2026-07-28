@@ -10,15 +10,14 @@ from __future__ import annotations
 import os
 import threading
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from play_store_mcp.client import PlayStoreClientError, _run_with_backoff
+from play_store_mcp.credentials import load_service_account_credentials
 
 if TYPE_CHECKING:
     from googleapiclient._apis.playdeveloperreporting.v1beta1 import (
@@ -67,7 +66,7 @@ class ReportingClient:
         credentials_json: str | dict[str, Any] | None = None,
     ) -> None:
         self._credentials_path = credentials_path or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-        self._credentials_json = credentials_json
+        self._credentials_json = credentials_json or os.environ.get("GOOGLE_PLAY_STORE_CREDENTIALS")
         self._service: PlayDeveloperReportingResource | None = None
         self._http_lock = threading.Lock()
         self._logger = logger.bind(component="ReportingClient")
@@ -77,23 +76,13 @@ class ReportingClient:
             return self._service
 
         self._logger.info("Initializing Play Developer Reporting API client")
-        credentials = None
         try:
-            if isinstance(self._credentials_json, dict):
-                credentials = service_account.Credentials.from_service_account_info(
-                    self._credentials_json, scopes=REPORTING_SCOPES
-                )
-            elif not credentials and self._credentials_path:
-                creds_path = Path(self._credentials_path)
-                if creds_path.exists():
-                    credentials = service_account.Credentials.from_service_account_file(
-                        str(creds_path), scopes=REPORTING_SCOPES
-                    )
-
-            if not credentials:
-                raise PlayStoreClientError(
-                    "No valid credentials found for Reporting API. Set GOOGLE_APPLICATION_CREDENTIALS."
-                )
+            credentials = load_service_account_credentials(
+                credentials_json=self._credentials_json,
+                credentials_path=self._credentials_path,
+                scopes=REPORTING_SCOPES,
+                api_label="Play Developer Reporting API",
+            )
 
             self._service = build(
                 "playdeveloperreporting",

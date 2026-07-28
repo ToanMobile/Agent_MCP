@@ -2,22 +2,26 @@
 
 from __future__ import annotations
 
-import json
 import os
+import re
 import threading
-from pathlib import Path
 from typing import Any, cast
 
 import structlog
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from play_store_mcp.client import PlayStoreClientError, _run_with_backoff
+from play_store_mcp.credentials import load_service_account_credentials
 
 logger = structlog.get_logger(__name__)
 
 CRASHLYTICS_SCOPES = ["https://www.googleapis.com/auth/firebase"]
+
+# Crashlytics issue IDs are 32 lowercase hex characters. The API answers an
+# unknown or truncated ID with 500 INTERNAL rather than 404, so validating the
+# shape here turns an opaque "Internal error encountered." into a clear message.
+_ISSUE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
 def _issue_resource_name(project_id: str, app_id: str, issue_id: str) -> str:
@@ -35,6 +39,12 @@ def _issue_resource_name(project_id: str, app_id: str, issue_id: str) -> str:
         if "/" in value:
             raise PlayStoreClientError(f"{field} must be an ID, not a resource path containing '/'")
         normalized[field] = value
+
+    if not _ISSUE_ID_RE.match(normalized["issue_id"]):
+        raise PlayStoreClientError(
+            "issue_id must be a full 32-character lowercase hex Crashlytics issue ID "
+            f"(for example, c07d6e046632025ecd72f628ee1bf2ce), got {normalized['issue_id']!r}"
+        )
 
     return (
         f"projects/{normalized['project_id']}/apps/{normalized['app_id']}"
@@ -63,36 +73,25 @@ class CrashlyticsClient:
             return self._service
 
         self._logger.info("Initializing Firebase Crashlytics API client")
-        credentials = None
         try:
-            credentials_json = self._credentials_json
-            if isinstance(credentials_json, str):
-                credentials_json = json.loads(credentials_json)
+            credentials = load_service_account_credentials(
+                credentials_json=self._credentials_json,
+                credentials_path=self._credentials_path,
+                scopes=CRASHLYTICS_SCOPES,
+                api_label="Firebase Crashlytics API",
+            )
 
-            if isinstance(credentials_json, dict):
-                credentials = service_account.Credentials.from_service_account_info(
-                    credentials_json,
-                    scopes=CRASHLYTICS_SCOPES,
-                )
-            elif self._credentials_path:
-                credentials_path = Path(self._credentials_path)
-                if credentials_path.exists():
-                    credentials = service_account.Credentials.from_service_account_file(
-                        str(credentials_path),
-                        scopes=CRASHLYTICS_SCOPES,
-                    )
-
-            if not credentials:
-                raise PlayStoreClientError(
-                    "No valid credentials found for Firebase Crashlytics API. "
-                    "Set GOOGLE_APPLICATION_CREDENTIALS."
-                )
-
+            # static_discovery=False is required: google-api-python-client only
+            # ships bundled discovery documents for a subset of APIs, and
+            # firebasecrashlytics v1alpha is not one of them. With the 2.x
+            # default (static_discovery=True) build() raises
+            # UnknownApiNameOrVersion before any request is made.
             self._service = build(
                 "firebasecrashlytics",
                 "v1alpha",
                 credentials=credentials,
                 cache_discovery=False,
+                static_discovery=False,
             )
             self._logger.info("Firebase Crashlytics API client initialized successfully")
             return self._service
@@ -112,9 +111,11 @@ class CrashlyticsClient:
             with self._http_lock:
                 return request.execute()
 
-        # Updating an issue to a specific state is idempotent, so transient
-        # server errors are safe to retry.
-        return _run_with_backoff(_locked_execute, retry_server_errors=True)
+        # The patch is idempotent, but the Crashlytics API answers a valid-looking
+        # yet unknown issue ID with 500 INTERNAL. Retrying that just burns the
+        # whole backoff before reporting a failure that will never succeed, so
+        # fail fast on server errors and let 429s still be retried.
+        return _run_with_backoff(_locked_execute, retry_server_errors=False)
 
     def close_issue(
         self,
@@ -122,7 +123,11 @@ class CrashlyticsClient:
         app_id: str,
         issue_id: str,
     ) -> dict[str, Any]:
-        """Close a Firebase Crashlytics crash, non-fatal, or ANR issue."""
+        """Close a Firebase Crashlytics crash, non-fatal, or ANR issue.
+
+        ``issue_id`` must be the full 32-character lowercase hex issue ID; the
+        API answers a truncated or unknown ID with 500 INTERNAL, not 404.
+        """
         name = _issue_resource_name(project_id, app_id, issue_id)
         service = self._get_service()
         try:

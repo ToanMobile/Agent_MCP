@@ -14,7 +14,7 @@ import secrets
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 import uvicorn
@@ -38,12 +38,54 @@ structlog.configure(
     processors=[
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.add_log_level,
-        structlog.dev.ConsoleRenderer(),
+        # show_locals=False is a security control, not a style choice.
+        # RichTracebackFormatter defaults it to True, which renders every
+        # frame's locals — and the credential-loading frames hold the parsed
+        # service account dict, so a malformed key would print its own
+        # private_key into stderr (and from there into Docker/k8s/IDE logs).
+        structlog.dev.ConsoleRenderer(
+            exception_formatter=structlog.dev.RichTracebackFormatter(show_locals=False),
+        ),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
     logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
 )
 logger = structlog.get_logger(__name__)
+
+
+def _credentials_from_request_headers() -> dict[str, Any] | None:
+    """Parse per-request service account credentials from the request headers.
+
+    Returns the parsed credentials, or None when the request carries none and
+    the caller should fall back to the shared client.
+
+    Every client resolver must consult this. When only some of them did, a
+    request authenticated as one tenant silently executed against the server's
+    own ambient credentials on the resolvers that ignored the headers.
+
+    Raises:
+        PlayStoreClientError: if a header is present but malformed.
+    """
+    headers = get_http_headers() or {}
+
+    if "x-google-credentials" in headers:
+        try:
+            parsed = json.loads(headers["x-google-credentials"])
+        except json.JSONDecodeError as e:
+            raise PlayStoreClientError(f"Invalid JSON in X-Google-Credentials header: {e}") from e
+        return cast("dict[str, Any]", parsed)
+
+    if "x-google-credentials-base64" in headers:
+        try:
+            creds_bytes = base64.b64decode(headers["x-google-credentials-base64"])
+            parsed = json.loads(creds_bytes.decode("utf-8"))
+        except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise PlayStoreClientError(
+                f"Invalid base64 or JSON in X-Google-Credentials-Base64 header: {e}"
+            ) from e
+        return cast("dict[str, Any]", parsed)
+
+    return None
 
 
 def get_client_from_context() -> PlayStoreClient:
@@ -56,24 +98,9 @@ def get_client_from_context() -> PlayStoreClient:
     Raises:
         PlayStoreClientError: if credentials are invalid or unavailable.
     """
-    headers = get_http_headers() or {}
-
-    if "x-google-credentials" in headers:
-        try:
-            creds_json = json.loads(headers["x-google-credentials"])
-        except json.JSONDecodeError as e:
-            raise PlayStoreClientError(f"Invalid JSON in X-Google-Credentials header: {e}") from e
-        return PlayStoreClient(credentials_json=creds_json)
-
-    if "x-google-credentials-base64" in headers:
-        try:
-            creds_bytes = base64.b64decode(headers["x-google-credentials-base64"])
-            creds_json = json.loads(creds_bytes.decode("utf-8"))
-        except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as e:
-            raise PlayStoreClientError(
-                f"Invalid base64 or JSON in X-Google-Credentials-Base64 header: {e}"
-            ) from e
-        return PlayStoreClient(credentials_json=creds_json)
+    per_request = _credentials_from_request_headers()
+    if per_request is not None:
+        return PlayStoreClient(credentials_json=per_request)
 
     client: PlayStoreClient | None = _shared_state.get("client")
     if client is not None:
@@ -92,6 +119,10 @@ def get_reporting_client_from_context() -> ReportingClient:
     Publisher API scope PlayStoreClient uses, so this is intentionally a
     distinct client/credential path rather than reusing get_client_from_context.
     """
+    per_request = _credentials_from_request_headers()
+    if per_request is not None:
+        return ReportingClient(credentials_json=per_request)
+
     reporting_client: ReportingClient | None = _shared_state.get("reporting_client")
     if reporting_client is not None:
         return reporting_client
@@ -103,24 +134,9 @@ def get_reporting_client_from_context() -> ReportingClient:
 
 def get_crashlytics_client_from_context() -> CrashlyticsClient:
     """Resolve a Firebase Crashlytics client for the current request."""
-    headers = get_http_headers() or {}
-
-    if "x-google-credentials" in headers:
-        try:
-            credentials_json = json.loads(headers["x-google-credentials"])
-        except json.JSONDecodeError as e:
-            raise PlayStoreClientError(f"Invalid JSON in X-Google-Credentials header: {e}") from e
-        return CrashlyticsClient(credentials_json=credentials_json)
-
-    if "x-google-credentials-base64" in headers:
-        try:
-            credentials_bytes = base64.b64decode(headers["x-google-credentials-base64"])
-            credentials_json = json.loads(credentials_bytes.decode("utf-8"))
-        except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as e:
-            raise PlayStoreClientError(
-                f"Invalid base64 or JSON in X-Google-Credentials-Base64 header: {e}"
-            ) from e
-        return CrashlyticsClient(credentials_json=credentials_json)
+    per_request = _credentials_from_request_headers()
+    if per_request is not None:
+        return CrashlyticsClient(credentials_json=per_request)
 
     crashlytics_client: CrashlyticsClient | None = _shared_state.get("crashlytics_client")
     if crashlytics_client is not None:
@@ -137,6 +153,10 @@ def get_bigquery_client_from_context() -> BigQueryClient:
     BigQuery requires the bigquery.readonly scope, separate from the Publisher
     and Reporting API scopes, so this is its own client/credential path.
     """
+    per_request = _credentials_from_request_headers()
+    if per_request is not None:
+        return BigQueryClient(credentials_json=per_request)
+
     bigquery_client: BigQueryClient | None = _shared_state.get("bigquery_client")
     if bigquery_client is not None:
         return bigquery_client
@@ -152,6 +172,10 @@ def get_analytics_client_from_context() -> AnalyticsDataClient:
     Requires the analytics.readonly scope, separate from the other clients'
     scopes, so this is its own client/credential path.
     """
+    per_request = _credentials_from_request_headers()
+    if per_request is not None:
+        return AnalyticsDataClient(credentials_json=per_request)
+
     analytics_client: AnalyticsDataClient | None = _shared_state.get("analytics_client")
     if analytics_client is not None:
         return analytics_client
@@ -860,7 +884,9 @@ def close_crashlytics_issue(
     Args:
         project_id: Firebase/Google Cloud project ID
         app_id: Firebase app ID (for example, 1:1234567890:android:abcdef)
-        issue_id: Crashlytics issue ID, not the full resource name
+        issue_id: Full 32-character lowercase hex Crashlytics issue ID (for
+            example, c07d6e046632025ecd72f628ee1bf2ce), not the full resource
+            name and not a truncated prefix
 
     Returns:
         The updated Firebase Crashlytics issue with state CLOSED
@@ -4238,11 +4264,15 @@ async def update_credentials(request: Request) -> JSONResponse:
                 status_code=401,
             )
 
-        # Update the client in the shared state
+        # Replace every cached client, not just the Play one. Rotation is often
+        # a response to a leaked key, so any client left holding the previous
+        # credentials would keep using the compromised key until restart.
+        rotated = new_client._credentials_json
         _shared_state["client"] = new_client
-        _shared_state["crashlytics_client"] = CrashlyticsClient(
-            credentials_json=new_client._credentials_json
-        )
+        _shared_state["crashlytics_client"] = CrashlyticsClient(credentials_json=rotated)
+        _shared_state["reporting_client"] = ReportingClient(credentials_json=rotated)
+        _shared_state["bigquery_client"] = BigQueryClient(credentials_json=rotated)
+        _shared_state["analytics_client"] = AnalyticsDataClient(credentials_json=rotated)
         _shared_state["credentials_updated"] = True
 
         logger.info("Credentials updated successfully via HTTP endpoint")

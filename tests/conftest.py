@@ -49,7 +49,7 @@ def _reset_shared_state() -> Generator[None, None, None]:
 def _mock_credentials() -> Generator[MagicMock, None, None]:
     """Mock Google credentials."""
     with patch(
-        "play_store_mcp.client.service_account.Credentials.from_service_account_file"
+        "play_store_mcp.credentials.service_account.Credentials.from_service_account_file"
     ) as mock:
         mock.return_value = MagicMock()
         yield mock

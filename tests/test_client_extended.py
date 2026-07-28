@@ -157,7 +157,7 @@ class TestGetServiceErrors:
 
         with (
             patch(
-                "play_store_mcp.client.service_account.Credentials.from_service_account_file",
+                "play_store_mcp.credentials.service_account.Credentials.from_service_account_file",
                 side_effect=ValueError("bad creds"),
             ),
             pytest.raises(PlayStoreClientError, match="Failed to initialize API client"),
@@ -1345,7 +1345,7 @@ class TestCredentialsJson:
         client = PlayStoreClient(credentials_json='{"type": "service_account"}')
 
         with patch(
-            "play_store_mcp.client.service_account.Credentials.from_service_account_info"
+            "play_store_mcp.credentials.service_account.Credentials.from_service_account_info"
         ) as mock_info:
             mock_info.return_value = MagicMock()
             client._get_service()
@@ -1359,7 +1359,7 @@ class TestCredentialsJson:
         client = PlayStoreClient(credentials_json=str(creds_file))
 
         with patch(
-            "play_store_mcp.client.service_account.Credentials.from_service_account_file"
+            "play_store_mcp.credentials.service_account.Credentials.from_service_account_file"
         ) as mock_file:
             mock_file.return_value = MagicMock()
             client._get_service()
@@ -1367,18 +1367,35 @@ class TestCredentialsJson:
         mock_file.assert_called_once()
 
     def test_credentials_json_invalid_json(self, _mock_service: MagicMock) -> None:
-        """An invalid JSON string starting with '{' logs a warning and yields no creds."""
+        """A '{'-prefixed string that will not parse names the real problem.
+
+        It used to fall through to "No valid credentials found", which pointed
+        at the env var the user had in fact already set.
+        """
         client = PlayStoreClient(credentials_json="{not valid json")
 
-        with pytest.raises(PlayStoreClientError, match="No valid credentials found"):
+        with pytest.raises(PlayStoreClientError, match="look like JSON but failed to parse"):
             client._get_service()
+
+    def test_credentials_json_invalid_json_does_not_echo_the_value(
+        self, _mock_service: MagicMock
+    ) -> None:
+        """The parse error must not quote the input: on a truncated key file that is key material."""
+        secret = '{"private_key": "-----BEGIN PRIVATE KEY-----\\nSECRETMATERIAL'
+        client = PlayStoreClient(credentials_json=secret)
+
+        with pytest.raises(PlayStoreClientError) as excinfo:
+            client._get_service()
+
+        assert "SECRETMATERIAL" not in str(excinfo.value)
+        assert "BEGIN PRIVATE KEY" not in str(excinfo.value)
 
     def test_credentials_json_dict(self, _mock_service: MagicMock) -> None:
         """A dict uses from_service_account_info."""
         client = PlayStoreClient(credentials_json={"type": "service_account"})
 
         with patch(
-            "play_store_mcp.client.service_account.Credentials.from_service_account_info"
+            "play_store_mcp.credentials.service_account.Credentials.from_service_account_info"
         ) as mock_info:
             mock_info.return_value = MagicMock()
             client._get_service()

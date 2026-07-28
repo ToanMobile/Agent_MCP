@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import json
 import os
 import random
 import re
@@ -16,11 +15,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
+from play_store_mcp.credentials import load_service_account_credentials
+from play_store_mcp.errors import PlayStoreClientError
 from play_store_mcp.models import (
     AccessResult,
     Apk,
@@ -96,8 +96,7 @@ _REVOCATION_CONTEXTS: dict[str, dict[str, dict]] = {
 }
 
 
-class PlayStoreClientError(Exception):
-    """Base exception for Play Store client errors."""
+__all__ = ["PlayStoreClient", "PlayStoreClientError"]
 
 
 def _parse_timestamp(value: dict[str, Any] | None) -> datetime | None:
@@ -388,46 +387,12 @@ class PlayStoreClient:
         self._logger.info("Initializing Google Play Developer API client")
 
         try:
-            credentials = None
-
-            # Try credentials_json first (from string or dict)
-            if self._credentials_json:
-                if isinstance(self._credentials_json, str):
-                    try:
-                        # Check if it's actually JSON or a path to a file
-                        if self._credentials_json.strip().startswith("{"):
-                            creds_info = json.loads(self._credentials_json)
-                            credentials = service_account.Credentials.from_service_account_info(
-                                creds_info, scopes=SCOPES
-                            )
-                        elif Path(self._credentials_json).exists():
-                            credentials = service_account.Credentials.from_service_account_file(
-                                self._credentials_json, scopes=SCOPES
-                            )
-                    except json.JSONDecodeError:
-                        # If it's not JSON, maybe it's a path that doesn't exist?
-                        self._logger.warning(
-                            "credentials_json string is not valid JSON and not a valid file path",
-                        )
-
-                elif isinstance(self._credentials_json, dict):
-                    credentials = service_account.Credentials.from_service_account_info(
-                        self._credentials_json, scopes=SCOPES
-                    )
-
-            # Fall back to credentials_path
-            if not credentials and self._credentials_path:
-                creds_path = Path(self._credentials_path)
-                if creds_path.exists():
-                    credentials = service_account.Credentials.from_service_account_file(
-                        str(creds_path), scopes=SCOPES
-                    )
-
-            if not credentials:
-                raise PlayStoreClientError(
-                    "No valid credentials found. Set GOOGLE_APPLICATION_CREDENTIALS (path) "
-                    "or GOOGLE_PLAY_STORE_CREDENTIALS (JSON or path)."
-                )
+            credentials = load_service_account_credentials(
+                credentials_json=self._credentials_json,
+                credentials_path=self._credentials_path,
+                scopes=SCOPES,
+                api_label="Play Developer API",
+            )
 
             self._service = build(
                 "androidpublisher",
