@@ -2,6 +2,8 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,28 +42,15 @@ type Manager struct {
 	labelCache map[string]string // package name -> tên app hiển thị, học được từ các APK đã quét
 }
 
+// NewManager giải nén adb kèm sẵn trong app ra đĩa và dùng luôn — người dùng
+// không cần cài hay trỏ đường dẫn adb thủ công nữa.
 func NewManager(cfg *Config) *Manager {
 	m := &Manager{Cfg: cfg, labelCache: map[string]string{}}
-	adbPath := cfg.AdbPath
-	if adbPath == "" || !fileExecutable(adbPath) {
-		if found, _ := DetectAdb(); found != "" {
-			adbPath = found
-		}
+	if adbPath, err := extractBundledAdb(); err == nil {
+		m.AdbPath = adbPath
 	}
-	m.AdbPath = adbPath
-	if adbPath != "" {
-		m.AaptPath = DetectAapt(adbPath)
-	}
+	m.AaptPath = DetectAapt()
 	return m
-}
-
-func (m *Manager) SetAdbPath(path string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.AdbPath = path
-	if path != "" {
-		m.AaptPath = DetectAapt(path)
-	}
 }
 
 // ---- helpers gọi adb ----
@@ -78,6 +68,101 @@ func (m *Manager) runTimeout(secs int, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(secs)*time.Second)
 	defer cancel()
 	return m.run(ctx, args...)
+}
+
+// splitLinesAndCR tách theo cả \n lẫn \r — adb in tiến trình % bằng cách ghi
+// đè dòng qua \r (như 1 progress bar trên terminal), ScanLines mặc định của
+// bufio chỉ tách theo \n nên sẽ bỏ lỡ các mốc % cập nhật qua \r.
+func splitLinesAndCR(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+		return i + 1, data[0:i], nil
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
+
+var installProgressRe = regexp.MustCompile(`\[\s*(\d+)%\]`)
+
+// runWithProgress chạy 1 lệnh adb, đọc output real-time để bắt tiến trình %
+// (nếu adb có in ra) hoặc phát nhịp theo giây nếu không có %, đồng thời trả về
+// toàn bộ output y như runTimeout() để logic thành/bại phía trên dùng tiếp.
+func (m *Manager) runWithProgress(secs int, label string, log func(string), args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(secs)*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, m.AdbPath, args...)
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	if err := cmd.Start(); err != nil {
+		pw.Close()
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	var mu sync.Mutex
+	sawPct := false
+	start := time.Now()
+
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		scanner := bufio.NewScanner(pr)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		scanner.Split(splitLinesAndCR)
+		lastPct := -1
+		for scanner.Scan() {
+			line := scanner.Text()
+			mu.Lock()
+			buf.WriteString(line)
+			buf.WriteByte('\n')
+			mu.Unlock()
+			if mm := installProgressRe.FindStringSubmatch(line); mm != nil {
+				if pct, perr := strconv.Atoi(mm[1]); perr == nil && pct != lastPct {
+					lastPct = pct
+					mu.Lock()
+					sawPct = true
+					mu.Unlock()
+					log(fmt.Sprintf("PROGRESS_PCT:%d|%s|", pct, label))
+				}
+			}
+		}
+	}()
+
+	tickStop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				mu.Lock()
+				got := sawPct
+				mu.Unlock()
+				if !got {
+					log(fmt.Sprintf("PROGRESS_TICK:%s|%ds trôi qua", label, int(time.Since(start).Seconds())))
+				}
+			case <-tickStop:
+				return
+			}
+		}
+	}()
+
+	waitErr := cmd.Wait()
+	pw.Close()
+	<-scanDone
+	close(tickStop)
+
+	mu.Lock()
+	result := buf.String()
+	mu.Unlock()
+	return result, waitErr
 }
 
 // extractError lọc output adb: bỏ dòng tiến trình (\r, %, MB/s), giữ dòng lỗi.
@@ -141,7 +226,7 @@ func explainError(err, deviceABI string) string {
 	upper := strings.ToUpper(err)
 	switch {
 	case strings.Contains(upper, "UPDATE_INCOMPATIBLE"), strings.Contains(upper, "DUPLICATE_PACKAGE"), signaturesMismatchRe.MatchString(err):
-		return "App đã cài sẵn nhưng khác chữ ký (bản mod vs bản gốc)."
+		return "Đã có app này sẵn trong thiết bị (chữ ký khác — thường do bản cài sẵn từ nhà sản xuất hoặc bản mod). Cần gỡ bản cũ ra trước khi cài bản mới, không cài đè trực tiếp được."
 	case strings.Contains(upper, "NO_MATCHING_ABIS"):
 		abi := deviceABI
 		if abi == "" {
@@ -329,13 +414,13 @@ func (m *Manager) DeviceList() ([]deviceInfo, error) {
 // (hạ cấp) khi gặp VERSION_DOWNGRADE.
 func (m *Manager) runInstall(cmdName string, args []string, log func(string)) (bool, string) {
 	full := append([]string{"-s", m.Device, cmdName, "-r", "-g"}, args...)
-	out, err := m.runTimeout(180, full...)
+	out, err := m.runWithProgress(180, "install", log, full...)
 	if err == nil && !strings.Contains(out, "Failure") && !strings.Contains(out, "Error") && !strings.Contains(out, "Exception") {
 		return true, ""
 	}
 
 	full2 := append([]string{"-s", m.Device, cmdName, "-r"}, args...)
-	out2, err2 := m.runTimeout(180, full2...)
+	out2, err2 := m.runWithProgress(180, "install", log, full2...)
 	if err2 == nil && !strings.Contains(out2, "Failure") && !strings.Contains(out2, "Error") && !strings.Contains(out2, "Exception") {
 		log("   ⚠️  Đã cài được nhưng phải bỏ -g (không cấp sẵn quyền).")
 		return true, ""
@@ -348,7 +433,7 @@ func (m *Manager) runInstall(cmdName string, args []string, log func(string)) (b
 
 	if strings.Contains(strings.ToUpper(lastErr), "VERSION_DOWNGRADE") {
 		full3 := append([]string{"-s", m.Device, cmdName, "-r", "-d"}, args...)
-		out3, err3 := m.runTimeout(180, full3...)
+		out3, err3 := m.runWithProgress(180, "install", log, full3...)
 		if err3 == nil && !strings.Contains(out3, "Failure") && !strings.Contains(out3, "Error") && !strings.Contains(out3, "Exception") {
 			log("   ⚠️  Đã cài đè bản cũ hơn (-d), dữ liệu app được giữ lại.")
 			return true, ""
@@ -437,48 +522,29 @@ func (m *Manager) UninstallPkg(pkg string, log func(string)) error {
 	return fmt.Errorf("uninstall failed")
 }
 
-// retryAfterUninstall: nếu lỗi là xung đột & AutoUninstall bật thì tự gỡ rồi cài lại.
-// Trả về (đã xử lý thành công, đã thử retry hay chưa).
-func (m *Manager) retryAfterUninstall(pkgHint, lastErr, cmdName string, args []string, log func(string)) bool {
+// reportConflict phát hiện lỗi có phải do xung đột chữ ký/phiên bản không —
+// nếu đúng, log gợi ý + gửi tín hiệu CONFLICT_PKG để frontend hiện popup hỏi
+// người dùng có muốn gỡ bản cũ rồi cài lại hay không. Không tự gỡ ngầm; việc
+// gỡ + cài lại luôn cần xác nhận, thực hiện ở request kế tiếp từ frontend.
+func (m *Manager) reportConflict(pkgHint, lastErr string, log func(string)) {
 	if !isConflictError(lastErr) {
-		return false
+		return
 	}
-	if !m.Cfg.AutoUninstall {
-		log("   💡 Xung đột cài đặt. Bật \"Tự gỡ bản cũ khi xung đột\" trong Cài đặt, hoặc vào tab Gỡ cài đặt để gỡ thủ công rồi cài lại.")
-		return false
-	}
-
 	pkg := pkgHint
 	if pkg == "" {
 		pkg = pkgFromError(lastErr)
 	}
 	if pkg == "" {
-		log("   ❌ Không xác định được package name để gỡ (thiếu aapt hoặc lỗi không rõ package).")
-		return false
+		log("   💡 Có vẻ đã cài sẵn app này với chữ ký khác, nhưng không xác định được package name để gỡ tự động — vào tab Danh sách package tự tìm & gỡ.")
+		return
 	}
-
-	log(fmt.Sprintf("   🗑️  Gỡ bản cũ %s ...", pkg))
-	ok, out := m.uninstallPkgRaw(pkg)
-	if !ok {
-		log("   ❌ Gỡ thất bại: " + strings.TrimSpace(out))
-		return false
-	}
-	log("   ✅ Đã gỡ. Đang cài lại ...")
-
-	ok2, lastErr2 := m.runInstall(cmdName, args, log)
-	if ok2 {
-		log("   ✅ Cài lại thành công.")
-		return true
-	}
-	log("   ❌ Cài lại thất bại.")
-	if hint := explainError(lastErr2, m.ABI); hint != "" {
-		log("   💡 " + hint)
-	}
-	log("   ↳ " + lastErr2)
-	return false
+	log("CONFLICT_PKG:" + pkg)
 }
 
-// InstallAPK cài 1 file .apk thường.
+// InstallAPK cài 1 file .apk thường. Để hiện được % tiến trình thật (adb chỉ
+// in % khi stdout là terminal thật, im lặng khi chạy qua exec.Command như app
+// này), app tự đẩy file lên thiết bị (tự đếm byte, báo % thật) rồi cài từ file
+// đã có sẵn trên máy thay vì gọi thẳng "adb install".
 func (m *Manager) InstallAPK(path string, log func(string)) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -489,8 +555,16 @@ func (m *Manager) InstallAPK(path string, log func(string)) (string, error) {
 
 	name := filepath.Base(path)
 	log("📦 " + name + " ...")
-	ok, lastErr := m.runInstall("install", []string{path}, log)
+
+	remotePath := "/data/local/tmp/" + sanitizeRemoteName(name)
+	if err := m.pushFileWithProgress(path, remotePath, log); err != nil {
+		log("❌ Đẩy file lên thiết bị thất bại: " + err.Error())
+		return "", err
+	}
+	defer func() { _, _ = m.runTimeout(15, "-s", m.Device, "shell", "rm", "-f", remotePath) }()
+
 	pkg := m.getPackageName(path)
+	ok, lastErr := m.runInstallOnDevice(remotePath, log)
 	if ok {
 		log("✅ Cài đặt thành công: " + name)
 		return pkg, nil
@@ -501,11 +575,89 @@ func (m *Manager) InstallAPK(path string, log func(string)) (string, error) {
 		log("   💡 " + hint)
 	}
 	log("   ↳ " + lastErr)
-
-	if m.retryAfterUninstall(pkg, lastErr, "install", []string{path}, log) {
-		return pkg, nil
-	}
+	m.reportConflict(pkg, lastErr, log)
 	return "", errors.New("install failed")
+}
+
+// runInstallOnDevice chạy "pm install" trên chính thiết bị nhắm vào file đã
+// đẩy sẵn (remotePath) — tương đương runInstall() nhưng không cần truyền lại
+// file qua adb lần nữa (đã có sẵn trên máy), thử -r -g, rồi -r, rồi -r -d.
+func (m *Manager) runInstallOnDevice(remotePath string, log func(string)) (bool, string) {
+	out, err := m.runTimeout(60, "-s", m.Device, "shell", "pm", "install", "-r", "-g", remotePath)
+	if err == nil && !strings.Contains(out, "Failure") && !strings.Contains(out, "Error") && !strings.Contains(out, "Exception") {
+		return true, ""
+	}
+
+	out2, err2 := m.runTimeout(60, "-s", m.Device, "shell", "pm", "install", "-r", remotePath)
+	if err2 == nil && !strings.Contains(out2, "Failure") && !strings.Contains(out2, "Error") && !strings.Contains(out2, "Exception") {
+		log("   ⚠️  Đã cài được nhưng phải bỏ -g (không cấp sẵn quyền).")
+		return true, ""
+	}
+
+	lastErr := extractError(out2)
+	if lastErr == "" {
+		lastErr = extractError(out)
+	}
+
+	if strings.Contains(strings.ToUpper(lastErr), "VERSION_DOWNGRADE") {
+		out3, err3 := m.runTimeout(60, "-s", m.Device, "shell", "pm", "install", "-r", "-d", remotePath)
+		if err3 == nil && !strings.Contains(out3, "Failure") && !strings.Contains(out3, "Error") && !strings.Contains(out3, "Exception") {
+			log("   ⚠️  Đã cài đè bản cũ hơn (-d), dữ liệu app được giữ lại.")
+			return true, ""
+		}
+	}
+	return false, lastErr
+}
+
+var remoteNameSanitizeRe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
+
+// sanitizeRemoteName làm sạch tên file trước khi dùng làm đường dẫn trên thiết
+// bị, tránh ký tự đặc biệt gây lỗi shell.
+func sanitizeRemoteName(name string) string {
+	cleaned := remoteNameSanitizeRe.ReplaceAllString(name, "_")
+	if cleaned == "" {
+		return "apkmanager_upload.apk"
+	}
+	return cleaned
+}
+
+// shellQuote bọc 1 chuỗi trong dấu nháy đơn an toàn cho remote shell của adb.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// pushFileWithProgress đẩy 1 file local lên thiết bị qua "adb shell cat > path"
+// thay vì "adb push" — vì adb chỉ in % khi output là terminal thật (isatty),
+// im lặng hoàn toàn khi bị redirect qua pipe (đúng như cách Go gọi lệnh con).
+// Tự đọc file cục bộ và đếm byte khi ghi vào stdin của tiến trình adb để có %
+// thật, không phụ thuộc vào việc adb có chịu in tiến trình hay không.
+func (m *Manager) pushFileWithProgress(localPath, remotePath string, log func(string)) error {
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	pw := &progressWriter{total: info.Size(), label: "install", log: log}
+	reader := io.TeeReader(f, pw)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, m.AdbPath, "-s", m.Device, "shell", "cat > "+shellQuote(remotePath))
+	cmd.Stdin = reader
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return errors.New(msg)
+	}
+	return nil
 }
 
 func splitToken(apkPath string) string {
@@ -691,9 +843,8 @@ func (m *Manager) InstallXAPK(path string, log func(string)) (string, error) {
 			log("   💡 " + hint)
 		}
 		log("   ↳ " + lastErr)
-		if !m.retryAfterUninstall(pkg, lastErr, "install-multiple", installList, log) {
-			return "", errors.New("install-multiple failed")
-		}
+		m.reportConflict(pkg, lastErr, log)
+		return "", errors.New("install-multiple failed")
 	} else {
 		log("   ✅ Cài đặt thành công.")
 	}
@@ -713,7 +864,7 @@ func (m *Manager) InstallXAPK(path string, log func(string)) (string, error) {
 		log(fmt.Sprintf("   📁 OBB %s -> %s ...", base, obbPkg))
 		remoteDir := "/sdcard/Android/obb/" + obbPkg
 		_, _ = m.runTimeout(30, "-s", m.Device, "shell", "mkdir", "-p", remoteDir)
-		out, err := m.runTimeout(120, "-s", m.Device, "push", obb, remoteDir+"/"+base)
+		out, err := m.runWithProgress(120, "push_obb", log, "-s", m.Device, "push", obb, remoteDir+"/"+base)
 		if err != nil {
 			log("   ❌ Push OBB thất bại: " + strings.TrimSpace(out))
 			return "", err

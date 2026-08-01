@@ -71,28 +71,6 @@
   </div>
 
   <section>
-    <h2>0. Cài đặt adb trên máy tính (macOS / Windows)</h2>
-    <p>Đây là bước làm trên <strong>máy tính</strong> của bạn (không phải trên xe) — cần có trước để app Geely EX2 App Manage tìm thấy và dùng được adb. Nếu bấm nút "Tự dò" ở panel bên trái mà báo chưa tìm thấy, làm theo 1 trong 2 cách dưới đây rồi bấm "Tự dò" lại.</p>
-
-    <h3>Cách 1 — Tải gói platform-tools chính chủ Google (khuyên dùng, áp dụng cho cả macOS &amp; Windows)</h3>
-    <ol>
-      <li>Tải tại trang chính thức: <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener">developer.android.com/tools/releases/platform-tools</a>
-        <br />— hoặc tải thẳng: macOS <a href="https://dl.google.com/android/repository/platform-tools-latest-darwin.zip" target="_blank" rel="noopener">platform-tools-latest-darwin.zip</a>, Windows <a href="https://dl.google.com/android/repository/platform-tools-latest-windows.zip" target="_blank" rel="noopener">platform-tools-latest-windows.zip</a>
-      </li>
-      <li>Giải nén ra 1 thư mục cố định, ví dụ: <code>~/platform-tools</code> (macOS) hoặc <code>C:\platform-tools</code> (Windows)</li>
-      <li>Trong thư mục vừa giải nén sẽ có file <code>adb</code> (macOS) hoặc <code>adb.exe</code> (Windows) — copy đường dẫn đầy đủ tới file này (vd: <code>/Users/ban/platform-tools/adb</code> hoặc <code>C:\platform-tools\adb.exe</code>) và dán vào ô "Đường dẫn adb" trong app</li>
-    </ol>
-
-    <h3>Cách 2 — macOS: cài qua Homebrew</h3>
-    <p>Nếu máy đã có <a href="https://brew.sh" target="_blank" rel="noopener">Homebrew</a>, mở Terminal chạy:</p>
-    <pre>brew install --cask android-platform-tools</pre>
-    <p>Sau khi cài xong, bấm nút "Tự dò" trong app là tự tìm thấy (Homebrew cài vào PATH sẵn).</p>
-
-    <h3>Kiểm tra lại</h3>
-    <p>Sau khi nhập đường dẫn, bấm nút "Kiểm tra" cạnh ô "Đường dẫn adb" trong app — nếu hiện ra dòng phiên bản (vd: "Android Debug Bridge version...") nghĩa là đã cấu hình đúng.</p>
-  </section>
-
-  <section>
     <h2>1. Chuẩn bị</h2>
     <h3>USB</h3>
     <ul>

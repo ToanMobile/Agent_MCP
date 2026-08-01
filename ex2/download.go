@@ -138,8 +138,9 @@ func DownloadInstallable(rawURL string, log func(string)) (string, error) {
 		return "", err
 	}
 
+	pw := &progressWriter{total: resp.ContentLength, label: "download", log: log}
 	limited := io.LimitReader(resp.Body, maxDownloadSize+1)
-	written, copyErr := io.Copy(out, limited)
+	written, copyErr := io.Copy(io.MultiWriter(out, pw), limited)
 	out.Close()
 	if copyErr != nil {
 		os.RemoveAll(tempDir)
@@ -157,6 +158,39 @@ func DownloadInstallable(rawURL string, log func(string)) (string, error) {
 
 	log(fmt.Sprintf("   ✅ Đã tải xong (%.1f MB): %s", float64(written)/1024/1024, name))
 	return dest, nil
+}
+
+// progressWriter theo dõi số byte đã tải, in tiến trình dạng "PROGRESS_PCT:.."
+// (frontend nhận diện và vẽ thanh %) mỗi khi % thay đổi — không phụ thuộc
+// kích thước file vì chỉ log khi % nguyên thay đổi (tối đa ~101 lần).
+type progressWriter struct {
+	total   int64
+	written int64
+	lastPct int
+	lastTag int64
+	label   string
+	log     func(string)
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	pw.written += int64(n)
+	if pw.total > 0 {
+		pct := int(pw.written * 100 / pw.total)
+		if pct != pw.lastPct {
+			pw.lastPct = pct
+			pw.log(fmt.Sprintf("PROGRESS_PCT:%d|%s|%.1f/%.1f MB", pct, pw.label,
+				float64(pw.written)/1024/1024, float64(pw.total)/1024/1024))
+		}
+	} else {
+		// Không biết tổng dung lượng (vd chunked transfer): báo mỗi 5MB thay vì theo %.
+		step := pw.written / (5 * 1024 * 1024)
+		if step != pw.lastTag {
+			pw.lastTag = step
+			pw.log(fmt.Sprintf("PROGRESS_TICK:%s|đã xử lý %.1f MB", pw.label, float64(pw.written)/1024/1024))
+		}
+	}
+	return n, nil
 }
 
 // looksLikeZip kiểm tra magic bytes "PK" — apk/xapk/apks/apkm đều là file zip.

@@ -53,18 +53,11 @@
         <input type="text" id="port" placeholder="5555" />
       </div>
       <div class="field">
-        <label>Đường dẫn adb</label>
-        <input type="text" id="adbPath" placeholder="/path/to/adb" />
-        <div class="row" style="margin-top:6px">
-          <button class="small" id="btnDetectAdb">Tự dò</button>
-          <button class="small" id="btnTestAdb">Kiểm tra</button>
+        <label>ADB</label>
+        <div class="row">
+          <div class="hint" id="adbHint" style="margin-top:0">adb đã được kèm sẵn trong app, không cần cài đặt.</div>
+          <button class="small" id="btnTestAdb" style="flex:0 0 auto">Kiểm tra</button>
         </div>
-        <div class="hint" id="adbHint"></div>
-      </div>
-
-      <div class="toggle" id="autoUninstallToggle" style="margin:10px 0">
-        <div class="switch"></div>
-        <span>Tự gỡ bản cũ khi xung đột chữ ký</span>
       </div>
 
       <div class="toggle hidden" id="demoModeToggle" style="margin:10px 0">

@@ -61,7 +61,7 @@ const DEMO_PACKAGES = [
 ];
 
 const DEMO_QUICK_INSTALLS = [
-  { name: 'App Demo 1', url: 'https://example.com/demo1.apk' },
+  { name: 'App Demo 1 (đã cài)', url: 'https://example.com/demo1.apk', package: 'vn.vietmap.live' },
   { name: 'App Demo 2', url: 'https://example.com/demo2.apk' },
 ];
 
@@ -176,9 +176,80 @@ function exitDemoMode() {
   refreshStatus();
 }
 
+// Log giữ theo từng "khối" (1 khối = 1 hành động), khối mới nhất luôn nằm
+// TRÊN CÙNG, các khối cũ bị đẩy xuống dưới thay vì bị xoá mất.
+let logBlocks = [];
+// Dòng tiến trình %/nhịp (PROGRESS_PCT/PROGRESS_TICK) hiện tại — chỉ hiện tạm
+// thời ở cuối khối mới nhất, không ghi thành lịch sử cố định.
+let pendingProgressLine = null;
+
+function renderProgressBar(pct) {
+  const width = 20;
+  const filled = Math.max(0, Math.min(width, Math.round((pct / 100) * width)));
+  return '[' + '█'.repeat(filled) + '░'.repeat(width - filled) + ']';
+}
+
+// Trả về text hiển thị cho 1 dòng PROGRESS_PCT:.. / PROGRESS_TICK:.., hoặc
+// null nếu dòng không phải dạng tiến trình.
+function formatProgressLine(line) {
+  let m = line.match(/^PROGRESS_PCT:(-?\d+)\|([^|]*)\|(.*)$/);
+  if (m) {
+    const pct = Number(m[1]);
+    const detail = m[3] ? ' ' + m[3] : '';
+    return `   ${renderProgressBar(pct)} ${pct}%${detail}`;
+  }
+  m = line.match(/^PROGRESS_TICK:([^|]*)\|(.*)$/);
+  if (m) {
+    return `   ⏳ ${m[2]}`;
+  }
+  return null;
+}
+
+function renderLogBlocks() {
+  const top = (logBlocks[0] || '') + (pendingProgressLine ? (logBlocks[0] ? '\n' : '') + pendingProgressLine : '');
+  const rest = logBlocks.slice(1);
+  logEl.textContent = [top, ...rest].join('\n\n──────────\n\n');
+  logEl.scrollTop = 0;
+}
+
+// Package name mà lần cài gần nhất báo xung đột chữ ký (nếu có) — dùng để
+// hiện popup hỏi "gỡ bản cũ & cài lại?" ngay sau khi 1 lượt cài kết thúc.
+let lastConflictPkg = null;
+
 function appendLog(line) {
-  logEl.textContent += line + '\n';
-  logEl.scrollTop = logEl.scrollHeight;
+  if (line.startsWith('CONFLICT_PKG:')) {
+    lastConflictPkg = line.slice('CONFLICT_PKG:'.length).trim();
+    return;
+  }
+  const progressText = formatProgressLine(line);
+  if (progressText !== null) {
+    pendingProgressLine = progressText;
+    renderLogBlocks();
+    return;
+  }
+  pendingProgressLine = null;
+  if (logBlocks.length === 0) logBlocks.unshift('');
+  logBlocks[0] += (logBlocks[0] ? '\n' : '') + line;
+  renderLogBlocks();
+}
+
+// Sau khi 1 lượt cài kết thúc mà có xung đột chữ ký + auto-gỡ đang tắt, hỏi
+// người dùng có muốn gỡ bản cũ rồi cài lại ngay không.
+async function maybePromptConflictRetry(retryInstallFn) {
+  if (!lastConflictPkg) return;
+  const pkg = lastConflictPkg;
+  lastConflictPkg = null;
+  const ok = window.confirm(
+    `Đã có app "${pkg}" cài sẵn trên thiết bị với chữ ký khác nên không cài đè được.\n\nGỡ bản cũ và cài lại bản mới ngay bây giờ?`
+  );
+  if (!ok) return;
+  clearLog();
+  await streamRequest('/api/uninstall', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ package: pkg }),
+  }, appendLog);
+  await retryInstallFn();
 }
 
 function escapeHtml(s) {
@@ -194,8 +265,13 @@ function appLabelCell(name, label) {
   return name ? escapeHtml(name) : '<i>không xác định</i>';
 }
 
+// Gọi lúc bắt đầu 1 hành động mới — mở khối log mới lên đầu, không xoá log cũ.
 function clearLog() {
-  logEl.textContent = '';
+  pendingProgressLine = null;
+  lastConflictPkg = null;
+  logBlocks.unshift('');
+  if (logBlocks.length > 50) logBlocks.length = 50; // tránh phình bộ nhớ vô hạn
+  renderLogBlocks();
 }
 
 // Đọc response dạng streaming (text/plain, flush từng dòng ở server) và gọi
@@ -271,12 +347,11 @@ function setStatusBadge(status) {
 function applyConfigToForm(cfg) {
   document.getElementById('ip').value = cfg.ip || '';
   document.getElementById('port').value = cfg.port || '';
-  document.getElementById('adbPath').value = cfg.adbPath || '';
   document.getElementById('folderPath').value = cfg.lastFolder || '';
-  const toggle = document.getElementById('autoUninstallToggle');
-  toggle.classList.toggle('on', !!cfg.autoUninstall);
   const hint = document.getElementById('adbHint');
-  hint.textContent = cfg.adbFound ? '' : '⚠️ Chưa tìm thấy adb ở đường dẫn này.';
+  hint.textContent = cfg.adbFound
+    ? 'adb đã được kèm sẵn trong app, không cần cài đặt.'
+    : '⚠️ Không giải nén được adb kèm sẵn — thử khởi động lại app.';
   setStatusBadge(cfg);
   quickInstalls = cfg.quickInstalls || [];
   renderQuickList();
@@ -295,8 +370,6 @@ function currentConfigBody() {
   return {
     ip: document.getElementById('ip').value.trim(),
     port: document.getElementById('port').value.trim(),
-    adbPath: document.getElementById('adbPath').value.trim(),
-    autoUninstall: document.getElementById('autoUninstallToggle').classList.contains('on'),
   };
 }
 
@@ -345,29 +418,9 @@ document.getElementById('btnCopyEngCode').addEventListener('click', async () => 
 updateEngineeringCode();
 setInterval(updateEngineeringCode, 60 * 1000);
 
-document.getElementById('autoUninstallToggle').addEventListener('click', async () => {
-  if (demoMode) {
-    document.getElementById('autoUninstallToggle').classList.toggle('on');
-    appendLog('🧪 (demo) Demo chỉ mô phỏng giao diện, không lưu vào cấu hình thật.');
-    return;
-  }
-  const cfg = await postJSON('/api/toggle-auto-uninstall', {});
-  applyConfigToForm(cfg);
-});
-
 document.getElementById('demoModeToggle').addEventListener('click', () => {
   if (demoMode) exitDemoMode();
   else enterDemoMode();
-});
-
-document.getElementById('btnDetectAdb').addEventListener('click', async () => {
-  const r = await getJSON('/api/adb/detect');
-  if (r.found) {
-    document.getElementById('adbPath').value = r.found;
-    appendLog('✅ Tìm thấy adb: ' + r.found);
-  } else {
-    appendLog('❌ Không tự dò được adb. Đã thử: \n  ' + (r.candidates || []).join('\n  '));
-  }
 });
 
 document.getElementById('btnTestAdb').addEventListener('click', async () => {
@@ -386,7 +439,8 @@ function renderQuickList() {
     list.innerHTML = '<p class="muted">Chưa có app nào — thêm ở form bên dưới.</p>';
     return;
   }
-  quickInstalls.forEach((q, idx) => {
+  quickInstalls.forEach((q) => {
+    const installedPkg = q.package && allPackages.some((p) => p.name === q.package && p.enabled);
     const row = document.createElement('div');
     row.className = 'card';
     row.style.cssText = 'padding:10px;margin-bottom:8px;display:flex;align-items:center;gap:8px';
@@ -396,18 +450,17 @@ function renderQuickList() {
         <div class="muted" style="font-size:11px;word-break:break-all">${escapeHtml(q.url)}</div>
       </div>
     `;
-    const btnInstall = document.createElement('button');
-    btnInstall.className = 'small primary';
-    btnInstall.textContent = '⚡ Cài đặt';
-    btnInstall.addEventListener('click', () => runQuickInstall(q));
-    row.appendChild(btnInstall);
-
-    const btnRemove = document.createElement('button');
-    btnRemove.className = 'small ghost';
-    btnRemove.textContent = '🗑️';
-    btnRemove.title = 'Xoá khỏi danh sách cài nhanh';
-    btnRemove.addEventListener('click', () => removeQuickInstall(idx));
-    row.appendChild(btnRemove);
+    const btn = document.createElement('button');
+    if (installedPkg) {
+      btn.className = 'small danger';
+      btn.textContent = '🗑️ Gỡ cài đặt';
+      btn.addEventListener('click', () => uninstallOnePkg(q.package));
+    } else {
+      btn.className = 'small primary';
+      btn.textContent = '⚡ Cài đặt';
+      btn.addEventListener('click', () => runQuickInstall(q));
+    }
+    row.appendChild(btn);
 
     list.appendChild(row);
   });
@@ -416,12 +469,6 @@ function renderQuickList() {
 async function persistQuickInstalls() {
   if (demoMode) return;
   await postJSON('/api/config', { quickInstalls });
-}
-
-function removeQuickInstall(idx) {
-  quickInstalls.splice(idx, 1);
-  renderQuickList();
-  persistQuickInstalls();
 }
 
 document.getElementById('btnAddQuick').addEventListener('click', () => {
@@ -457,6 +504,7 @@ async function runQuickInstall(q) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url: q.url }),
   }, appendLog);
+  await maybePromptConflictRetry(() => runQuickInstall(q));
 }
 
 // ---- connect / device picker ----
@@ -464,7 +512,7 @@ async function runQuickInstall(q) {
 document.getElementById('btnConnect').addEventListener('click', async () => {
   if (demoMode) return demoConnect();
   clearLog();
-  // Lưu IP/port/adbPath đang gõ trước khi kết nối — nếu không, server vẫn dùng
+  // Lưu IP/port đang gõ trước khi kết nối — nếu không, server vẫn dùng
   // giá trị đã lưu từ trước và refreshStatus() cuối cùng sẽ "trả" ô IP về giá trị cũ.
   await postJSON('/api/config', currentConfigBody());
   const controls = await streamRequest('/api/connect', { method: 'POST' }, appendLog);
@@ -654,6 +702,7 @@ async function installOnePath(path) {
     currentFolderFiles.forEach((f) => { if (f.path === path) { f.installed = true; f.disabledOnDevice = false; } });
     renderFolderTable();
   }
+  await maybePromptConflictRetry(() => installOnePath(path));
 }
 
 async function uninstallOnePkg(pkg) {
@@ -791,6 +840,9 @@ function renderPackages() {
   const btnShowAll = document.getElementById('btnShowAllHiddenPkgs');
   btnShowAll.style.display = hiddenCount ? '' : 'none';
   btnShowAll.textContent = `👁️ Hiện tất cả đã ẩn (${hiddenCount})`;
+  // Tab Cài nhanh cần biết app nào đã cài để đổi nút Cài đặt <-> Gỡ cài đặt,
+  // nên luôn vẽ lại cùng lúc với danh sách package thay vì rải rác từng nơi gọi.
+  renderQuickList();
 }
 
 // ---- favorites ----

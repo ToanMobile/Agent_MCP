@@ -49,7 +49,6 @@ func statusPayload(mgr *Manager) map[string]any {
 		"adbFound":         mgr.AdbPath != "" && fileExecutable(mgr.AdbPath),
 		"ip":               mgr.Cfg.IP,
 		"port":             mgr.Cfg.Port,
-		"autoUninstall":    mgr.Cfg.AutoUninstall,
 		"lastFolder":       mgr.Cfg.LastFolder,
 		"quickInstalls":    mgr.Cfg.QuickInstalls,
 		"favoritePackages": mgr.Cfg.FavoritePackages,
@@ -69,8 +68,6 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 			var body struct {
 				IP               string              `json:"ip"`
 				Port             string              `json:"port"`
-				AdbPath          string              `json:"adbPath"`
-				AutoUninstall    *bool               `json:"autoUninstall"`
 				QuickInstalls    *[]QuickInstallItem `json:"quickInstalls"`
 				FavoritePackages *[]string           `json:"favoritePackages"`
 			}
@@ -83,13 +80,6 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 			}
 			if strings.TrimSpace(body.Port) != "" {
 				mgr.Cfg.Port = strings.TrimSpace(body.Port)
-			}
-			if strings.TrimSpace(body.AdbPath) != "" {
-				mgr.SetAdbPath(strings.TrimSpace(body.AdbPath))
-				mgr.Cfg.AdbPath = mgr.AdbPath
-			}
-			if body.AutoUninstall != nil {
-				mgr.Cfg.AutoUninstall = *body.AutoUninstall
 			}
 			if body.QuickInstalls != nil {
 				mgr.Cfg.QuickInstalls = *body.QuickInstalls
@@ -107,14 +97,9 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 		}
 	})
 
-	mux.HandleFunc("/api/adb/detect", func(w http.ResponseWriter, r *http.Request) {
-		found, candidates := DetectAdb()
-		writeJSON(w, map[string]any{"found": found, "candidates": candidates})
-	})
-
 	mux.HandleFunc("/api/adb/test", func(w http.ResponseWriter, r *http.Request) {
 		if mgr.AdbPath == "" || !fileExecutable(mgr.AdbPath) {
-			writeJSON(w, map[string]any{"ok": false, "message": "Không tìm thấy adb ở đường dẫn đã cấu hình."})
+			writeJSON(w, map[string]any{"ok": false, "message": "Không giải nén được adb kèm sẵn trong app."})
 			return
 		}
 		out, err := mgr.runTimeout(10, "version")
@@ -123,12 +108,6 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 			return
 		}
 		writeJSON(w, map[string]any{"ok": true, "message": strings.TrimSpace(out)})
-	})
-
-	mux.HandleFunc("/api/toggle-auto-uninstall", func(w http.ResponseWriter, r *http.Request) {
-		mgr.Cfg.AutoUninstall = !mgr.Cfg.AutoUninstall
-		_ = mgr.Cfg.Save()
-		writeJSON(w, statusPayload(mgr))
 	})
 
 	mux.HandleFunc("/api/connect", func(w http.ResponseWriter, r *http.Request) {
@@ -431,6 +410,15 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 			if err != nil {
 				log("RESULT_ERROR")
 				return
+			}
+			if pkg != "" {
+				for i := range mgr.Cfg.QuickInstalls {
+					if mgr.Cfg.QuickInstalls[i].URL == targetURL {
+						mgr.Cfg.QuickInstalls[i].Package = pkg
+						_ = mgr.Cfg.Save()
+						break
+					}
+				}
 			}
 			_ = mgr.LaunchApp(pkg, log)
 			log("RESULT_OK")
