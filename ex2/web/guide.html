@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hướng dẫn mở khoá ADB — Geely EX2</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  .guide { max-width: 820px; margin: 0 auto; padding: 24px 20px 60px; }
+  .guide h1 { font-size: 22px; margin-bottom: 4px; }
+  .guide .source { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+  .guide .source a { color: var(--accent); }
+  .warn-box {
+    border: 1px solid var(--warn);
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+  .warn-box h2 { margin: 0 0 8px; font-size: 14px; color: var(--warn); text-transform: none; letter-spacing: 0; }
+  .warn-box ul { margin: 0; padding-left: 20px; }
+  .guide section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .guide h2 { font-size: 16px; margin: 0 0 12px; text-transform: none; letter-spacing: 0; color: var(--text); }
+  .guide h3 { font-size: 14px; margin: 16px 0 6px; color: var(--accent); }
+  .guide h3:first-child { margin-top: 0; }
+  .guide p { line-height: 1.6; margin: 6px 0; }
+  .guide ol, .guide ul { line-height: 1.7; padding-left: 22px; }
+  .guide code, .guide pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .guide code { padding: 1px 6px; font-size: 13px; }
+  .guide pre { padding: 10px 12px; overflow-x: auto; font-size: 13px; }
+  .guide .example {
+    background: var(--panel-2);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin: 8px 0;
+    font-size: 13.5px;
+  }
+  .guide a.back { display: inline-block; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="guide">
+  <a class="back" href="javascript:window.close()">← Đóng tab này</a>
+  <h1>📘 Hướng dẫn mở khoá &amp; cài đặt ADB cho màn hình Geely EX2</h1>
+  <p class="source">
+    Tổng hợp lại từ bài viết gốc trên diễn đàn Xe Thông Minh —
+    <a href="https://xethongminh.net/threads/huong-dan-mo-khoa-va-cai-dat-phan-mem-cho-man-hinh-xe-geely-ex2.5527/" target="_blank" rel="noopener">xem bài gốc tại đây</a>.
+    Áp dụng cho màn hình IHU629G (model EEBADF1), Flyme Auto E 1.8.0, các bản build 1111 / 1114.
+  </p>
+
+  <div class="warn-box">
+    <h2>⚠️ Lưu ý quan trọng trước khi làm</h2>
+    <ul>
+      <li>Mọi thao tác thực hiện <strong>tự chịu trách nhiệm</strong> — có thể ảnh hưởng đến sự ổn định của hệ thống, thậm chí phải cài lại toàn bộ phần mềm màn hình.</li>
+      <li>Bản patch chỉ mở lại tính năng root sẵn có của nhà sản xuất, không phải khai thác lỗ hổng bảo mật mới.</li>
+      <li>Chỉ áp dụng đúng cho model/bản build nêu trên — dùng sai bản có thể gây lỗi.</li>
+      <li>Có thể gỡ bỏ hoàn toàn bằng Factory Reset (xem mục cuối trang) nếu muốn quay lại trạng thái ban đầu.</li>
+    </ul>
+  </div>
+
+  <section>
+    <h2>0. Cài đặt adb trên máy tính (macOS / Windows)</h2>
+    <p>Đây là bước làm trên <strong>máy tính</strong> của bạn (không phải trên xe) — cần có trước để app Geely EX2 App Manage tìm thấy và dùng được adb. Nếu bấm nút "Tự dò" ở panel bên trái mà báo chưa tìm thấy, làm theo 1 trong 2 cách dưới đây rồi bấm "Tự dò" lại.</p>
+
+    <h3>Cách 1 — Tải gói platform-tools chính chủ Google (khuyên dùng, áp dụng cho cả macOS &amp; Windows)</h3>
+    <ol>
+      <li>Tải tại trang chính thức: <a href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener">developer.android.com/tools/releases/platform-tools</a>
+        <br />— hoặc tải thẳng: macOS <a href="https://dl.google.com/android/repository/platform-tools-latest-darwin.zip" target="_blank" rel="noopener">platform-tools-latest-darwin.zip</a>, Windows <a href="https://dl.google.com/android/repository/platform-tools-latest-windows.zip" target="_blank" rel="noopener">platform-tools-latest-windows.zip</a>
+      </li>
+      <li>Giải nén ra 1 thư mục cố định, ví dụ: <code>~/platform-tools</code> (macOS) hoặc <code>C:\platform-tools</code> (Windows)</li>
+      <li>Trong thư mục vừa giải nén sẽ có file <code>adb</code> (macOS) hoặc <code>adb.exe</code> (Windows) — copy đường dẫn đầy đủ tới file này (vd: <code>/Users/ban/platform-tools/adb</code> hoặc <code>C:\platform-tools\adb.exe</code>) và dán vào ô "Đường dẫn adb" trong app</li>
+    </ol>
+
+    <h3>Cách 2 — macOS: cài qua Homebrew</h3>
+    <p>Nếu máy đã có <a href="https://brew.sh" target="_blank" rel="noopener">Homebrew</a>, mở Terminal chạy:</p>
+    <pre>brew install --cask android-platform-tools</pre>
+    <p>Sau khi cài xong, bấm nút "Tự dò" trong app là tự tìm thấy (Homebrew cài vào PATH sẵn).</p>
+
+    <h3>Kiểm tra lại</h3>
+    <p>Sau khi nhập đường dẫn, bấm nút "Kiểm tra" cạnh ô "Đường dẫn adb" trong app — nếu hiện ra dòng phiên bản (vd: "Android Debug Bridge version...") nghĩa là đã cấu hình đúng.</p>
+  </section>
+
+  <section>
+    <h2>1. Chuẩn bị</h2>
+    <h3>USB</h3>
+    <ul>
+      <li>Format USB theo chuẩn <strong>FAT32</strong>.</li>
+      <li>USB ≤ 32GB: format bình thường bằng Windows.</li>
+      <li>USB &gt; 32GB: dùng công cụ <a href="https://ridgecrop.co.uk/index.htm?guiformat.htm" target="_blank" rel="noopener">guiformat (fat32format)</a> vì Windows không format FAT32 cho ổ lớn.</li>
+    </ul>
+    <h3>Tải file patch</h3>
+    <ul>
+      <li>Bản 1111: <a href="https://drive.google.com/file/d/1rvTfF4WoTgXcZ98_y73fKRayZVBgxaOZ/view?usp=sharing" target="_blank" rel="noopener">Google Drive</a></li>
+      <li>Bản 1114: <a href="https://drive.google.com/file/d/1RF5ut5r_zVGCxfe2O3LKc3SrecRVp3td/view?usp=drive_link" target="_blank" rel="noopener">Google Drive</a></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>2. Chuẩn bị cấu trúc thư mục trên USB</h2>
+    <p>Giải nén file ZIP đã tải, sẽ có 1 thư mục dạng:</p>
+    <ul>
+      <li><code>3C6025_SW0E22H0128H111100000_user_995</code> (bản 1111)</li>
+      <li><code>3C6025_SW0E22H0306H111400000_user_995</code> (bản 1114)</li>
+    </ul>
+    <p><strong>Cấu trúc thư mục cần có trên USB:</strong></p>
+    <pre>ROOT/
+└── 3C6025_SW0E...user_995/
+    └── OS/
+        └── update.zip   (KHÔNG giải nén file này)</pre>
+  </section>
+
+  <section>
+    <h2>3. Cắm USB vào xe</h2>
+    <p>Cắm USB đã chuẩn bị vào cổng USB trên màn hình trung tâm. Màn hình sẽ hiện thông báo đã nhận diện thiết bị USB.</p>
+  </section>
+
+  <section>
+    <h2>4. Vào menu ẩn (Engineering Mode)</h2>
+    <p>Tắt Bluetooth trước, sau đó mở app Điện thoại (Phone) trên màn hình trung tâm.</p>
+    <p>Nhập mã theo công thức:</p>
+    <pre>#*(tháng + 10)(ngày)(giờ theo định dạng 12h)</pre>
+    <div class="example">
+      <strong>Ví dụ</strong> — ngày 20/07/2026, lúc 19:25:<br />
+      Tháng: 07 + 10 = 17 · Ngày: 20 · Giờ: 19 → 07 (định dạng 12h)<br />
+      → Mã bấm: <code>#*172007</code>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Áp dụng patch mở khoá</h2>
+    <p>Trong menu ẩn, tìm icon đánh dấu <strong>màu xanh lá</strong> rồi bấm để bắt đầu cài đặt.</p>
+    <p>Hệ thống sẽ tự động:</p>
+    <ul>
+      <li>Hiện thông báo đang kiểm tra bản cập nhật</li>
+      <li>Tự khởi động lại vào chế độ Recovery</li>
+      <li>Tự cài đặt patch</li>
+      <li>Hiện thông báo lỗi khi hoàn tất — <strong>đây là hiện tượng bình thường</strong>, không phải lỗi thật</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>6. Thoát Recovery</h2>
+    <p>Khi thông báo lỗi hiện ra, nhấn giữ nút <strong>Previous Track</strong> (lùi bài hát) trên vô lăng cho đến khi màn hình khởi động lại lần nữa.</p>
+    <p>✅ ADB đã được kích hoạt.</p>
+  </section>
+
+  <section>
+    <h2>7. Bật Wi-Fi &amp; lấy địa chỉ IP</h2>
+    <p>Quay lại menu ẩn, chọn mục đánh dấu <strong>màu xanh dương</strong> để vào cài đặt mạng không dây.</p>
+    <p>Kết nối vào Wi-Fi nhà bạn hoặc phát Wi-Fi từ điện thoại. <strong>Ghi lại địa chỉ IP</strong> hiển thị bên trái màn hình — đây chính là IP bạn cần nhập vào ô "Địa chỉ IP thiết bị" trong app Geely EX2 App Manage này.</p>
+  </section>
+
+  <section>
+    <h2>8. Bật chế độ ADB</h2>
+    <p>Thoát ra màn hình chính, mở lại app Điện thoại.</p>
+    <p>Nhập mã theo công thức:</p>
+    <pre>#*(tháng + 5)(ngày)(giờ theo định dạng 12h)</pre>
+    <div class="example">
+      <strong>Ví dụ</strong> — cùng ngày giờ trên:<br />
+      Tháng: 07 + 5 = 12 · Ngày: 20 · Giờ: 07<br />
+      → Mã bấm: <code>#*122007</code>
+    </div>
+    <p>Bấm nút ADB một lần để bật.</p>
+  </section>
+
+  <section>
+    <h2>9. Cài ứng dụng bằng Geely EX2 App Manage (app này)</h2>
+    <p>Không cần tải thêm ADB AppControl hay công cụ nào khác — dùng luôn app <strong>Geely EX2 App Manage</strong> đang chạy đây:</p>
+    <ol>
+      <li>Ở panel "Kết nối &amp; cấu hình", nhập địa chỉ IP đã ghi lại ở bước 7 vào ô "Địa chỉ IP thiết bị"</li>
+      <li>Bấm <strong>"Lưu cấu hình"</strong> rồi <strong>"Kết nối lại"</strong></li>
+      <li>Qua tab <strong>"⚡ Cài nhanh"</strong> để cài các app đã cấu hình sẵn (SmartTube, Waze, VietMap Live...) chỉ với 1 bấm, hoặc tab <strong>"Cài đặt file"</strong> để kéo-thả file .apk/.xapk bất kỳ</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Sau khi mở khoá có thể làm gì?</h2>
+    <ul>
+      <li>Cài app xem YouTube không quảng cáo (SmartTube, YouTube ReVanced)</li>
+      <li>Cài Firefox kèm tiện ích chặn quảng cáo (uBlock Origin)</li>
+      <li>Cài app nghe nhạc (Spotify, Deezer)</li>
+      <li>Cài trình phát media (VLC)</li>
+      <li>Cài các app Android tương thích khác</li>
+      <li>Đổi âm thanh khoá/mở xe</li>
+      <li>Tuỳ biến hệ thống nâng cao (do có sẵn quyền root từ nhà sản xuất)</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Gỡ bỏ hoàn toàn (quay lại ban đầu)</h2>
+    <p>Vào <strong>Cài đặt xe → Xe của tôi → Khôi phục cài đặt gốc (Factory Reset)</strong>.</p>
+    <p>Thao tác này sẽ xoá toàn bộ app đã cài và tắt luôn quyền truy cập ADB.</p>
+  </section>
+</div>
+</body>
+</html>
