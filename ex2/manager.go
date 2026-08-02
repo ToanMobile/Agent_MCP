@@ -1116,13 +1116,13 @@ func (m *Manager) InstallPath(path string, log func(string)) (string, error) {
 	case "apk":
 		pkg, err := m.InstallAPK(path, log)
 		if err == nil {
-			m.warnAfterInstall(pkg, log)
+			m.afterInstall(pkg, log)
 		}
 		return pkg, err
 	case "xapk", "apks", "apkm":
 		pkg, err := m.InstallXAPK(path, log)
 		if err == nil {
-			m.warnAfterInstall(pkg, log)
+			m.afterInstall(pkg, log)
 		}
 		return pkg, err
 	default:
@@ -1136,6 +1136,67 @@ const (
 	pkgGoogleMaps = "com.google.android.apps.maps"
 	pkgGoogleGMS  = "com.google.android.gms"
 )
+
+// actionIgnoreBatteryOpt là màn hình hệ thống "xin bỏ qua tối ưu pin". Điện
+// thoại Android nào cũng có, nhưng ROM màn hình xe (Flyme Auto trên Geely EX2)
+// bị cắt mất — app nào gọi tới nó mà không bắt lỗi là văng ngay khi mở.
+const actionIgnoreBatteryOpt = "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+
+// pkgsNeedingDozeWhitelist: các app đã được kiểm chứng là gọi thẳng màn hình
+// trên trong onCreate và văng ngay trên màn hình xe.
+//
+// Cách chữa: đưa app vào danh sách "bỏ qua tối ưu pin" TRƯỚC. App kiểm tra thấy
+// mình đã được bỏ qua rồi nên không mở màn hình kia nữa → không văng.
+//
+// Phải làm lại sau MỖI lần cài: Android xoá package khỏi danh sách này khi gỡ
+// cài đặt, nên cài lại là bản vá biến mất và app văng trở lại.
+var pkgsNeedingDozeWhitelist = map[string]bool{
+	"vn.vietmap.live": true,
+}
+
+// deviceLacksBatteryOptScreenLocked kiểm tra thiết bị có thiếu màn hình "bỏ qua
+// tối ưu pin" không. Phải gọi khi đang giữ m.mu.
+//
+// Có cổng kiểm tra này để trên thiết bị bình thường (điện thoại, máy tính bảng
+// có đủ màn hình đó) app KHÔNG tự ý đổi thiết lập tối ưu pin của người dùng —
+// ở đó không có gì để chữa cả.
+func (m *Manager) deviceLacksBatteryOptScreenLocked() bool {
+	out, err := m.runTimeout(20, "-s", m.Device, "shell", "cmd", "package",
+		"query-activities", "-a", actionIgnoreBatteryOpt)
+	if err != nil {
+		return false // không hỏi được thì đừng đụng vào thiết lập của thiết bị
+	}
+	return strings.Contains(out, "No activities found")
+}
+
+// applyDozeWhitelistIfNeeded chạy ngay sau khi cài xong, tự áp lại bản vá cho
+// những app đã biết là sẽ văng vì thiếu màn hình tối ưu pin.
+func (m *Manager) applyDozeWhitelistIfNeeded(pkg string, log func(string)) {
+	if !pkgsNeedingDozeWhitelist[pkg] {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.deviceLacksBatteryOptScreenLocked() {
+		return
+	}
+
+	log("   🔧 Thiết bị thiếu màn hình \"bỏ qua tối ưu pin\" — app này sẽ văng khi mở nếu không xử lý.")
+	if _, err := m.runTimeout(20, "-s", m.Device, "shell", "dumpsys", "deviceidle", "whitelist", "+"+pkg); err != nil {
+		log("   ⚠️  Không áp được bản vá tự động: " + err.Error())
+		return
+	}
+
+	// Đọc lại để chắc chắn đã vào danh sách — báo "đã xử lý" mà thực ra không
+	// vào thì người dùng sẽ ngồi đoán vì sao app vẫn văng.
+	out, err := m.runTimeout(20, "-s", m.Device, "shell", "dumpsys", "deviceidle", "whitelist")
+	if err != nil || !strings.Contains(out, pkg) {
+		log("   ⚠️  Đã chạy lệnh vá nhưng kiểm tra lại không thấy có tác dụng.")
+		return
+	}
+	log("   ✅ Đã đưa " + pkg + " vào danh sách bỏ qua tối ưu pin — app sẽ mở được bình thường.")
+	log("      (Cần làm lại sau mỗi lần cài lại; app tự làm nên không phải nhớ. Gỡ bỏ: dumpsys deviceidle whitelist -" + pkg + ")")
+}
 
 // deviceHasPackageLocked kiểm tra 1 package đã có trên thiết bị chưa. Phải gọi
 // khi đang giữ m.mu (đọc m.Device).
@@ -1155,6 +1216,13 @@ func (m *Manager) deviceHasPackageLocked(pkg string) bool {
 		}
 	}
 	return false
+}
+
+// afterInstall gom các việc phải làm ngay sau khi cài xong: vá lỗi đã biết
+// trước, rồi mới cảnh báo những app không có đường cứu.
+func (m *Manager) afterInstall(pkg string, log func(string)) {
+	m.applyDozeWhitelistIfNeeded(pkg, log)
+	m.warnAfterInstall(pkg, log)
 }
 
 // warnAfterInstall cảnh báo ngay sau khi cài xong những app đã được kiểm

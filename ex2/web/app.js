@@ -360,7 +360,13 @@ async function postJSON(url, body) {
 
 // ---- status / config ----
 
+// deviceConnected: có thiết bị đang kết nối hay không. Cần cho việc tự nạp
+// danh sách package khi mở tab — chưa kết nối mà vẫn gọi thì chỉ tổ đổ ra một
+// dòng lỗi đỏ mỗi lần người dùng bấm sang tab đó.
+let deviceConnected = false;
+
 function setStatusBadge(status) {
+  deviceConnected = !!status.connected;
   const el = document.getElementById('statusBadge');
   const wifiWrap = document.getElementById('wifiSSIDWrap');
   if (status.connected) {
@@ -624,6 +630,15 @@ document.querySelectorAll('.tabs button').forEach((btn) => {
     document.querySelectorAll('.tabpane').forEach((p) => p.classList.remove('active'));
     btn.classList.add('active');
     document.querySelector(`.tabpane[data-pane="${btn.dataset.tab}"]`).classList.add('active');
+
+    // Mở tab cần danh sách package thì tự nạp luôn, khỏi bắt người dùng bấm
+    // thêm một nút nữa. Chỉ nạp khi CHƯA có dữ liệu — liệt kê qua Wi-Fi mất
+    // vài giây, nạp lại mỗi lần chuyển tab sẽ giật và mất công vô ích. Muốn
+    // làm mới thì vẫn còn nút "Liệt kê package".
+    const needsPackages = btn.dataset.tab === 'packages' || btn.dataset.tab === 'favorites';
+    if (needsPackages && allPackages.length === 0 && (demoMode || deviceConnected)) {
+      loadPackages({ silent: true });
+    }
   });
 });
 
@@ -854,20 +869,35 @@ document.getElementById('btnInstallAll').addEventListener('click', async () => {
 
 let allPackages = [];
 
-document.getElementById('btnListPackages').addEventListener('click', async () => {
-  if (demoMode) {
-    allPackages = DEMO_PACKAGES.map((o) => ({ ...o }));
+// packagesLoading: chặn nạp chồng khi người dùng bấm qua lại giữa các tab
+// trong lúc lần nạp trước còn chạy (liệt kê package qua Wi-Fi mất vài giây).
+let packagesLoading = false;
+
+async function loadPackages({ silent = false } = {}) {
+  if (packagesLoading) return;
+  packagesLoading = true;
+  try {
+    if (demoMode) {
+      allPackages = DEMO_PACKAGES.map((o) => ({ ...o }));
+      renderPackages();
+      renderFavoritesTab();
+      if (!silent) appendLog('🧪 (demo) Danh sách package mẫu.');
+      return;
+    }
+    const r = await getJSON('/api/packages');
+    if (r.error) {
+      if (!silent) appendLog('❌ ' + r.error);
+      return;
+    }
+    allPackages = r.packages || [];
     renderPackages();
     renderFavoritesTab();
-    appendLog('🧪 (demo) Danh sách package mẫu.');
-    return;
+  } finally {
+    packagesLoading = false;
   }
-  const r = await getJSON('/api/packages');
-  if (r.error) { appendLog('❌ ' + r.error); return; }
-  allPackages = r.packages || [];
-  renderPackages();
-  renderFavoritesTab();
-});
+}
+
+document.getElementById('btnListPackages').addEventListener('click', () => loadPackages());
 
 document.getElementById('pkgFilter').addEventListener('input', renderPackages);
 

@@ -44,8 +44,8 @@ var quickInstallIntroducedIn = map[string]int{
 	quickInstallGMSName: 2,
 }
 
-// quickInstallHiddenIn ghi mục dựng sẵn nào bị TẠM ẨN ở phiên bản defaults
-// nào, kèm URL mà bản dựng sẵn từng dùng.
+// quickInstallHiddenIn ghi mục dựng sẵn nào bị TẠM ẨN kể từ phiên bản defaults
+// nào.
 //
 // Vì sao ẩn: Google Maps và Google Play Services đã được kiểm chứng trên màn
 // hình Geely EX2 thật (IHU629G, Android 9) là KHÔNG chạy được — Play Services
@@ -57,14 +57,13 @@ var quickInstallIntroducedIn = map[string]int{
 // ẨN chứ không XOÁ: link và package vẫn nằm nguyên trong config, mai này tìm
 // được cách chạy thì chỉ cần bỏ khỏi bảng này là hiện lại.
 //
-// Chỉ ẩn khi URL vẫn đúng URL dựng sẵn: ai đã tự sửa link thành bản của riêng
-// mình thì đó là lựa chọn có chủ ý, không được đụng vào.
-var quickInstallHiddenIn = map[string]struct {
-	Version int
-	URL     string
-}{
-	"Google Maps":       {4, "https://drive.google.com/file/d/1Tqkp1EYo1B-xuMTiSHDVmbXiROUwmOBj/view?usp=sharing"},
-	quickInstallGMSName: {4, "https://drive.google.com/file/d/1yx9I4PlqA_6VuFnoISX3VMgn2voTtUMs/view?usp=sharing"},
+// Đối sánh theo TÊN, không theo link — vì mục dựng sẵn vốn đã bị đồng bộ link
+// theo tên ở vòng cập nhật phía trên, nên một mục mang tên dựng sẵn thì luôn
+// là app dựng sẵn đó. Ai muốn giữ bản Google Maps của riêng mình thì đặt tên
+// khác (vd "Google Maps (của tôi)") — mục tự thêm không bao giờ bị đụng tới.
+var quickInstallHiddenIn = map[string]int{
+	"Google Maps":       4,
+	quickInstallGMSName: 4,
 }
 
 // QuickInstallItem là 1 app được cấu hình để tải + cài chỉ với 1 bấm ở tab "Cài
@@ -177,8 +176,7 @@ func refreshDefaultQuickInstalls(cfg *Config, defaults []QuickInstallItem) {
 	// Tạm ẩn những mục đã xác nhận không chạy được trên xe. Không xoá: link
 	// vẫn còn đó, chỉ là không hiện ra để không ai tải nhầm.
 	for i, q := range cfg.QuickInstalls {
-		h, hidden := quickInstallHiddenIn[q.Name]
-		if hidden && h.Version > cfg.DefaultsVersion && q.URL == h.URL {
+		if v, hidden := quickInstallHiddenIn[q.Name]; hidden && v > cfg.DefaultsVersion {
 			cfg.QuickInstalls[i].Hidden = true
 		}
 	}
