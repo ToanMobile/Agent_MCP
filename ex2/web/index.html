@@ -31,12 +31,20 @@
       <button class="small" id="btnOpenGuide" style="margin-bottom:12px;width:100%">📘 Hướng dẫn mở khoá &amp; cài đặt ADB cho xe Geely EX2</button>
 
       <div class="field">
-        <label>Mã bấm vào menu ẩn hôm nay (Bước 4 hướng dẫn)</label>
+        <label>Mã vào menu ẩn — bước 4 (tháng+10)</label>
         <div class="row">
           <input type="text" id="engCode" readonly />
           <button class="small" id="btnCopyEngCode" style="flex:0 0 auto">Copy</button>
         </div>
-        <div class="hint">Công thức: #*(tháng+10)(ngày)(giờ 12h) — tự tính theo giờ máy này, đổi mỗi khung giờ.</div>
+      </div>
+
+      <div class="field">
+        <label>Mã bật chế độ ADB — bước 8 (tháng+5)</label>
+        <div class="row">
+          <input type="text" id="adbCode" readonly />
+          <button class="small" id="btnCopyAdbCode" style="flex:0 0 auto">Copy</button>
+        </div>
+        <div class="hint">Cả 2 mã tự tính theo giờ trên máy này và đổi mỗi khung giờ — bấm ngay khi copy. Nếu giờ trên xe lệch với máy tính thì phải tự tính lại theo giờ hiển thị trên xe.</div>
       </div>
 
       <div class="field" id="wifiSSIDWrap" style="display:none">
@@ -142,7 +150,7 @@
           <button id="btnHideSelectedPkgs" class="small">🙈 Ẩn đã chọn (trên thiết bị)</button>
           <button id="btnShowAllHiddenPkgs" class="small" style="display:none">👁️ Hiện tất cả đã ẩn</button>
         </div>
-        <p class="hint">"Ẩn" gọi <code>pm disable-user</code> trên thiết bị thật — app biến mất khỏi launcher nhưng KHÔNG mất dữ liệu, bấm "Hiện" ở từng dòng để bật lại bất kỳ lúc nào.</p>
+        <p class="hint">"Ẩn" gọi <code>pm disable-user</code> trên thiết bị thật — app biến mất khỏi launcher nhưng KHÔNG mất dữ liệu, bấm "👁️ Hiện lại" ở từng dòng để bật lại bất kỳ lúc nào.</p>
         <table id="pkgTable">
           <thead><tr><th style="width:28px"></th><th>Tên app / Package</th><th></th></tr></thead>
           <tbody></tbody>

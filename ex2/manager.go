@@ -435,6 +435,18 @@ func (m *Manager) StatusSnapshot() map[string]any {
 	}
 }
 
+// FirstQuickInstallURL trả về URL của mục "Cài nhanh" đầu tiên, đọc dưới khoá.
+// Danh sách này bị sửa bởi request khác (thêm/xoá mục, học package sau khi cài
+// xong) nên đọc thẳng m.Cfg.QuickInstalls từ handler là tranh chấp dữ liệu.
+func (m *Manager) FirstQuickInstallURL() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.Cfg.QuickInstalls) == 0 {
+		return ""
+	}
+	return m.Cfg.QuickInstalls[0].URL
+}
+
 // UpdateConfig sửa cấu hình dưới khoá rồi lưu xuống đĩa — dùng cho mọi thay
 // đổi cấu hình đến từ HTTP handler, vì cùng lúc đó StatusSnapshot có thể đang
 // đọc chính những trường này.
@@ -1102,13 +1114,68 @@ func (m *Manager) InstallPath(path string, log func(string)) (string, error) {
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 	switch ext {
 	case "apk":
-		return m.InstallAPK(path, log)
+		pkg, err := m.InstallAPK(path, log)
+		if err == nil {
+			m.warnAfterInstall(pkg, log)
+		}
+		return pkg, err
 	case "xapk", "apks", "apkm":
-		return m.InstallXAPK(path, log)
+		pkg, err := m.InstallXAPK(path, log)
+		if err == nil {
+			m.warnAfterInstall(pkg, log)
+		}
+		return pkg, err
 	default:
 		err := fmt.Errorf("không hỗ trợ định dạng: %s", path)
 		log("❌ " + err.Error())
 		return "", err
+	}
+}
+
+const (
+	pkgGoogleMaps = "com.google.android.apps.maps"
+	pkgGoogleGMS  = "com.google.android.gms"
+)
+
+// deviceHasPackageLocked kiểm tra 1 package đã có trên thiết bị chưa. Phải gọi
+// khi đang giữ m.mu (đọc m.Device).
+//
+// Dùng "pm list packages <pkg>" rồi so khớp CHÍNH XÁC từng dòng: đối số của
+// pm chỉ là bộ lọc chuỗi con, nên hỏi "com.google.android.gms" cũng trả về
+// "com.google.android.gms.location.history" — so khớp lỏng sẽ kết luận nhầm là
+// đã có GMS.
+func (m *Manager) deviceHasPackageLocked(pkg string) bool {
+	out, err := m.runTimeout(20, "-s", m.Device, "shell", "pm", "list", "packages", pkg)
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(strings.ReplaceAll(out, "\r", ""), "\n") {
+		if strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "package:")) == pkg {
+			return true
+		}
+	}
+	return false
+}
+
+// warnAfterInstall cảnh báo ngay sau khi cài xong những app đã được kiểm
+// chứng là KHÔNG chạy nổi trên màn hình Geely EX2, để người dùng khỏi ngồi đoán
+// vì sao bấm vào app chỉ thấy nó văng ra.
+//
+// Bằng chứng thu được trên xe thật (IHU629G, Android 9, tháng 8/2026): Google
+// Maps cần Google Play Services; mà Play Services cài kiểu app thường thì
+// tiến trình com.google.android.gms.persistent văng liên tục vì thiếu quyền
+// WRITE_SECURE_SETTINGS — quyền chỉ cấp cho app nằm trong /system/priv-app,
+// không cấp được bằng "pm grant". Vì vậy Maps không có đường chạy trên xe này.
+func (m *Manager) warnAfterInstall(installedPkg string, log func(string)) {
+	switch installedPkg {
+	case pkgGoogleMaps:
+		log("   ⚠️  Google Maps ĐÃ ĐƯỢC KIỂM CHỨNG là không chạy được trên màn hình Geely EX2:")
+		log("      nó cần Google Play Services, mà Play Services trên xe này văng liên tục vì")
+		log("      thiếu quyền hệ thống (WRITE_SECURE_SETTINGS) — không cấp được cho app cài thường.")
+		log("      👉 Dùng VietMap Live thay thế, đã chạy tốt trên xe.")
+	case pkgGoogleGMS:
+		log("   ⚠️  Google Play Services cài kiểu app thường sẽ văng liên tục trên màn hình Geely EX2")
+		log("      (thiếu quyền hệ thống WRITE_SECURE_SETTINGS). Nên ẩn hoặc gỡ để đỡ hao pin/CPU.")
 	}
 }
 

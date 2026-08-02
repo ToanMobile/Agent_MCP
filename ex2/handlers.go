@@ -392,8 +392,8 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		targetURL := strings.TrimSpace(body.URL)
-		if targetURL == "" && len(mgr.Cfg.QuickInstalls) > 0 {
-			targetURL = mgr.Cfg.QuickInstalls[0].URL
+		if targetURL == "" {
+			targetURL = mgr.FirstQuickInstallURL()
 		}
 		streamOp(w, func(log func(string)) {
 			if targetURL == "" {

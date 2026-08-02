@@ -47,6 +47,15 @@
     margin: 8px 0;
     font-size: 13.5px;
   }
+  .guide .note {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin: 10px 0 14px;
+    line-height: 1.6;
+    font-size: 13.5px;
+  }
   .guide a.back { display: inline-block; margin-bottom: 16px; }
 </style>
 </head>
@@ -71,12 +80,26 @@
   </div>
 
   <section>
+    <h2>0. Kiểm tra xe có tương thích không (làm trước tiên)</h2>
+    <p>Trên màn hình xe vào <strong>Cài đặt xe (Vehicle Settings) → mục cuối cùng: Xe của tôi (My Car)</strong> để xem thông tin màn hình và phiên bản phần mềm.</p>
+    <p>Hướng dẫn này chỉ áp dụng cho màn hình <strong>IHU629G</strong> (model EEBADF1) chạy <strong>Flyme Auto E 1.8.0</strong>, bản build <strong>1111</strong> hoặc <strong>1114</strong> — và bạn phải tải đúng file patch tương ứng với bản build của xe mình.</p>
+    <div class="warn-box" style="margin-top:12px">
+      <h2>⚠️ Điểm bài gốc KHÔNG nói rõ</h2>
+      <ul>
+        <li>Bài gốc <strong>không hướng dẫn cách xác định chính xác</strong> xe bạn đang ở bản 1111 hay 1114, cũng <strong>không nói điều gì xảy ra nếu áp nhầm bản</strong>. Đây là khoảng trống thật của tài liệu gốc, không phải phần bị lược bớt ở đây.</li>
+        <li>Vì vậy: hãy đối chiếu kỹ thông tin phiên bản trong màn hình "Xe của tôi" với tên file patch trước khi làm. Nếu không chắc chắn mình đang ở bản nào, <strong>đừng đoán</strong> — hỏi lại cộng đồng ở bài gốc trước khi cắm USB.</li>
+        <li>Bài gốc cũng không nêu yêu cầu về trạng thái xe (nổ máy/đỗ, mức pin) hay thời gian cần thiết. Nên chủ động: đỗ xe nơi an toàn, giữ nguồn ổn định và không tắt máy giữa chừng trong lúc màn hình đang cài đặt/khởi động lại.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
     <h2>1. Chuẩn bị</h2>
     <h3>USB</h3>
     <ul>
       <li>Format USB theo chuẩn <strong>FAT32</strong>.</li>
       <li>USB ≤ 32GB: format bình thường bằng Windows.</li>
-      <li>USB &gt; 32GB: dùng công cụ <a href="https://ridgecrop.co.uk/index.htm?guiformat.htm" target="_blank" rel="noopener">guiformat (fat32format)</a> vì Windows không format FAT32 cho ổ lớn.</li>
+      <li>USB &gt; 32GB: dùng công cụ <a href="http://ridgecrop.co.uk/index.htm?guiformat.htm" target="_blank" rel="noopener">guiformat (fat32format)</a> vì Windows không format FAT32 cho ổ lớn. (Trang này chỉ chạy được với <code>http://</code>, không có <code>https://</code>.)</li>
     </ul>
     <h3>Tải file patch</h3>
     <ul>
@@ -106,14 +129,21 @@
 
   <section>
     <h2>4. Vào menu ẩn (Engineering Mode)</h2>
-    <p>Tắt Bluetooth trước, sau đó mở app Điện thoại (Phone) trên màn hình trung tâm.</p>
-    <p>Nhập mã theo công thức:</p>
+    <div class="note">
+      <strong>Toàn bộ thao tác dưới đây làm trên MÀN HÌNH XE.</strong><br />
+      Trên màn hình xe có sẵn app <strong>Gọi điện</strong> (icon ống nghe) — bên trong có <strong>bàn phím số</strong>, đây chính là nơi bấm mã bí mật để mở menu kỹ thuật.
+    </div>
+    <p><strong>Bước 4.1 — Tắt Bluetooth trên màn hình xe trước.</strong> Đây là bắt buộc, không được bỏ qua: nếu Bluetooth còn kết nối với máy di động, bàn phím số sẽ đẩy dãy số sang máy di động để gọi thật, xe không nhận được mã và menu ẩn sẽ không mở ra.</p>
+    <p><strong>Bước 4.2</strong> — Trên màn hình xe, mở app <strong>Gọi điện</strong> rồi mở bàn phím số.</p>
+    <p><strong>Bước 4.3</strong> — Nhập mã theo công thức:</p>
     <pre>#*(tháng + 10)(ngày)(giờ theo định dạng 12h)</pre>
     <div class="example">
       <strong>Ví dụ</strong> — ngày 20/07/2026, lúc 19:25:<br />
       Tháng: 07 + 10 = 17 · Ngày: 20 · Giờ: 19 → 07 (định dạng 12h)<br />
       → Mã bấm: <code>#*172007</code>
     </div>
+    <p>💡 <strong>Không cần tự tính</strong>: app đã hiện sẵn mã này ở panel "Kết nối &amp; cấu hình" bên trái (ô "Mã vào menu ẩn — bước 4"), bấm Copy là dùng ngay.</p>
+    <p>⚠️ Mã <strong>đổi theo từng khung giờ</strong>, nên bấm luôn sau khi copy. Nếu đồng hồ trên xe lệch với máy tính, phải tính lại theo <strong>giờ đang hiển thị trên xe</strong>.</p>
   </section>
 
   <section>
@@ -137,12 +167,13 @@
   <section>
     <h2>7. Bật Wi-Fi &amp; lấy địa chỉ IP</h2>
     <p>Quay lại menu ẩn, chọn mục đánh dấu <strong>màu xanh dương</strong> để vào cài đặt mạng không dây.</p>
-    <p>Kết nối vào Wi-Fi nhà bạn hoặc phát Wi-Fi từ điện thoại. <strong>Ghi lại địa chỉ IP</strong> hiển thị bên trái màn hình — đây chính là IP bạn cần nhập vào ô "Địa chỉ IP thiết bị" trong app Geely EX2 App Manage này.</p>
+    <p>Kết nối vào Wi-Fi nhà bạn hoặc Wi-Fi phát ra từ máy di động. <strong>Lưu ý máy tính đang chạy app này phải vào CÙNG mạng Wi-Fi đó</strong>, nếu khác mạng sẽ không kết nối được. <strong>Ghi lại địa chỉ IP</strong> hiển thị bên trái màn hình — đây chính là IP bạn cần nhập vào ô "Địa chỉ IP thiết bị" trong app Geely EX2 App Manage này.</p>
   </section>
 
   <section>
     <h2>8. Bật chế độ ADB</h2>
-    <p>Thoát ra màn hình chính, mở lại app Điện thoại.</p>
+    <p>Trên màn hình xe, bấm nút về màn hình chính để thoát menu ẩn, rồi <strong>mở lại app Gọi điện</strong> — vẫn là app có bàn phím số đã dùng ở bước 4.</p>
+    <p>⚠️ <strong>Bluetooth vẫn phải đang tắt</strong>. Bài gốc không nhắc lại ở bước này, nhưng lý do vẫn y như bước 4: Bluetooth bật thì dãy số bị đẩy sang máy di động, xe không nhận được mã.</p>
     <p>Nhập mã theo công thức:</p>
     <pre>#*(tháng + 5)(ngày)(giờ theo định dạng 12h)</pre>
     <div class="example">
@@ -150,6 +181,7 @@
       Tháng: 07 + 5 = 12 · Ngày: 20 · Giờ: 07<br />
       → Mã bấm: <code>#*122007</code>
     </div>
+    <p>💡 App cũng hiện sẵn mã này ở ô <strong>"Mã bật chế độ ADB — bước 8"</strong> trong panel bên trái. Lưu ý mã bước 8 <strong>khác</strong> mã bước 4 (cộng 5 thay vì cộng 10 vào tháng) — đừng dùng nhầm.</p>
     <p>Bấm nút ADB một lần để bật.</p>
   </section>
 
@@ -177,9 +209,19 @@
   </section>
 
   <section>
-    <h2>Gỡ bỏ hoàn toàn (quay lại ban đầu)</h2>
-    <p>Vào <strong>Cài đặt xe → Xe của tôi → Khôi phục cài đặt gốc (Factory Reset)</strong>.</p>
-    <p>Thao tác này sẽ xoá toàn bộ app đã cài và tắt luôn quyền truy cập ADB.</p>
+    <h2>Muốn gỡ app đã cài — chọn cách nào?</h2>
+
+    <h3>Cách 1 — Ẩn app (nhẹ nhất, không mất gì)</h3>
+    <p>Vào tab <strong>"Danh sách package"</strong> trong app này, chọn app rồi bấm <strong>"🙈 Ẩn đã chọn"</strong>. App biến mất khỏi màn hình xe nhưng <strong>vẫn còn nguyên dữ liệu</strong>, bấm <strong>"👁️ Hiện lại"</strong> ở dòng đó là hiện lại ngay. Hợp lý khi chỉ muốn dọn màn hình cho gọn, hoặc muốn giấu app trước khi mang xe đi bảo dưỡng.</p>
+
+    <h3>Cách 2 — Gỡ từng app</h3>
+    <p>Cũng ở tab <strong>"Danh sách package"</strong>, bấm <strong>"Gỡ cài đặt"</strong> ở dòng app muốn bỏ. Chỉ app đó bị xoá, các app khác và quyền ADB giữ nguyên — muốn cài lại lúc nào cũng được. Đây là cách nên dùng trong hầu hết trường hợp.</p>
+    <p>⚠️ Chỉ gỡ những app do <strong>chính bạn cài thêm</strong>. Đừng gỡ app hệ thống của xe (điều hoà, camera, radio, cài đặt xe…) — gỡ nhầm có thể làm hỏng chức năng trên xe và phải Factory Reset mới cứu được.</p>
+
+    <h3>Cách 3 — Gỡ bỏ hoàn toàn, quay lại ban đầu</h3>
+    <p>Vào <strong>Cài đặt xe → Xe của tôi → Khôi phục cài đặt gốc (Factory Reset)</strong> trên màn hình xe.</p>
+    <p>Thao tác này xoá <strong>toàn bộ</strong> app đã cài và <strong>tắt luôn quyền truy cập ADB</strong> — muốn dùng lại phải làm lại từ bước 1 (chuẩn bị USB, patch, bấm mã…). Cũng mất luôn các thiết lập cá nhân trên màn hình xe.</p>
+    <p>Chỉ nên dùng khi thật sự cần trả xe về nguyên trạng (bán xe, đi bảo hành, hoặc màn hình lỗi nặng). Nếu chỉ muốn bỏ vài app thì dùng Cách 1 hoặc Cách 2 là đủ.</p>
   </section>
 </div>
 </body>

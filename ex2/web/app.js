@@ -52,8 +52,6 @@ const DEMO_PACKAGES = [
   { name: 'android', label: 'Android System', enabled: true },
   { name: 'com.android.systemui', label: 'System UI', enabled: true },
   { name: 'com.android.settings', label: 'Cài đặt', enabled: true },
-  { name: 'com.google.android.gms', label: 'Google Play Services', enabled: true },
-  { name: 'com.google.android.apps.maps', label: 'Google Maps', enabled: false },
   { name: 'vn.vietmap.live', label: 'VietMap Live', enabled: true },
   { name: 'com.waze', label: 'Waze', enabled: true },
   { name: 'com.spotify.music', label: '', enabled: false },
@@ -65,6 +63,7 @@ const DEMO_QUICK_INSTALLS = [
   { name: 'App Demo 2', url: 'https://example.com/demo2.apk' },
   { name: 'App Demo 3 (app nặng)', url: 'https://example.com/demo3-big.apk' },
 ];
+
 
 // Dung lượng giả cho từng app demo, để thanh % chạy với tốc độ khác nhau
 // giống thực tế (app nhẹ xong nhanh, app nặng chạy lâu hơn).
@@ -399,7 +398,13 @@ function applyConfigToForm(cfg) {
 }
 
 async function refreshStatus() {
+  // Ở chế độ demo phải bỏ qua: refreshStatus() được gọi lúc khởi động và không
+  // await, nên nếu người dùng mở thẳng bằng ?demo=1 thì enterDemoMode() chạy
+  // trước, rồi promise này về sau mới xong và ghi đè danh sách cài nhanh demo
+  // bằng dữ liệu thật — demo hiện ra danh sách thật, sai hoàn toàn ý nghĩa.
+  if (demoMode) return null;
   const status = await getJSON('/api/status');
+  if (demoMode) return null; // demo có thể vừa được bật trong lúc đang chờ mạng
   applyConfigToForm(status);
   return status;
 }
@@ -425,33 +430,41 @@ document.getElementById('btnOpenGuide').addEventListener('click', () => {
   window.open('guide.html', '_blank');
 });
 
-// ---- mã bấm vào menu ẩn (Engineering Mode), công thức #*(tháng+10)(ngày)(giờ 12h) ----
+// ---- 2 mã bấm trên app Điện thoại của xe ----
+// Bước 4 (vào menu ẩn): #*(tháng+10)(ngày)(giờ 12h)
+// Bước 8 (bật chế độ ADB): #*(tháng+5)(ngày)(giờ 12h)
+// Cùng công thức, chỉ khác số cộng vào tháng. Tính sẵn cả hai vì cả hai đều
+// đổi theo từng khung giờ và tự nhẩm rất dễ sai.
 
 function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
-function computeEngineeringCode(date) {
-  const month = date.getMonth() + 1 + 10;
+function computeCarCode(date, monthOffset) {
+  const month = date.getMonth() + 1 + monthOffset;
   const day = date.getDate();
-  const hour24 = date.getHours();
-  const hour12 = hour24 % 12 || 12;
+  const hour12 = date.getHours() % 12 || 12;
   return `#*${pad2(month)}${pad2(day)}${pad2(hour12)}`;
 }
 
 function updateEngineeringCode() {
-  document.getElementById('engCode').value = computeEngineeringCode(new Date());
+  const now = new Date();
+  document.getElementById('engCode').value = computeCarCode(now, 10);
+  document.getElementById('adbCode').value = computeCarCode(now, 5);
 }
 
-document.getElementById('btnCopyEngCode').addEventListener('click', async () => {
-  const code = document.getElementById('engCode').value;
+async function copyCode(inputId) {
+  const code = document.getElementById(inputId).value;
   try {
     await navigator.clipboard.writeText(code);
     appendLog('📋 Đã copy mã: ' + code);
   } catch {
     appendLog('⚠️ Không copy được tự động, hãy copy thủ công: ' + code);
   }
-});
+}
+
+document.getElementById('btnCopyEngCode').addEventListener('click', () => copyCode('engCode'));
+document.getElementById('btnCopyAdbCode').addEventListener('click', () => copyCode('adbCode'));
 
 updateEngineeringCode();
 setInterval(updateEngineeringCode, 60 * 1000);
@@ -473,11 +486,14 @@ let quickInstalls = [];
 function renderQuickList() {
   const list = document.getElementById('quickList');
   list.innerHTML = '';
-  if (!quickInstalls.length) {
+  if (!quickInstalls.some((q) => !q.hidden)) {
     list.innerHTML = '<p class="muted">Chưa có app nào — thêm ở form bên dưới.</p>';
     return;
   }
   quickInstalls.forEach((q) => {
+    // Mục bị đánh dấu ẩn (app đã xác nhận không chạy được trên xe) vẫn nằm
+    // trong cấu hình nhưng không hiện ra, để không ai tải nhầm vài trăm MB.
+    if (q.hidden) return;
     const installedPkg = q.package && allPackages.some((p) => p.name === q.package && p.enabled);
     const row = document.createElement('div');
     row.className = 'card';
@@ -551,6 +567,8 @@ async function runQuickInstall(q) {
     }
     renderPackages();
     renderFavoritesTab();
+    renderQuickList();
+
     return;
   }
   clearLog();
