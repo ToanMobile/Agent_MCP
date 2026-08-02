@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -55,12 +56,20 @@ func NewManager(cfg *Config) *Manager {
 
 // ---- helpers gọi adb ----
 
+// ErrTimeout: lệnh adb bị huỷ vì chạy quá lâu. Tách riêng để báo cho người
+// dùng biết rõ "quá thời gian chờ" thay vì báo lỗi rỗng khó hiểu — khi tiến
+// trình bị giết giữa chừng, adb thường chưa kịp in gì nên output rỗng.
+var ErrTimeout = errors.New("quá thời gian chờ")
+
 func (m *Manager) run(ctx context.Context, args ...string) (string, error) {
 	if m.AdbPath == "" {
 		return "", errors.New("chưa cấu hình đường dẫn adb")
 	}
 	cmd := exec.CommandContext(ctx, m.AdbPath, args...)
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return string(out), ErrTimeout
+	}
 	return string(out), err
 }
 
@@ -133,6 +142,11 @@ func (m *Manager) runWithProgress(secs int, label string, log func(string), args
 				}
 			}
 		}
+		if serr := scanner.Err(); serr != nil {
+			mu.Lock()
+			buf.WriteString("[cảnh báo: đọc output bị cắt ngang: " + serr.Error() + "]\n")
+			mu.Unlock()
+		}
 	}()
 
 	tickStop := make(chan struct{})
@@ -162,6 +176,9 @@ func (m *Manager) runWithProgress(secs int, label string, log func(string), args
 	mu.Lock()
 	result := buf.String()
 	mu.Unlock()
+	if ctx.Err() == context.DeadlineExceeded {
+		return result, ErrTimeout
+	}
 	return result, waitErr
 }
 
@@ -393,6 +410,41 @@ func (m *Manager) fetchWifiSSID(serial string) string {
 	return ""
 }
 
+// StatusSnapshot đọc toàn bộ trạng thái hiển thị DƯỚI KHOÁ. Bắt buộc phải qua
+// đây thay vì đọc thẳng m.Device/m.ABI/... từ HTTP handler: các trường này bị
+// ghi bởi những request khác (kết nối/chọn thiết bị) chạy song song, đọc không
+// khoá là lỗi tranh chấp dữ liệu thật — Go có thể trả về chuỗi rách (con trỏ
+// của giá trị này ghép với độ dài của giá trị kia) gây đọc lung tung bộ nhớ.
+func (m *Manager) StatusSnapshot() map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return map[string]any{
+		"device":           m.Device,
+		"abi":              m.ABI,
+		"sdk":              m.SDK,
+		"wifiSSID":         m.WifiSSID,
+		"connected":        m.Device != "",
+		"adbPath":          m.AdbPath,
+		"aaptPath":         m.AaptPath,
+		"adbFound":         m.AdbPath != "" && fileExecutable(m.AdbPath),
+		"ip":               m.Cfg.IP,
+		"port":             m.Cfg.Port,
+		"lastFolder":       m.Cfg.LastFolder,
+		"quickInstalls":    m.Cfg.QuickInstalls,
+		"favoritePackages": m.Cfg.FavoritePackages,
+	}
+}
+
+// UpdateConfig sửa cấu hình dưới khoá rồi lưu xuống đĩa — dùng cho mọi thay
+// đổi cấu hình đến từ HTTP handler, vì cùng lúc đó StatusSnapshot có thể đang
+// đọc chính những trường này.
+func (m *Manager) UpdateConfig(mutate func(*Config)) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	mutate(m.Cfg)
+	return m.Cfg.Save()
+}
+
 func (m *Manager) EnsureDevice() error {
 	if m.Device == "" {
 		return errors.New("chưa có thiết bị, hãy kết nối lại")
@@ -410,20 +462,41 @@ func (m *Manager) DeviceList() ([]deviceInfo, error) {
 
 // ---- cài đặt ----
 
+// installTimeoutSecs: lưới an toàn cuối cùng cho các luồng KHÔNG đo được tiến
+// độ (cài XAPK/split-APK bằng install-multiple, đẩy file OBB). Luồng cài APK
+// đơn không dùng mốc này — nó đã có cơ chế theo dõi "file bên xe còn lớn lên
+// không" chính xác hơn nhiều (xem pushFileWithProgress).
+//
+// Đặt rất rộng là có chủ ý: cắt sớm chính là lỗi đã từng khiến file vài trăm
+// MB không cài được qua Wi-Fi yếu — mạng chậm mà vẫn đang chạy thì không phải
+// là hỏng. Mốc này chỉ để tránh treo vĩnh viễn khi mất kết nối hẳn.
+const installTimeoutSecs = 7200 // 2 tiếng
+
+func timeoutMessage() string {
+	return fmt.Sprintf("Quá thời gian chờ (%d tiếng) — nhiều khả năng mất kết nối Wi-Fi tới xe giữa chừng. "+
+		"Kiểm tra xe còn trong vùng phủ sóng rồi thử lại.", installTimeoutSecs/3600)
+}
+
 // runInstall tương đương run_install() trong bash: thử -r -g, rồi -r, rồi -r -d
 // (hạ cấp) khi gặp VERSION_DOWNGRADE.
 func (m *Manager) runInstall(cmdName string, args []string, log func(string)) (bool, string) {
 	full := append([]string{"-s", m.Device, cmdName, "-r", "-g"}, args...)
-	out, err := m.runWithProgress(180, "install", log, full...)
+	out, err := m.runWithProgress(installTimeoutSecs, "install", log, full...)
 	if err == nil && !strings.Contains(out, "Failure") && !strings.Contains(out, "Error") && !strings.Contains(out, "Exception") {
 		return true, ""
 	}
+	if errors.Is(err, ErrTimeout) {
+		return false, timeoutMessage()
+	}
 
 	full2 := append([]string{"-s", m.Device, cmdName, "-r"}, args...)
-	out2, err2 := m.runWithProgress(180, "install", log, full2...)
+	out2, err2 := m.runWithProgress(installTimeoutSecs, "install", log, full2...)
 	if err2 == nil && !strings.Contains(out2, "Failure") && !strings.Contains(out2, "Error") && !strings.Contains(out2, "Exception") {
 		log("   ⚠️  Đã cài được nhưng phải bỏ -g (không cấp sẵn quyền).")
 		return true, ""
+	}
+	if errors.Is(err2, ErrTimeout) {
+		return false, timeoutMessage()
 	}
 
 	lastErr := extractError(out2)
@@ -433,11 +506,16 @@ func (m *Manager) runInstall(cmdName string, args []string, log func(string)) (b
 
 	if strings.Contains(strings.ToUpper(lastErr), "VERSION_DOWNGRADE") {
 		full3 := append([]string{"-s", m.Device, cmdName, "-r", "-d"}, args...)
-		out3, err3 := m.runWithProgress(180, "install", log, full3...)
+		out3, err3 := m.runWithProgress(installTimeoutSecs, "install", log, full3...)
 		if err3 == nil && !strings.Contains(out3, "Failure") && !strings.Contains(out3, "Error") && !strings.Contains(out3, "Exception") {
 			log("   ⚠️  Đã cài đè bản cũ hơn (-d), dữ liệu app được giữ lại.")
 			return true, ""
 		}
+	}
+	if lastErr == "" {
+		// adb bị giết/thoát bất thường mà chưa in gì — đừng để trống, người dùng
+		// nhìn dòng lỗi rỗng sẽ không biết chuyện gì đã xảy ra.
+		lastErr = "adb kết thúc bất thường, không có thông báo lỗi cụ thể (nhiều khả năng mất kết nối Wi-Fi tới xe giữa chừng)"
 	}
 	return false, lastErr
 }
@@ -541,10 +619,10 @@ func (m *Manager) reportConflict(pkgHint, lastErr string, log func(string)) {
 	log("CONFLICT_PKG:" + pkg)
 }
 
-// InstallAPK cài 1 file .apk thường. Để hiện được % tiến trình thật (adb chỉ
-// in % khi stdout là terminal thật, im lặng khi chạy qua exec.Command như app
-// này), app tự đẩy file lên thiết bị (tự đếm byte, báo % thật) rồi cài từ file
-// đã có sẵn trên máy thay vì gọi thẳng "adb install".
+// InstallAPK cài 1 file .apk thường: đẩy file lên thiết bị bằng "adb push"
+// rồi chạy "pm install" ngay trên máy đó, thay vì gọi thẳng "adb install".
+// Tách 2 bước như vậy để phần truyền file (chậm nhất, hay lỗi nhất khi qua
+// Wi-Fi) có nhịp báo tiến trình riêng và thông báo lỗi rõ ràng hơn.
 func (m *Manager) InstallAPK(path string, log func(string)) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -557,15 +635,29 @@ func (m *Manager) InstallAPK(path string, log func(string)) (string, error) {
 	log("📦 " + name + " ...")
 
 	remotePath := "/data/local/tmp/" + sanitizeRemoteName(name)
+	// Đăng ký dọn dẹp TRƯỚC khi đẩy: nếu đẩy dở dang rồi thất bại (rớt Wi-Fi,
+	// treo giữa chừng), phần file đã ghi vẫn phải được xoá. Đặt sau lệnh đẩy thì
+	// mọi lần thất bại đều bỏ lại file rác vài trăm MB trong bộ nhớ xe, tích tụ
+	// dần sẽ gây lỗi hết dung lượng ở những lần cài sau. Xoá 1 file không tồn
+	// tại là vô hại nên đăng ký sớm hoàn toàn an toàn.
+	defer func() { _, _ = m.runTimeout(15, "-s", m.Device, "shell", "rm", "-f", remotePath) }()
 	if err := m.pushFileWithProgress(path, remotePath, log); err != nil {
 		log("❌ Đẩy file lên thiết bị thất bại: " + err.Error())
 		return "", err
 	}
-	defer func() { _, _ = m.runTimeout(15, "-s", m.Device, "shell", "rm", "-f", remotePath) }()
 
 	pkg := m.getPackageName(path)
+	// Không có aapt thì chưa biết package trước khi cài — chụp lại danh sách
+	// package hiện có để sau khi cài xong, so sánh tìm ra package mới xuất hiện.
+	var beforeSet map[string]bool
+	if pkg == "" {
+		beforeSet = m.rawPackageSet()
+	}
 	ok, lastErr := m.runInstallOnDevice(remotePath, log)
 	if ok {
+		if pkg == "" && beforeSet != nil {
+			pkg = diffSingleNewPackage(beforeSet, m.rawPackageSet())
+		}
 		log("✅ Cài đặt thành công: " + name)
 		return pkg, nil
 	}
@@ -582,16 +674,38 @@ func (m *Manager) InstallAPK(path string, log func(string)) (string, error) {
 // runInstallOnDevice chạy "pm install" trên chính thiết bị nhắm vào file đã
 // đẩy sẵn (remotePath) — tương đương runInstall() nhưng không cần truyền lại
 // file qua adb lần nữa (đã có sẵn trên máy), thử -r -g, rồi -r, rồi -r -d.
+// pmInstallTimeoutSecs: "pm install" chạy trên chính máy xe với file đã có sẵn
+// (không truyền qua mạng nữa), nhưng máy xe cấu hình yếu nên app vài trăm MB
+// vẫn có thể mất nhiều phút để giải nén + tối ưu. Để rộng tay cho chắc.
+const pmInstallTimeoutSecs = 900 // 15 phút
+
+// pushStallLimit: chỉ coi là treo khi kích thước file bên xe không nhích thêm
+// byte nào suốt khoảng thời gian này. Mạng chậm mà vẫn tiến đều thì không bao
+// giờ chạm ngưỡng, dù tổng thời gian có kéo dài bao lâu.
+const pushStallLimit = 3 * time.Minute
+
+// blindPushLimit: chỉ dùng khi KHÔNG đọc được kích thước file bên xe lần nào
+// (máy không hỗ trợ lệnh stat) — lúc đó hoàn toàn không có tín hiệu để biết
+// còn chạy hay đã treo, nên đành dựa vào tổng thời gian. Đặt rất rộng để mạng
+// chậm vẫn kịp truyền xong file vài trăm MB.
+const blindPushLimit = 2 * time.Hour
+
 func (m *Manager) runInstallOnDevice(remotePath string, log func(string)) (bool, string) {
-	out, err := m.runTimeout(60, "-s", m.Device, "shell", "pm", "install", "-r", "-g", remotePath)
+	out, err := m.runTimeout(pmInstallTimeoutSecs, "-s", m.Device, "shell", "pm", "install", "-r", "-g", remotePath)
 	if err == nil && !strings.Contains(out, "Failure") && !strings.Contains(out, "Error") && !strings.Contains(out, "Exception") {
 		return true, ""
 	}
+	if errors.Is(err, ErrTimeout) {
+		return false, timeoutMessage()
+	}
 
-	out2, err2 := m.runTimeout(60, "-s", m.Device, "shell", "pm", "install", "-r", remotePath)
+	out2, err2 := m.runTimeout(pmInstallTimeoutSecs, "-s", m.Device, "shell", "pm", "install", "-r", remotePath)
 	if err2 == nil && !strings.Contains(out2, "Failure") && !strings.Contains(out2, "Error") && !strings.Contains(out2, "Exception") {
 		log("   ⚠️  Đã cài được nhưng phải bỏ -g (không cấp sẵn quyền).")
 		return true, ""
+	}
+	if errors.Is(err2, ErrTimeout) {
+		return false, timeoutMessage()
 	}
 
 	lastErr := extractError(out2)
@@ -600,11 +714,14 @@ func (m *Manager) runInstallOnDevice(remotePath string, log func(string)) (bool,
 	}
 
 	if strings.Contains(strings.ToUpper(lastErr), "VERSION_DOWNGRADE") {
-		out3, err3 := m.runTimeout(60, "-s", m.Device, "shell", "pm", "install", "-r", "-d", remotePath)
+		out3, err3 := m.runTimeout(pmInstallTimeoutSecs, "-s", m.Device, "shell", "pm", "install", "-r", "-d", remotePath)
 		if err3 == nil && !strings.Contains(out3, "Failure") && !strings.Contains(out3, "Error") && !strings.Contains(out3, "Exception") {
 			log("   ⚠️  Đã cài đè bản cũ hơn (-d), dữ liệu app được giữ lại.")
 			return true, ""
 		}
+	}
+	if lastErr == "" {
+		lastErr = "pm install kết thúc bất thường, không có thông báo lỗi cụ thể (nhiều khả năng mất kết nối tới xe giữa chừng)"
 	}
 	return false, lastErr
 }
@@ -621,43 +738,147 @@ func sanitizeRemoteName(name string) string {
 	return cleaned
 }
 
-// shellQuote bọc 1 chuỗi trong dấu nháy đơn an toàn cho remote shell của adb.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-// pushFileWithProgress đẩy 1 file local lên thiết bị qua "adb shell cat > path"
-// thay vì "adb push" — vì adb chỉ in % khi output là terminal thật (isatty),
-// im lặng hoàn toàn khi bị redirect qua pipe (đúng như cách Go gọi lệnh con).
-// Tự đọc file cục bộ và đếm byte khi ghi vào stdin của tiến trình adb để có %
-// thật, không phụ thuộc vào việc adb có chịu in tiến trình hay không.
+// pushFileWithProgress đẩy 1 file local lên thiết bị bằng "adb push" — dùng
+// đúng giao thức truyền file nhị phân chính thức của adb (sync protocol),
+// đáng tin cậy hơn nhiều so với cách cũ (tự bơm byte qua "adb shell cat >
+// path" dùng kênh shell tương tác) — đặc biệt quan trọng với file lớn
+// (200-300+ MB) truyền qua Wi-Fi thật tới xe, nơi kênh shell không được thiết
+// kế và không được kiểm chứng cho việc truyền khối lượng dữ liệu lớn, trong
+// khi "adb push" là cơ chế mà chính Google dùng và kiểm thử cho đúng việc này.
+// Chỉ dựa vào exit code để kết luận thành/bại: mọi kiểu lỗi của "adb push"
+// (thiếu file nguồn, thư mục đích chỉ đọc, thiết bị rớt kết nối) đều trả exit
+// khác 0. KHÔNG dò chữ "error"/"failed" trong output, vì dòng báo THÀNH CÔNG
+// của adb có in kèm đường dẫn file nguồn — file tên kiểu "no_error_build.apk"
+// hoặc nằm trong thư mục "error-fix/" sẽ bị kết luận nhầm là thất bại.
+//
+// Tiến độ + phát hiện treo: adb không in % khi output bị pipe, nên app tự hỏi
+// kích thước file bên phía xe mỗi 2 giây. Vừa cho % thật, vừa cho biết việc
+// truyền CÓ ĐANG NHÚC NHÍCH hay không.
+//
+// KHÔNG đặt trần theo tổng thời gian: chừng nào file bên xe còn lớn lên thì cứ
+// để chạy tiếp, dù mất 20 phút hay 2 tiếng (mạng yếu vẫn là mạng đang chạy —
+// cắt ngang lúc đó chính là lỗi đã từng khiến file lớn không cài được). Chỉ
+// huỷ trong 2 trường hợp thật sự bất thường: (1) file đứng im quá lâu, (2)
+// không đọc được kích thước lần nào suốt thời gian dài — tức không có bất kỳ
+// tín hiệu nào để biết còn sống hay đã treo.
 func (m *Manager) pushFileWithProgress(localPath, remotePath string, log func(string)) error {
 	info, err := os.Stat(localPath)
 	if err != nil {
 		return err
 	}
-	f, err := os.Open(localPath)
-	if err != nil {
+	total := info.Size()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Context riêng cho các lệnh đọc kích thước, để lúc kết thúc có thể cắt
+	// ngay lệnh stat đang chạy dở thay vì phải chờ nó hết giờ.
+	statCtx, statCancel := context.WithCancel(context.Background())
+	defer statCancel()
+
+	cmd := exec.CommandContext(ctx, m.AdbPath, "-s", m.Device, "push", localPath, remotePath)
+	var outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &outBuf
+	if err := cmd.Start(); err != nil {
 		return err
 	}
-	defer f.Close()
 
-	pw := &progressWriter{total: info.Size(), label: "install", log: log}
-	reader := io.TeeReader(f, pw)
+	var stalled atomic.Bool
+	var blindTimeout atomic.Bool
+	watchStop := make(chan struct{})
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, m.AdbPath, "-s", m.Device, "shell", "cat > "+shellQuote(remotePath))
-	cmd.Stdin = reader
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
+		start := time.Now()
+		var lastSize int64 = -1
+		lastPct := -1
+		sawAnySize := false
+		lastGrow := time.Now()
+
+		for {
+			select {
+			case <-watchStop:
+				return
+			case <-ticker.C:
+				size := m.remoteFileSizeCtx(statCtx, remotePath)
+				if size < 0 {
+					// Chưa đọc được kích thước (file chưa kịp tạo, hoặc máy xe
+					// không hỗ trợ lệnh stat). Nếu suốt thời gian dài vẫn không có
+					// tín hiệu nào thì mới coi là bất thường — lúc đó hoàn toàn mù,
+					// không còn cách nào biết đang chạy hay đã treo.
+					if !sawAnySize && time.Since(start) > blindPushLimit {
+						blindTimeout.Store(true)
+						cancel()
+						return
+					}
+					continue
+				}
+				sawAnySize = true
+				if size > lastSize {
+					lastSize = size
+					lastGrow = time.Now()
+					if total > 0 {
+						if pct := int(size * 100 / total); pct != lastPct {
+							lastPct = pct
+							log(fmt.Sprintf("PROGRESS_PCT:%d|install|%.1f/%.1f MB", pct,
+								float64(size)/1024/1024, float64(total)/1024/1024))
+						}
+					}
+					continue
+				}
+				if time.Since(lastGrow) > pushStallLimit {
+					stalled.Store(true)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+
+	waitErr := cmd.Wait()
+	close(watchStop)
+	statCancel() // cắt luôn lệnh stat đang chạy dở để goroutine thoát ngay
+	<-watchDone
+
+	if stalled.Load() {
+		return fmt.Errorf("việc truyền file đứng im quá %d phút — nhiều khả năng mất kết nối Wi-Fi tới xe. "+
+			"Kiểm tra xe còn trong vùng phủ sóng rồi thử lại", int(pushStallLimit.Minutes()))
+	}
+	if blindTimeout.Load() {
+		return fmt.Errorf("quá %d phút mà không đọc được tiến độ nào từ xe — nhiều khả năng mất kết nối. "+
+			"Kiểm tra lại kết nối rồi thử lại", int(blindPushLimit.Minutes()))
+	}
+	if waitErr != nil {
+		msg := extractError(outBuf.String())
 		if msg == "" {
-			msg = err.Error()
+			msg = strings.TrimSpace(outBuf.String())
+		}
+		if msg == "" {
+			msg = waitErr.Error()
 		}
 		return errors.New(msg)
 	}
 	return nil
+}
+
+// remoteFileSizeCtx đọc kích thước hiện tại của 1 file trên thiết bị (byte).
+// Trả -1 nếu chưa đọc được (file chưa tồn tại, máy không hỗ trợ stat, hoặc
+// lệnh bị huỷ). Nhận context để nơi gọi cắt được lệnh đang chạy dở.
+func (m *Manager) remoteFileSizeCtx(parent context.Context, remotePath string) int64 {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
+	out, err := m.run(ctx, "-s", m.Device, "shell", "stat", "-c", "%s", remotePath)
+	if err != nil {
+		return -1
+	}
+	size, convErr := strconv.ParseInt(strings.TrimSpace(strings.ReplaceAll(out, "\r", "")), 10, 64)
+	if convErr != nil {
+		return -1
+	}
+	return size
 }
 
 func splitToken(apkPath string) string {
@@ -864,7 +1085,7 @@ func (m *Manager) InstallXAPK(path string, log func(string)) (string, error) {
 		log(fmt.Sprintf("   📁 OBB %s -> %s ...", base, obbPkg))
 		remoteDir := "/sdcard/Android/obb/" + obbPkg
 		_, _ = m.runTimeout(30, "-s", m.Device, "shell", "mkdir", "-p", remoteDir)
-		out, err := m.runWithProgress(120, "push_obb", log, "-s", m.Device, "push", obb, remoteDir+"/"+base)
+		out, err := m.runWithProgress(installTimeoutSecs, "push_obb", log, "-s", m.Device, "push", obb, remoteDir+"/"+base)
 		if err != nil {
 			log("   ❌ Push OBB thất bại: " + strings.TrimSpace(out))
 			return "", err
@@ -934,6 +1155,38 @@ func parsePackageList(out string) []string {
 		pkgs = append(pkgs, strings.TrimPrefix(line, "package:"))
 	}
 	return pkgs
+}
+
+// rawPackageSet lấy danh sách package hiện có dạng set — KHÔNG tự khoá mutex,
+// chỉ gọi từ nơi đã giữ sẵn m.mu (vd trong InstallAPK) để tránh deadlock.
+func (m *Manager) rawPackageSet() map[string]bool {
+	out, err := m.runTimeout(20, "-s", m.Device, "shell", "pm", "list", "packages")
+	if err != nil {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, p := range parsePackageList(out) {
+		set[p] = true
+	}
+	return set
+}
+
+// diffSingleNewPackage trả về package duy nhất xuất hiện thêm trong "after" so
+// với "before" — dùng để suy ra package vừa cài khi không có aapt để đọc trực
+// tiếp từ file. Nếu có 0 hoặc nhiều hơn 1 package mới (không rõ ràng) thì trả "".
+func diffSingleNewPackage(before, after map[string]bool) string {
+	found := ""
+	count := 0
+	for p := range after {
+		if !before[p] {
+			found = p
+			count++
+		}
+	}
+	if count == 1 {
+		return found
+	}
+	return ""
 }
 
 func (m *Manager) ListPackages() ([]InstalledPackage, error) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -35,11 +36,22 @@ func bundledDir() (string, error) {
 	return dir, nil
 }
 
-// writeIfChanged chỉ ghi file khi nội dung khác hoặc chưa tồn tại — tránh ghi
-// đè giống hệt mỗi lần khởi động app.
+// writeIfChanged chỉ ghi lại nội dung khi khác hoặc chưa tồn tại — tránh ghi đè
+// giống hệt mỗi lần khởi động app — nhưng luôn đảm bảo đúng quyền thực thi dù
+// nội dung không đổi (phòng trường hợp bị mất quyền exec do sao chép/AV).
+// Ghi ra file tạm cùng thư mục rồi rename đè lên (atomic) để 2 tiến trình app
+// khởi động cùng lúc không ghi đè lẫn nhau ra 1 file dở dang.
 func writeIfChanged(path string, data []byte, perm os.FileMode) error {
 	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, data) {
-		return nil
+		return os.Chmod(path, perm)
 	}
-	return os.WriteFile(path, data, perm)
+	tmp := path + fmt.Sprintf(".tmp-%d", os.Getpid())
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }

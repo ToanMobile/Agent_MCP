@@ -63,7 +63,22 @@ const DEMO_PACKAGES = [
 const DEMO_QUICK_INSTALLS = [
   { name: 'App Demo 1 (đã cài)', url: 'https://example.com/demo1.apk', package: 'vn.vietmap.live' },
   { name: 'App Demo 2', url: 'https://example.com/demo2.apk' },
+  { name: 'App Demo 3 (app nặng)', url: 'https://example.com/demo3-big.apk' },
 ];
+
+// Dung lượng giả cho từng app demo, để thanh % chạy với tốc độ khác nhau
+// giống thực tế (app nhẹ xong nhanh, app nặng chạy lâu hơn).
+const DEMO_SIZES = {
+  'App Demo 1 (đã cài)': 25.0,
+  'App Demo 2': 87.5,
+  'App Demo 3 (app nặng)': 275.7,
+};
+
+// demoPkgNameFor sinh package name giả từ tên app, dùng cho mô phỏng cài xong.
+function demoPkgNameFor(name) {
+  const slug = (name || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return 'com.demo.' + (slug || 'app');
+}
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -88,19 +103,42 @@ async function demoConnect() {
   setDemoBadge();
 }
 
-async function demoInstall(name) {
+// demoProgress phát ra đúng loại dòng PROGRESS_PCT như server thật, để xem
+// trước thanh % chạy y hệt lúc dùng thật.
+async function demoProgress(label, totalMB, steps, delayMs) {
+  for (let i = 1; i <= steps; i++) {
+    const pct = Math.round((i / steps) * 100);
+    const doneMB = (totalMB * i) / steps;
+    appendLog(`PROGRESS_PCT:${pct}|${label}|${doneMB.toFixed(1)}/${totalMB.toFixed(1)} MB`);
+    await sleep(delayMs);
+  }
+}
+
+// Trả về true/false theo kết quả cài (để nơi gọi biết có nên đánh dấu file là
+// "đã cài" hay không) — kịch bản OldNavApp.apk mô phỏng đúng luồng xung đột
+// chữ ký thật: báo lỗi + hiện popup hỏi gỡ bản cũ, giống hệt code path thật.
+async function demoInstall(name, sizeMB) {
   clearLog();
   appendLog(`📦 ${name} ... (demo)`);
-  await sleep(500);
+  await sleep(300);
   if (name === 'OldNavApp.apk') {
     appendLog('❌ Cài đặt thất bại: ' + name);
-    appendLog('   💡 App đã cài sẵn nhưng khác chữ ký (bản mod vs bản gốc). (demo)');
+    appendLog('   💡 Đã có app này sẵn trong thiết bị (chữ ký khác — thường do bản cài sẵn từ nhà sản xuất hoặc bản mod). Cần gỡ bản cũ ra trước khi cài bản mới, không cài đè trực tiếp được. (demo)');
     appendLog('   ↳ Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]');
-    await sleep(400);
-    appendLog('   💡 Xung đột cài đặt. Bật "Tự gỡ bản cũ khi xung đột" trong Cài đặt, hoặc vào tab Gỡ cài đặt để gỡ thủ công rồi cài lại. (demo)');
-    return;
+    const retry = window.confirm(
+      'Đã có app "com.example.oldnav" cài sẵn trên thiết bị với chữ ký khác nên không cài đè được.\n\n(Demo) Gỡ bản cũ và cài lại bản mới ngay bây giờ?'
+    );
+    if (!retry) return false;
+    appendLog('🗑️  Đang gỡ com.example.oldnav ... (demo)');
+    await sleep(300);
+    appendLog('   ✅ Đã gỡ. Đang cài lại ... (demo)');
+    await demoProgress('install', sizeMB || 8.0, 12, 90);
+    appendLog('✅ Cài đặt thành công: ' + name + ' (demo)');
+    return true;
   }
+  await demoProgress('install', sizeMB || 25.0, 14, 110);
   appendLog('✅ Cài đặt thành công: ' + name + ' (demo)');
+  return true;
 }
 
 async function demoUninstall(pkg) {
@@ -149,13 +187,13 @@ function enterDemoMode() {
   toggle.classList.add('on');
   setDemoBadge();
   document.getElementById('folderPath').value = '/demo/folder-mau';
-  currentFolderFiles = DEMO_FILES.slice();
+  currentFolderFiles = DEMO_FILES.map((o) => ({ ...o }));
   renderFolderTable();
-  allPackages = DEMO_PACKAGES.slice();
+  allPackages = DEMO_PACKAGES.map((o) => ({ ...o }));
   favoriteSet = new Set(['vn.vietmap.live', 'com.waze']);
   renderPackages();
   renderFavoritesTab();
-  quickInstalls = DEMO_QUICK_INSTALLS.slice();
+  quickInstalls = DEMO_QUICK_INSTALLS.map((o) => ({ ...o }));
   renderQuickList();
   clearLog();
   appendLog('🧪 Đã bật CHẾ ĐỘ DEMO — toàn bộ dữ liệu bên dưới là giả để xem giao diện, KHÔNG thao tác lên thiết bị thật.');
@@ -489,13 +527,30 @@ document.getElementById('btnAddQuick').addEventListener('click', () => {
 
 async function runQuickInstall(q) {
   if (demoMode) {
+    // Mô phỏng đầy đủ y như luồng thật: tải (có %) → cài (có %) → mở app,
+    // rồi đánh dấu đã cài để nút đổi thành "Gỡ cài đặt".
+    const sizeMB = DEMO_SIZES[q.name] || 42.0;
+    const fakePkg = q.package || demoPkgNameFor(q.name);
     clearLog();
-    appendLog(`⬇️  Đang tải ${q.name} ... (demo)`);
-    await sleep(500);
-    appendLog('   🔗 Link GitHub → link tải trực tiếp (demo)');
+    appendLog(`⬇️  Đang tải: ${q.url} (demo)`);
     await sleep(300);
-    appendLog('   ✅ Đã tải xong (demo)');
-    await demoInstall((q.name || 'app') + '.apk');
+    appendLog('   🔗 Link rút gọn/chia sẻ → link tải trực tiếp (demo)');
+    await demoProgress('download', sizeMB, 16, 90);
+    appendLog(`   ✅ Đã tải xong (${sizeMB.toFixed(1)} MB): ${q.name}.apk (demo)`);
+
+    const ok = await demoInstall(`${q.name}.apk`, sizeMB);
+    if (!ok) return;
+
+    appendLog(`🚀 Đang mở app ${fakePkg} ... (demo)`);
+    await sleep(300);
+    appendLog('   ✅ Đã mở app. (demo)');
+
+    q.package = fakePkg;
+    if (!allPackages.some((p) => p.name === fakePkg)) {
+      allPackages.push({ name: fakePkg, label: q.name, enabled: true });
+    }
+    renderPackages();
+    renderFavoritesTab();
     return;
   }
   clearLog();
@@ -688,8 +743,8 @@ document.getElementById('btnShowHiddenFiles').addEventListener('click', () => {
 async function installOnePath(path) {
   if (demoMode) {
     const f = currentFolderFiles.find((x) => x.path === path);
-    await demoInstall(f ? f.name : path.split('/').pop());
-    if (f) { f.installed = true; f.disabledOnDevice = false; renderFolderTable(); }
+    const ok = await demoInstall(f ? f.name : path.split('/').pop());
+    if (f && ok) { f.installed = true; f.disabledOnDevice = false; renderFolderTable(); }
     return;
   }
   clearLog();
@@ -735,7 +790,7 @@ document.getElementById('btnScanFolder').addEventListener('click', async () => {
   const path = document.getElementById('folderPath').value.trim();
   if (!path) return;
   if (demoMode) {
-    currentFolderFiles = DEMO_FILES.slice();
+    currentFolderFiles = DEMO_FILES.map((o) => ({ ...o }));
     lastScanDeviceChecked = true;
     hiddenFilePaths.clear();
     renderFolderTable();
@@ -763,7 +818,8 @@ document.getElementById('btnInstallAll').addEventListener('click', async () => {
   for (const f of visibleFolderFiles) {
     appendLog(`── ${f.name} ──`);
     if (demoMode) {
-      await demoInstall(f.name);
+      const ok = await demoInstall(f.name);
+      if (ok) { f.installed = true; f.disabledOnDevice = false; }
       continue;
     }
     await streamRequest('/api/install-path', {
@@ -772,6 +828,7 @@ document.getElementById('btnInstallAll').addEventListener('click', async () => {
       body: JSON.stringify({ path: f.path }),
     }, appendLog);
   }
+  if (demoMode) renderFolderTable();
   appendLog('🏁 Đã cài xong tất cả.');
 });
 
@@ -781,8 +838,9 @@ let allPackages = [];
 
 document.getElementById('btnListPackages').addEventListener('click', async () => {
   if (demoMode) {
-    allPackages = DEMO_PACKAGES.slice();
+    allPackages = DEMO_PACKAGES.map((o) => ({ ...o }));
     renderPackages();
+    renderFavoritesTab();
     appendLog('🧪 (demo) Danh sách package mẫu.');
     return;
   }
@@ -790,6 +848,7 @@ document.getElementById('btnListPackages').addEventListener('click', async () =>
   if (r.error) { appendLog('❌ ' + r.error); return; }
   allPackages = r.packages || [];
   renderPackages();
+  renderFavoritesTab();
 });
 
 document.getElementById('pkgFilter').addEventListener('input', renderPackages);

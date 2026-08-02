@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -37,27 +38,29 @@ func streamOp(w http.ResponseWriter, op func(log func(string))) {
 	op(logf)
 }
 
+// statusPayload luôn đọc qua StatusSnapshot() để lấy dữ liệu dưới khoá.
 func statusPayload(mgr *Manager) map[string]any {
-	return map[string]any{
-		"device":           mgr.Device,
-		"abi":              mgr.ABI,
-		"sdk":              mgr.SDK,
-		"wifiSSID":         mgr.WifiSSID,
-		"connected":        mgr.Device != "",
-		"adbPath":          mgr.AdbPath,
-		"aaptPath":         mgr.AaptPath,
-		"adbFound":         mgr.AdbPath != "" && fileExecutable(mgr.AdbPath),
-		"ip":               mgr.Cfg.IP,
-		"port":             mgr.Cfg.Port,
-		"lastFolder":       mgr.Cfg.LastFolder,
-		"quickInstalls":    mgr.Cfg.QuickInstalls,
-		"favoritePackages": mgr.Cfg.FavoritePackages,
-	}
+	return mgr.StatusSnapshot()
 }
 
 func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, statusPayload(mgr))
+	})
+
+	// /api/shutdown: cho phép 1 bản Geely EX2 App Manage mới khởi động yêu cầu
+	// bản cũ (đang chiếm cổng 8848 từ lần chạy trước) tự thoát, để bản mới luôn
+	// chạy đúng ở cổng quen thuộc thay vì bị đẩy sang cổng khác.
+	mux.HandleFunc("/api/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, 405, "method not allowed")
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			os.Exit(0)
+		}()
 	})
 
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
@@ -75,19 +78,20 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 				writeErr(w, 400, "body không hợp lệ")
 				return
 			}
-			if strings.TrimSpace(body.IP) != "" {
-				mgr.Cfg.IP = strings.TrimSpace(body.IP)
-			}
-			if strings.TrimSpace(body.Port) != "" {
-				mgr.Cfg.Port = strings.TrimSpace(body.Port)
-			}
-			if body.QuickInstalls != nil {
-				mgr.Cfg.QuickInstalls = *body.QuickInstalls
-			}
-			if body.FavoritePackages != nil {
-				mgr.Cfg.FavoritePackages = *body.FavoritePackages
-			}
-			if err := mgr.Cfg.Save(); err != nil {
+			if err := mgr.UpdateConfig(func(c *Config) {
+				if strings.TrimSpace(body.IP) != "" {
+					c.IP = strings.TrimSpace(body.IP)
+				}
+				if strings.TrimSpace(body.Port) != "" {
+					c.Port = strings.TrimSpace(body.Port)
+				}
+				if body.QuickInstalls != nil {
+					c.QuickInstalls = *body.QuickInstalls
+				}
+				if body.FavoritePackages != nil {
+					c.FavoritePackages = *body.FavoritePackages
+				}
+			}); err != nil {
 				writeErr(w, 500, err.Error())
 				return
 			}
@@ -188,8 +192,7 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 			writeErr(w, 500, err.Error())
 			return
 		}
-		mgr.Cfg.LastFolder = path
-		_ = mgr.Cfg.Save()
+		_ = mgr.UpdateConfig(func(c *Config) { c.LastFolder = path })
 		writeJSON(w, scan)
 	})
 
@@ -412,13 +415,13 @@ func RegisterRoutes(mux *http.ServeMux, mgr *Manager) {
 				return
 			}
 			if pkg != "" {
-				for i := range mgr.Cfg.QuickInstalls {
-					if mgr.Cfg.QuickInstalls[i].URL == targetURL {
-						mgr.Cfg.QuickInstalls[i].Package = pkg
-						_ = mgr.Cfg.Save()
-						break
+				_ = mgr.UpdateConfig(func(c *Config) {
+					for i := range c.QuickInstalls {
+						if c.QuickInstalls[i].URL == targetURL {
+							c.QuickInstalls[i].Package = pkg
+						}
 					}
-				}
+				})
 			}
 			_ = mgr.LaunchApp(pkg, log)
 			log("RESULT_OK")

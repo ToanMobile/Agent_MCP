@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +17,30 @@ import (
 
 var githubBlobRe = regexp.MustCompile(`^/([^/]+)/([^/]+)/blob/([^/]+)/(.+)$`)
 var driveFileIDRe = regexp.MustCompile(`/file/d/([a-zA-Z0-9_-]+)`)
+
+// CleanupOrphanedTempDirs xoá các thư mục tạm còn sót từ những lần chạy trước
+// bị tắt ngang (tắt app/mất điện lúc đang tải hoặc đang giải nén XAPK). Bình
+// thường app tự dọn khi xong, nhưng tiến trình bị giết thì không kịp — mỗi lần
+// như vậy để lại vài trăm MB nằm lì trong thư mục tạm.
+//
+// Chỉ đụng vào thư mục do chính app này tạo (tiền tố "apkmanager-") và đã cũ
+// hơn 1 tiếng, để không bao giờ xoá nhầm thư mục của phiên đang chạy song song.
+func CleanupOrphanedTempDirs() {
+	entries, err := os.ReadDir(os.TempDir())
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "apkmanager-") {
+			continue
+		}
+		info, statErr := e.Info()
+		if statErr != nil || time.Since(info.ModTime()) < time.Hour {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(os.TempDir(), e.Name()))
+	}
+}
 
 func isGoogleDriveHost(host string) bool {
 	switch host {
@@ -105,7 +130,18 @@ func DownloadInstallable(rawURL string, log func(string)) (string, error) {
 		log("   🔗 Link rút gọn/chia sẻ → link tải trực tiếp: " + direct)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Minute}
+	// KHÔNG đặt Timeout tổng: đó là giới hạn cho toàn bộ vòng đời request, nên
+	// file lớn (300MB+) trên mạng chậm sẽ bị cắt giữa chừng dù đang tải bình
+	// thường. Thay vào đó chỉ giới hạn thời gian chờ phản hồi/kết nối — mạng
+	// chết thì báo lỗi nhanh, còn mạng chậm mà vẫn chạy thì cứ để tải tiếp.
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 20 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   20 * time.Second,
+			ResponseHeaderTimeout: 60 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+		},
+	}
 	req, err := http.NewRequest(http.MethodGet, direct, nil)
 	if err != nil {
 		return "", err
