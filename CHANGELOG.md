@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added `list_crashlytics_issues` and `get_crashlytics_issue` so a Crashlytics
+  `issue_id` can be discovered and verified from the MCP server instead of the
+  Firebase console. Crashlytics and Android Vitals identify the same crash
+  under different 32-character hex IDs, and the Crashlytics API rejects a
+  foreign ID with an opaque `500 INTERNAL`, so IDs from `list_error_issues`
+  could not be used with `close_crashlytics_issue`. Listing is backed by the
+  v1alpha `topIssues` report (the API has no `issues.list` method) and supports
+  title/stack-trace search plus error-type and state filters. Both tools are
+  reads and stay available in read-only mode.
 - Added `close_crashlytics_issue`, backed by the Firebase Crashlytics v1alpha
   issue `patch` API, to close fatal-crash and Android-ANR issues. It supports
   file, environment, per-request header, and `/credentials` service-account

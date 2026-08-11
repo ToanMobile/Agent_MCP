@@ -43,7 +43,21 @@ Complete reference for all MCP tools provided by the Play Store MCP server.
 | `get_vitals_summary` | Summarize crash and ANR rates by version code |
 | `list_error_issues` | List recent Google Play Android Vitals error issues |
 | `get_error_reports` | Fetch Google Play error reports and stack traces |
+| `list_crashlytics_issues` | List Firebase Crashlytics issues with their issue IDs |
+| `get_crashlytics_issue` | Fetch one Firebase Crashlytics issue by ID |
 | `close_crashlytics_issue` | Close a Firebase Crashlytics crash or ANR issue (write) |
+
+Crashlytics and Android Vitals track the same crash under **different issue
+IDs**, even though both are 32-character hex. Take the `issue_id` for the
+Crashlytics tools from `list_crashlytics_issues`, never from
+`list_error_issues` — the Crashlytics API answers a well-formed but unknown ID
+with `500 INTERNAL` ("Internal error encountered."), not a `404`, so a Vitals ID
+fails without saying why.
+
+`list_crashlytics_issues` is backed by the `topIssues` report (v1alpha has no
+`issues.list` method) and supports `search` over the issue title and stack
+trace, plus `error_type` (`FATAL` / `NON_FATAL` / `ANR`) and `state` (`OPEN` /
+`CLOSED` / `MUTED`) filters.
 
 `close_crashlytics_issue` requires `project_id`, the Firebase `app_id`, and the
 Crashlytics `issue_id` — the full 32-character lowercase hex ID (for example,

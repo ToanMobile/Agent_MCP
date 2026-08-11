@@ -867,6 +867,79 @@ def get_error_reports(
 
 
 @mcp.tool()
+def list_crashlytics_issues(
+    project_id: str,
+    app_id: str,
+    days: int = 30,
+    error_type: str = "",
+    state: str = "",
+    search: str = "",
+    max_results: int = 25,
+    page_token: str = "",
+) -> dict[str, Any]:
+    """List Firebase Crashlytics issues, with the issue IDs used to close them.
+
+    This is the correct source of an issue_id for get_crashlytics_issue and
+    close_crashlytics_issue. The IDs returned by list_error_issues come from
+    Android Vitals (Play Developer Reporting API), which tracks the same crash
+    under a different identifier — passing one of those to the Crashlytics
+    tools fails with an opaque "Internal error encountered."
+
+    Args:
+        project_id: Firebase/Google Cloud project ID
+        app_id: Firebase app ID (for example, 1:1234567890:android:abcdef)
+        days: Past days of events to rank issues over (default 30, max 365)
+        error_type: Optional filter: "FATAL", "NON_FATAL", or "ANR"
+        state: Optional filter: "OPEN", "CLOSED", or "MUTED"
+        search: Optional search over issue title and stack trace, as space
+            separated prefix terms (for example, BadParcelableException
+            MainTabsScreen); quote a term for an exact match
+        max_results: Max issues to return (default 25, max 100)
+        page_token: Page token from a previous call's nextPageToken
+
+    Returns:
+        Issues with issueId, title, subtitle, errorType, state, versions,
+        event/user counts, and a Firebase console uri
+    """
+    client = get_crashlytics_client_from_context()
+    return client.list_issues(
+        project_id=project_id,
+        app_id=app_id,
+        days=days,
+        error_type=error_type,
+        state=state,
+        search=search,
+        page_size=max_results,
+        page_token=page_token,
+    )
+
+
+@mcp.tool()
+def get_crashlytics_issue(
+    project_id: str,
+    app_id: str,
+    issue_id: str,
+) -> dict[str, Any]:
+    """Get one Firebase Crashlytics issue, to confirm an ID before closing it.
+
+    Args:
+        project_id: Firebase/Google Cloud project ID
+        app_id: Firebase app ID (for example, 1:1234567890:android:abcdef)
+        issue_id: Full 32-character lowercase hex Crashlytics issue ID (from
+            list_crashlytics_issues)
+
+    Returns:
+        The issue with its title, errorType, state, and Firebase console uri
+    """
+    client = get_crashlytics_client_from_context()
+    return client.get_issue(
+        project_id=project_id,
+        app_id=app_id,
+        issue_id=issue_id,
+    )
+
+
+@mcp.tool()
 def close_crashlytics_issue(
     project_id: str,
     app_id: str,
@@ -884,9 +957,11 @@ def close_crashlytics_issue(
     Args:
         project_id: Firebase/Google Cloud project ID
         app_id: Firebase app ID (for example, 1:1234567890:android:abcdef)
-        issue_id: Full 32-character lowercase hex Crashlytics issue ID (for
-            example, c07d6e046632025ecd72f628ee1bf2ce), not the full resource
-            name and not a truncated prefix
+        issue_id: Full 32-character lowercase hex Crashlytics issue ID from
+            list_crashlytics_issues (for example,
+            c07d6e046632025ecd72f628ee1bf2ce), not the full resource name, not
+            a truncated prefix, and not an Android Vitals issue ID from
+            list_error_issues
 
     Returns:
         The updated Firebase Crashlytics issue with state CLOSED

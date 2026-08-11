@@ -86,10 +86,14 @@ Set the path to your service account key:
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 ```
 
-To use `close_crashlytics_issue`, enable the Firebase Crashlytics API and grant
+To use the Crashlytics tools, enable the Firebase Crashlytics API and grant
 the service account **Firebase Crashlytics Admin**
-(`roles/firebasecrashlytics.admin`). The tool accepts the Firebase project ID,
-app ID, and issue ID, and closes both fatal-crash and Android-ANR issues.
+(`roles/firebasecrashlytics.admin`). `close_crashlytics_issue` accepts the
+Firebase project ID, app ID, and issue ID, and closes both fatal-crash and
+Android-ANR issues. Get that issue ID from `list_crashlytics_issues` (or verify
+one with `get_crashlytics_issue`): Crashlytics and Android Vitals identify the
+same crash differently, so an ID from `list_error_issues` is rejected with an
+unhelpful `500 INTERNAL`.
 
 Google Play Android Vitals issues remain read-only: the public Play Developer
 Reporting API only exposes issue search and has no endpoint for changing an
