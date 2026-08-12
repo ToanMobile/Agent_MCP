@@ -203,8 +203,8 @@ changes are not mirrored to Play Console.
 |---|---|
 | [`list_apks`](tools/subscriptions.md#list_apks) | List the APKs currently uploaded for an app |
 | [`list_bundles`](tools/subscriptions.md#list_bundles) | List the Android App Bundles currently uploaded for an app |
-| [`upload_apk`](tools/subscriptions.md#upload_apk) | Upload an APK and commit the edit (write) |
-| [`upload_bundle`](tools/subscriptions.md#upload_bundle) | Upload an app bundle (.aab) and commit the edit (write) |
+| [`upload_apk`](tools/subscriptions.md#upload_apk) | Upload an APK and commit the edit, or validate only with `commit=false` (write) |
+| [`upload_bundle`](tools/subscriptions.md#upload_bundle) | Upload an app bundle (.aab) and commit the edit, or validate only with `commit=false` (write) |
 | [`upload_deobfuscation_file`](tools/subscriptions.md#upload_deobfuscation_file) | Upload a ProGuard mapping / native symbols file (write) |
 | [`upload_expansion_file`](tools/subscriptions.md#upload_expansion_file) | Upload an APK expansion (OBB) file (write) |
 

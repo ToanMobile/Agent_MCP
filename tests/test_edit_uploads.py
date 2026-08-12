@@ -17,9 +17,9 @@ from play_store_mcp.models import Apk, Bundle, DeobfuscationFile, ExpansionFile
 # ---------------------------------------------------------------------------
 
 
-def _make_http_error(reason: str = "boom") -> HttpError:
+def _make_http_error(reason: str = "boom", status: int = 400) -> HttpError:
     resp = MagicMock()
-    resp.status = 400
+    resp.status = status
     resp.reason = reason
     err = HttpError(resp, b"{}")
     err.reason = reason
@@ -273,6 +273,99 @@ def test_upload_bundle_http_error_abandons_edit(monkeypatch):
     _edits(service).commit.assert_not_called()
 
 
+def test_upload_bundle_error_keeps_the_http_status(monkeypatch):
+    """A 500 from Play must not read like a rejected artifact: show the status."""
+    service = MagicMock()
+    _prime_edit(service)
+    _edits(service).bundles.return_value.upload.return_value.execute.side_effect = _make_http_error(
+        "Internal error", status=500
+    )
+    monkeypatch.setattr(client_module, "MediaFileUpload", MagicMock())
+    client = _client(service)
+
+    with pytest.raises(PlayStoreClientError) as excinfo:
+        client.upload_bundle("com.example.app", "/data/build/app.aab")
+
+    assert "HTTP 500" in str(excinfo.value)
+    assert "Internal error" in str(excinfo.value)
+
+
+def test_upload_bundle_timeout_is_reported_as_a_timeout(monkeypatch):
+    """A client-side read timeout must not be conflated with a Play rejection."""
+    service = MagicMock()
+    _prime_edit(service)
+    _edits(service).bundles.return_value.upload.return_value.execute.side_effect = TimeoutError(
+        "The read operation timed out"
+    )
+    monkeypatch.setattr(client_module, "MediaFileUpload", MagicMock())
+    monkeypatch.setenv(client_module.UPLOAD_TIMEOUT_ENV, "900")
+    client = _client(service)
+
+    with pytest.raises(PlayStoreClientError) as excinfo:
+        client.upload_bundle("com.example.app", "/data/build/app.aab")
+
+    message = str(excinfo.value)
+    assert "Timed out after 900s" in message
+    assert "No HTTP status was received" in message
+    assert client_module.UPLOAD_TIMEOUT_ENV in message
+    # Nothing published, and the edit is not left dangling.
+    _edits(service).commit.assert_not_called()
+    _edits(service).delete.assert_called_once_with(packageName="com.example.app", editId="edit-123")
+
+
+def test_upload_bundle_without_commit_discards_the_edit(monkeypatch):
+    """commit=False validates the bundle without spending the version code."""
+    service = MagicMock()
+    _prime_edit(service)
+    _edits(service).bundles.return_value.upload.return_value.execute.return_value = {
+        "versionCode": 130,
+        "sha1": "u1",
+    }
+    monkeypatch.setattr(client_module, "MediaFileUpload", MagicMock())
+    client = _client(service)
+
+    result = client.upload_bundle("com.example.app", "/data/build/app.aab", commit=False)
+
+    assert result.version_code == 130
+    _edits(service).commit.assert_not_called()
+    _edits(service).delete.assert_called_once_with(packageName="com.example.app", editId="edit-123")
+
+
+def test_upload_apk_without_commit_discards_the_edit(monkeypatch):
+    service = MagicMock()
+    _prime_edit(service)
+    _edits(service).apks.return_value.upload.return_value.execute.return_value = {
+        "versionCode": 30,
+        "binary": {"sha1": "a1"},
+    }
+    monkeypatch.setattr(client_module, "MediaFileUpload", MagicMock())
+    client = _client(service)
+
+    result = client.upload_apk("com.example.app", "/data/build/app.apk", commit=False)
+
+    assert result.version_code == 30
+    _edits(service).commit.assert_not_called()
+    _edits(service).delete.assert_called_once_with(packageName="com.example.app", editId="edit-123")
+
+
+def test_upload_bundle_uses_the_long_timeout_transport(monkeypatch):
+    """The upload request goes over the upload transport, not the default one."""
+    service = MagicMock()
+    _prime_edit(service)
+    upload_request = _edits(service).bundles.return_value.upload.return_value
+    upload_request.execute.return_value = {"versionCode": 40}
+    monkeypatch.setattr(client_module, "MediaFileUpload", MagicMock())
+    client = _client(service)
+    upload_http = MagicMock(name="upload_http")
+    client._upload_http = upload_http
+
+    client.upload_bundle("com.example.app", "/data/build/app.aab")
+
+    upload_request.execute.assert_called_once_with(http=upload_http)
+    # Ordinary calls in the same flow keep the default transport.
+    _edits(service).insert.return_value.execute.assert_called_once_with()
+
+
 # ---------------------------------------------------------------------------
 # Client: upload_deobfuscation_file (WRITE)
 # ---------------------------------------------------------------------------
@@ -467,8 +560,25 @@ def test_tool_upload_apk(monkeypatch):
 
     assert result["version_code"] == 30
     assert result["sha1"] == "a1"
+    assert result["committed"] is True
+    assert "note" not in result
     mc.upload_apk.assert_called_once_with(
-        package_name="com.example.app", apk_path="/data/build/app.apk"
+        package_name="com.example.app", apk_path="/data/build/app.apk", commit=True
+    )
+
+
+def test_tool_upload_apk_without_commit(monkeypatch):
+    monkeypatch.setattr(server, "READ_ONLY", False)
+    mc = MagicMock()
+    mc.upload_apk.return_value = Apk(package_name="com.example.app", version_code=30, sha1="a1")
+    monkeypatch.setattr(server, "get_client_from_context", lambda: mc)
+
+    result = server.upload_apk("com.example.app", "/data/build/app.apk", commit=False)
+
+    assert result["committed"] is False
+    assert "nothing was published" in result["note"]
+    mc.upload_apk.assert_called_once_with(
+        package_name="com.example.app", apk_path="/data/build/app.apk", commit=False
     )
 
 
@@ -484,8 +594,29 @@ def test_tool_upload_bundle(monkeypatch):
 
     assert result["version_code"] == 40
     assert result["sha256"] == "u256"
+    assert result["committed"] is True
+    assert "note" not in result
     mc.upload_bundle.assert_called_once_with(
-        package_name="com.example.app", bundle_path="/data/build/app.aab"
+        package_name="com.example.app", bundle_path="/data/build/app.aab", commit=True
+    )
+
+
+def test_tool_upload_bundle_without_commit(monkeypatch):
+    """commit=False is a validation run: the caller must be able to see that."""
+    monkeypatch.setattr(server, "READ_ONLY", False)
+    mc = MagicMock()
+    mc.upload_bundle.return_value = Bundle(
+        package_name="com.example.app", version_code=40, sha256="u256"
+    )
+    monkeypatch.setattr(server, "get_client_from_context", lambda: mc)
+
+    result = server.upload_bundle("com.example.app", "/data/build/app.aab", commit=False)
+
+    assert result["version_code"] == 40
+    assert result["committed"] is False
+    assert "nothing was published" in result["note"]
+    mc.upload_bundle.assert_called_once_with(
+        package_name="com.example.app", bundle_path="/data/build/app.aab", commit=False
     )
 
 

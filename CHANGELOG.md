@@ -11,7 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Artifact uploads no longer hide the server's answer behind a client-side
+  timeout. The API transport used googleapiclient's default 60s socket
+  timeout, which a large `.aab` upload routinely outruns, so a Play `500
+  INTERNAL` surfaced as `Failed to upload bundle: The read operation timed
+  out` — a network-shaped message that points diagnosis in the wrong
+  direction. Uploads now go over a transport with a much longer timeout
+  (`PLAY_STORE_MCP_UPLOAD_TIMEOUT`, default 1200s; other calls use
+  `PLAY_STORE_MCP_HTTP_TIMEOUT`, default 120s), a genuine timeout is reported
+  as one and says no HTTP status was received, and upload errors now carry the
+  status code (`HTTP 500: ...`) rather than the bare reason.
+
 ### Added
+- `upload_apk` and `upload_bundle` take `commit` (default `true`). With
+  `commit=false` the artifact is uploaded and validated by Play, then the edit
+  is discarded: no draft on the Console and no version code consumed, so a
+  rejected artifact can be told apart from a failing Play backend without
+  burning a version code per attempt. The result reports `committed`.
 - Added `list_crashlytics_issues` and `get_crashlytics_issue` so a Crashlytics
   `issue_id` can be discovered and verified from the MCP server instead of the
   Firebase console. Crashlytics and Android Vitals identify the same crash

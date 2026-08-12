@@ -1749,14 +1749,16 @@ list_bundles(package_name="com.example.myapp")
 
 ### upload_apk
 
-Upload an APK to a new edit and commit it. **Write.**
+Upload an APK to a new edit and commit it, unless `commit=False`. **Write.**
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `package_name` | string | Yes | App package name |
-| `apk_path` | string | Yes | Local path to the APK file |
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `package_name` | string | Yes | — | App package name |
+| `apk_path` | string | Yes | — | Local path to the APK file |
+| `commit` | boolean | No | `True` | Commit the edit on success. `False` discards the edit after Play validates the APK: no draft, no version code consumed |
 
-Returns the uploaded APK with its `version_code` and binary `sha1`/`sha256`.
+Returns the uploaded APK with its `version_code`, binary `sha1`/`sha256`, and
+`committed`.
 
 ```python
 upload_apk(
@@ -1767,14 +1769,17 @@ upload_apk(
 
 ### upload_bundle
 
-Upload an Android App Bundle (`.aab`) to a new edit and commit it. **Write.**
+Upload an Android App Bundle (`.aab`) to a new edit and commit it, unless
+`commit=False`. **Write.**
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `package_name` | string | Yes | App package name |
-| `bundle_path` | string | Yes | Local path to the app bundle (`.aab`) file |
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `package_name` | string | Yes | — | App package name |
+| `bundle_path` | string | Yes | — | Local path to the app bundle (`.aab`) file |
+| `commit` | boolean | No | `True` | Commit the edit on success. `False` discards the edit after Play validates the bundle: no draft, no version code consumed |
 
-Returns the uploaded bundle with its `version_code` and `sha1`/`sha256`.
+Returns the uploaded bundle with its `version_code`, `sha1`/`sha256`, and
+`committed`.
 
 ```python
 upload_bundle(
@@ -1782,6 +1787,22 @@ upload_bundle(
     bundle_path="/path/to/app.aab",
 )
 ```
+
+A validation run — Play checks the bundle, nothing is published, and version
+code 130 stays free for the next attempt:
+
+```python
+upload_bundle(
+    package_name="com.example.myapp",
+    bundle_path="/path/to/app.aab",
+    commit=False,
+)
+```
+
+Uploads are sent over a transport with a long read timeout
+(`PLAY_STORE_MCP_UPLOAD_TIMEOUT`, default 1200s) so Play's real status — a
+rejection or a `HTTP 500` — is not lost to a client-side timeout. Raise the
+MCP client's own tool-call timeout to match.
 
 ### upload_deobfuscation_file
 

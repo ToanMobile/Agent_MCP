@@ -270,6 +270,22 @@ def _read_only_block(operation: str) -> dict[str, Any] | None:
     return None
 
 
+def _upload_result(payload: dict[str, Any], *, commit: bool) -> dict[str, Any]:
+    """Annotate an artifact upload result with what happened to the edit.
+
+    Without this the caller cannot tell a published upload from a validation
+    run: both return the same version code and hashes.
+    """
+    result = dict(payload)
+    result["committed"] = commit
+    if not commit:
+        result["note"] = (
+            "Validation only: Play accepted the artifact and the edit was discarded, "
+            "so nothing was published and this version code is still available."
+        )
+    return result
+
+
 def _code_mode_enabled() -> bool:
     """Return True if CODE_MODE enables the experimental code-mode transform."""
     return os.environ.get("CODE_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
@@ -3621,45 +3637,54 @@ def list_bundles(package_name: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def upload_apk(package_name: str, apk_path: str) -> dict[str, Any]:
-    """Upload an APK to a new edit and commit it.
+def upload_apk(package_name: str, apk_path: str, commit: bool = True) -> dict[str, Any]:
+    """Upload an APK to a new edit, committing it unless commit=False.
 
     Disabled in read-only mode.
 
     Args:
         package_name: App package name
         apk_path: Local path to the APK file
+        commit: Commit the edit on success (default). Pass False to have Play
+            validate the APK and then discard the edit, leaving no draft on the
+            Console and no version code consumed
 
     Returns:
-        The uploaded APK with its version code and binary sha1/sha256 hashes
+        The uploaded APK with its version code, binary sha1/sha256 hashes, and
+        whether the edit was committed
     """
     if blocked := _read_only_block("upload_apk"):
         return blocked
     client = get_client_from_context()
 
-    apk = client.upload_apk(package_name=package_name, apk_path=apk_path)
-    return apk.model_dump()
+    apk = client.upload_apk(package_name=package_name, apk_path=apk_path, commit=commit)
+    return _upload_result(apk.model_dump(), commit=commit)
 
 
 @mcp.tool()
-def upload_bundle(package_name: str, bundle_path: str) -> dict[str, Any]:
-    """Upload an Android App Bundle (.aab) to a new edit and commit it.
+def upload_bundle(package_name: str, bundle_path: str, commit: bool = True) -> dict[str, Any]:
+    """Upload an Android App Bundle (.aab) to a new edit, committing it unless commit=False.
 
     Disabled in read-only mode.
 
     Args:
         package_name: App package name
         bundle_path: Local path to the app bundle (.aab) file
+        commit: Commit the edit on success (default). Pass False to have Play
+            validate the bundle and then discard the edit, leaving no draft on
+            the Console and no version code consumed — use this to tell a
+            rejected artifact apart from a failing Play backend
 
     Returns:
-        The uploaded app bundle with its version code and sha1/sha256 hashes
+        The uploaded app bundle with its version code, sha1/sha256 hashes, and
+        whether the edit was committed
     """
     if blocked := _read_only_block("upload_bundle"):
         return blocked
     client = get_client_from_context()
 
-    bundle = client.upload_bundle(package_name=package_name, bundle_path=bundle_path)
-    return bundle.model_dump()
+    bundle = client.upload_bundle(package_name=package_name, bundle_path=bundle_path, commit=commit)
+    return _upload_result(bundle.model_dump(), commit=commit)
 
 
 @mcp.tool()

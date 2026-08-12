@@ -169,6 +169,8 @@ module = [
     "googleapiclient.*",
     "google.oauth2.*",
     "google.auth.*",
+    "google_auth_httplib2.*",
+    "httplib2.*",
     "mcp.*",
 ]
 ignore_missing_imports = true

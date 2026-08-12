@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import google_auth_httplib2
+import httplib2
 import structlog
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -82,6 +84,16 @@ SCOPES = ["https://www.googleapis.com/auth/androidpublisher"]
 MAX_RETRIES = 3
 INITIAL_BACKOFF = 1.0  # seconds
 MAX_BACKOFF = 32.0  # seconds
+
+# Transport timeouts, in seconds. googleapiclient builds its own http with a
+# 60s socket timeout when none is passed, which is far shorter than Play takes
+# to answer an artifact upload: the client gives up first and raises "the read
+# operation timed out", so a server-side 500 arrives looking like a network
+# fault. Uploads therefore get their own, much longer transport.
+DEFAULT_HTTP_TIMEOUT = 120.0
+DEFAULT_UPLOAD_TIMEOUT = 1200.0
+HTTP_TIMEOUT_ENV = "PLAY_STORE_MCP_HTTP_TIMEOUT"
+UPLOAD_TIMEOUT_ENV = "PLAY_STORE_MCP_UPLOAD_TIMEOUT"
 
 # HTTP methods whose requests are safe to retry on an ambiguous server error
 # (500/503): repeating them cannot create a duplicate side effect. Non-idempotent
@@ -155,6 +167,60 @@ def _parse_review(review_data: dict[str, Any]) -> Review | None:
         developer_reply_time=(
             _parse_timestamp(dev_comment.get("lastModified")) if dev_comment else None
         ),
+    )
+
+
+def _timeout_from_env(env_var: str, default: float) -> float:
+    """Read a positive timeout (seconds) from ``env_var``, falling back to ``default``."""
+    raw = os.environ.get(env_var)
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("Ignoring invalid timeout", env_var=env_var, default=default)
+        return default
+    if value <= 0:
+        logger.warning("Ignoring non-positive timeout", env_var=env_var, default=default)
+        return default
+    return value
+
+
+def _http_error_detail(error: HttpError) -> str:
+    """Describe an ``HttpError`` with its status code kept in front.
+
+    ``HttpError.reason`` on its own renders a Play 500 as "Internal error",
+    which reads like a bad request. The status code is the one thing that
+    separates "the artifact is rejected" (4xx) from "Play is failing" (5xx),
+    so it belongs in every message a caller sees.
+    """
+    status = getattr(getattr(error, "resp", None), "status", None)
+    reason = (getattr(error, "reason", None) or "").strip() or "no reason given"
+    return f"HTTP {status}: {reason}" if status else reason
+
+
+def _is_timeout_error(error: BaseException) -> bool:
+    """Whether ``error`` is a client-side socket/TLS read timeout.
+
+    httplib2 surfaces these as ``socket.timeout`` (an alias of ``TimeoutError``)
+    or as ``ssl.SSLError("The read operation timed out")``, neither of which
+    carries an HTTP status.
+    """
+    return isinstance(error, TimeoutError) or "timed out" in str(error).lower()
+
+
+def _timeout_message(operation: str, timeout: float, error: BaseException) -> str:
+    """Message for an upload that timed out before Play answered.
+
+    Says explicitly that no HTTP status was received, so this is not read as a
+    rejection of the artifact — that distinction is the whole diagnosis.
+    """
+    return (
+        f"Timed out after {timeout:g}s waiting for Google Play to answer the {operation} "
+        f"({error}). No HTTP status was received: this is a client-side timeout, not a "
+        f"rejection of the artifact, and Play may have been processing it. The edit was "
+        f"abandoned, so nothing was published. Raise {UPLOAD_TIMEOUT_ENV} (seconds) and "
+        f"retry to see the real status."
     )
 
 
@@ -255,10 +321,17 @@ class PlayStoreClient:
             else os.environ.get("PLAY_STORE_MCP_DOWNLOAD_DIR")
         )
         self._service: AndroidPublisherResource | None = None
+        self._credentials: Any | None = None
+        # A second transport, waiting far longer for a response, over which
+        # artifact uploads are sent (see DEFAULT_UPLOAD_TIMEOUT).
+        self._upload_http: Any | None = None
         # Serializes API I/O on this client's single (non-thread-safe) httplib2
         # transport. The shared fallback client is used across concurrent tool
         # worker threads; per-request header clients each get their own lock.
+        # The upload transport is a separate httplib2 object, so it takes its
+        # own lock: a 20-minute upload must not block every other call.
         self._http_lock = threading.Lock()
+        self._upload_http_lock = threading.Lock()
         self._logger = logger.bind(component="PlayStoreClient")
 
     # =========================================================================
@@ -387,20 +460,26 @@ class PlayStoreClient:
         self._logger.info("Initializing Google Play Developer API client")
 
         try:
-            credentials = load_service_account_credentials(
+            self._credentials = load_service_account_credentials(
                 credentials_json=self._credentials_json,
                 credentials_path=self._credentials_path,
                 scopes=SCOPES,
                 api_label="Play Developer API",
             )
 
+            # The transport is built here rather than left to googleapiclient's
+            # own build_http(), whose 60s socket timeout is shorter than Play
+            # takes to answer some calls.
+            timeout = _timeout_from_env(HTTP_TIMEOUT_ENV, DEFAULT_HTTP_TIMEOUT)
             self._service = build(
                 "androidpublisher",
                 "v3",
-                credentials=credentials,
+                http=google_auth_httplib2.AuthorizedHttp(
+                    self._credentials, http=httplib2.Http(timeout=timeout)
+                ),
                 cache_discovery=False,
             )
-            self._logger.info("API client initialized successfully")
+            self._logger.info("API client initialized successfully", timeout=timeout)
             return self._service  # type: ignore[return-value]
         except Exception as e:
             if isinstance(e, PlayStoreClientError):
@@ -408,7 +487,36 @@ class PlayStoreClient:
             self._logger.exception("Failed to initialize API client", error=str(e))
             raise PlayStoreClientError(f"Failed to initialize API client: {e}") from e
 
-    def _execute(self, request: Any) -> Any:
+    @staticmethod
+    def _upload_timeout() -> float:
+        """Read timeout (seconds) applied to artifact uploads."""
+        return _timeout_from_env(UPLOAD_TIMEOUT_ENV, DEFAULT_UPLOAD_TIMEOUT)
+
+    def _get_upload_http(self) -> Any | None:
+        """Get or create the long-timeout transport used for artifact uploads.
+
+        An upload request stays open while Play ingests and validates the
+        artifact, which routinely outlasts the timeout that suits ordinary
+        calls. Only the transport differs — the service (and its discovery
+        document) is shared, and the request is sent over this http instead.
+
+        Returns None when the service was injected rather than built here, so
+        no credentials are available to authorize a second transport; the
+        caller then falls back to the service's own http.
+        """
+        if self._upload_http is not None:
+            return self._upload_http
+        if self._credentials is None:
+            return None
+
+        timeout = self._upload_timeout()
+        self._logger.info("Initializing upload transport", timeout=timeout)
+        self._upload_http = google_auth_httplib2.AuthorizedHttp(
+            self._credentials, http=httplib2.Http(timeout=timeout)
+        )
+        return self._upload_http
+
+    def _execute(self, request: Any, *, upload: bool = False) -> Any:
         """Execute a googleapiclient request with retry/backoff.
 
         All Play API calls go through here. 429 (rate limited) is always
@@ -418,15 +526,23 @@ class PlayStoreClient:
         the server may have already applied it and a retry could duplicate the
         side effect. Non-transient errors (e.g. 400/403/404) propagate to each
         caller's own ``except HttpError`` handling.
+
+        Set ``upload`` for artifact uploads: the request is then sent over the
+        long-timeout transport (under its own lock), so the client waits for
+        Play's real answer instead of timing out and reporting a network fault
+        for what was a server-side status.
         """
         method = (getattr(request, "method", "") or "").upper()
         retry_server_errors = method in _IDEMPOTENT_HTTP_METHODS
+        upload_http = self._get_upload_http() if upload else None
+        lock = self._upload_http_lock if upload_http is not None else self._http_lock
+        execute_kwargs = {"http": upload_http} if upload_http is not None else {}
 
         def _locked_execute() -> Any:
             # Hold the lock only around the actual transport call, not the
             # backoff sleep between attempts, so retries don't serialize waits.
-            with self._http_lock:
-                return request.execute()
+            with lock:
+                return request.execute(**execute_kwargs)
 
         return _run_with_backoff(_locked_execute, retry_server_errors=retry_server_errors)
 
@@ -4284,17 +4400,22 @@ class PlayStoreClient:
         finally:
             self._delete_edit(package_name, edit_id)
 
-    def upload_apk(self, package_name: str, apk_path: str) -> Apk:
-        """Upload an APK to a new edit and commit it.
+    def upload_apk(self, package_name: str, apk_path: str, *, commit: bool = True) -> Apk:
+        """Upload an APK to a new edit, committing it unless asked not to.
 
         Args:
             package_name: App package name.
             apk_path: Local path to the APK file.
+            commit: Commit the edit on success (default). When False the edit
+                is discarded instead, so the upload is validated by Play
+                without publishing a draft or consuming the version code.
 
         Returns:
             The uploaded APK with its version code and binary hashes.
         """
-        self._logger.info("Uploading APK", package_name=package_name, apk_path=apk_path)
+        self._logger.info(
+            "Uploading APK", package_name=package_name, apk_path=apk_path, commit=commit
+        )
         service = self._get_service()
         edit_id = self._create_edit(package_name)
 
@@ -4307,9 +4428,10 @@ class PlayStoreClient:
             data = self._execute(
                 service.edits()
                 .apks()
-                .upload(packageName=package_name, editId=edit_id, media_body=media)
+                .upload(packageName=package_name, editId=edit_id, media_body=media),
+                upload=True,
             )
-            self._commit_edit(package_name, edit_id)
+            self._finish_upload_edit(package_name, edit_id, commit=commit)
             binary = data.get("binary") or {}
             return Apk(
                 package_name=package_name,
@@ -4320,23 +4442,33 @@ class PlayStoreClient:
         except HttpError as e:
             self._logger.exception("Failed to upload APK", error=str(e))
             self._delete_edit(package_name, edit_id)
-            raise PlayStoreClientError(f"Failed to upload APK: {e.reason}") from e
+            raise PlayStoreClientError(f"Failed to upload APK: {_http_error_detail(e)}") from e
         except Exception as e:
             self._logger.exception("Failed to upload APK", error=str(e))
             self._delete_edit(package_name, edit_id)
-            raise PlayStoreClientError(f"Failed to upload APK: {e}") from e
+            raise PlayStoreClientError(self._upload_failure_message("APK", e)) from e
 
-    def upload_bundle(self, package_name: str, bundle_path: str) -> Bundle:
-        """Upload an app bundle (.aab) to a new edit and commit it.
+    def upload_bundle(self, package_name: str, bundle_path: str, *, commit: bool = True) -> Bundle:
+        """Upload an app bundle (.aab) to a new edit, committing it unless asked not to.
 
         Args:
             package_name: App package name.
             bundle_path: Local path to the app bundle (.aab) file.
+            commit: Commit the edit on success (default). When False the edit
+                is discarded instead, so the bundle is validated by Play
+                without publishing a draft or consuming the version code —
+                useful for telling a rejected artifact apart from a failing
+                Play backend without spending version codes on the attempts.
 
         Returns:
             The uploaded app bundle with its version code and hashes.
         """
-        self._logger.info("Uploading bundle", package_name=package_name, bundle_path=bundle_path)
+        self._logger.info(
+            "Uploading bundle",
+            package_name=package_name,
+            bundle_path=bundle_path,
+            commit=commit,
+        )
         service = self._get_service()
         edit_id = self._create_edit(package_name)
 
@@ -4349,9 +4481,10 @@ class PlayStoreClient:
             data = self._execute(
                 service.edits()
                 .bundles()
-                .upload(packageName=package_name, editId=edit_id, media_body=media)
+                .upload(packageName=package_name, editId=edit_id, media_body=media),
+                upload=True,
             )
-            self._commit_edit(package_name, edit_id)
+            self._finish_upload_edit(package_name, edit_id, commit=commit)
             return Bundle(
                 package_name=package_name,
                 version_code=int(data.get("versionCode", 0)),
@@ -4361,11 +4494,29 @@ class PlayStoreClient:
         except HttpError as e:
             self._logger.exception("Failed to upload bundle", error=str(e))
             self._delete_edit(package_name, edit_id)
-            raise PlayStoreClientError(f"Failed to upload bundle: {e.reason}") from e
+            raise PlayStoreClientError(f"Failed to upload bundle: {_http_error_detail(e)}") from e
         except Exception as e:
             self._logger.exception("Failed to upload bundle", error=str(e))
             self._delete_edit(package_name, edit_id)
-            raise PlayStoreClientError(f"Failed to upload bundle: {e}") from e
+            raise PlayStoreClientError(self._upload_failure_message("bundle", e)) from e
+
+    def _finish_upload_edit(self, package_name: str, edit_id: str, *, commit: bool) -> None:
+        """Commit the edit an upload went into, or discard it when ``commit`` is False."""
+        if commit:
+            self._commit_edit(package_name, edit_id)
+            return
+        self._logger.info(
+            "Discarding edit after upload (commit=False)",
+            package_name=package_name,
+            edit_id=edit_id,
+        )
+        self._delete_edit(package_name, edit_id)
+
+    def _upload_failure_message(self, label: str, error: Exception) -> str:
+        """Message for a non-HTTP upload failure, naming a timeout as a timeout."""
+        if _is_timeout_error(error):
+            return _timeout_message(f"{label} upload", self._upload_timeout(), error)
+        return f"Failed to upload {label}: {error}"
 
     def upload_deobfuscation_file(
         self,
@@ -4405,7 +4556,8 @@ class PlayStoreClient:
                     apkVersionCode=version_code,
                     deobfuscationFileType=deobfuscation_file_type,
                     media_body=media,
-                )
+                ),
+                upload=True,
             )
             self._commit_edit(package_name, edit_id)
             deobfuscation_file = data.get("deobfuscationFile") or {}
@@ -4417,11 +4569,13 @@ class PlayStoreClient:
         except HttpError as e:
             self._logger.exception("Failed to upload deobfuscation file", error=str(e))
             self._delete_edit(package_name, edit_id)
-            raise PlayStoreClientError(f"Failed to upload deobfuscation file: {e.reason}") from e
+            raise PlayStoreClientError(
+                f"Failed to upload deobfuscation file: {_http_error_detail(e)}"
+            ) from e
         except Exception as e:
             self._logger.exception("Failed to upload deobfuscation file", error=str(e))
             self._delete_edit(package_name, edit_id)
-            raise PlayStoreClientError(f"Failed to upload deobfuscation file: {e}") from e
+            raise PlayStoreClientError(self._upload_failure_message("deobfuscation file", e)) from e
 
     def upload_expansion_file(
         self,
@@ -4461,7 +4615,8 @@ class PlayStoreClient:
                     apkVersionCode=version_code,
                     expansionFileType=expansion_file_type,
                     media_body=media,
-                )
+                ),
+                upload=True,
             )
             self._commit_edit(package_name, edit_id)
             expansion_file = data.get("expansionFile") or {}
@@ -4474,11 +4629,13 @@ class PlayStoreClient:
         except HttpError as e:
             self._logger.exception("Failed to upload expansion file", error=str(e))
             self._delete_edit(package_name, edit_id)
-            raise PlayStoreClientError(f"Failed to upload expansion file: {e.reason}") from e
+            raise PlayStoreClientError(
+                f"Failed to upload expansion file: {_http_error_detail(e)}"
+            ) from e
         except Exception as e:
             self._logger.exception("Failed to upload expansion file", error=str(e))
             self._delete_edit(package_name, edit_id)
-            raise PlayStoreClientError(f"Failed to upload expansion file: {e}") from e
+            raise PlayStoreClientError(self._upload_failure_message("expansion file", e)) from e
 
     # =========================================================================
     # Store Listing Images API (edits.images)
@@ -5888,14 +6045,20 @@ class PlayStoreClient:
             data = self._execute(
                 service.internalappsharingartifacts().uploadapk(
                     packageName=package_name, media_body=media
-                )
+                ),
+                upload=True,
             )
             return self._parse_internal_app_sharing_artifact(package_name, data)
 
         except HttpError as e:
             self._logger.exception("Failed to upload internal app sharing APK", error=str(e))
             raise PlayStoreClientError(
-                f"Failed to upload internal app sharing APK: {e.reason}"
+                f"Failed to upload internal app sharing APK: {_http_error_detail(e)}"
+            ) from e
+        except Exception as e:
+            self._logger.exception("Failed to upload internal app sharing APK", error=str(e))
+            raise PlayStoreClientError(
+                self._upload_failure_message("internal app sharing APK", e)
             ) from e
 
     def upload_internal_app_sharing_bundle(
@@ -5928,12 +6091,18 @@ class PlayStoreClient:
             data = self._execute(
                 service.internalappsharingartifacts().uploadbundle(
                     packageName=package_name, media_body=media
-                )
+                ),
+                upload=True,
             )
             return self._parse_internal_app_sharing_artifact(package_name, data)
 
         except HttpError as e:
             self._logger.exception("Failed to upload internal app sharing bundle", error=str(e))
             raise PlayStoreClientError(
-                f"Failed to upload internal app sharing bundle: {e.reason}"
+                f"Failed to upload internal app sharing bundle: {_http_error_detail(e)}"
+            ) from e
+        except Exception as e:
+            self._logger.exception("Failed to upload internal app sharing bundle", error=str(e))
+            raise PlayStoreClientError(
+                self._upload_failure_message("internal app sharing bundle", e)
             ) from e

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from googleapiclient.errors import HttpError
 
+import play_store_mcp.client as client_module
 from play_store_mcp.client import (
     MAX_RETRIES,
     PlayStoreClient,
@@ -173,6 +174,74 @@ class TestGetServiceErrors:
         svc1 = client._get_service()
         svc2 = client._get_service()
         assert svc1 is svc2
+
+
+# =========================================================================
+# Transport timeouts
+# =========================================================================
+
+
+class TestTransportTimeouts:
+    """The transport timeout is ours, not googleapiclient's 60s default."""
+
+    @staticmethod
+    def _built_timeout(mock_build: MagicMock) -> float:
+        """The socket timeout of the http that ``build`` was called with."""
+        authorized_http = mock_build.call_args.kwargs["http"]
+        return authorized_http.http.timeout
+
+    def test_service_uses_the_default_timeout(
+        self, client: PlayStoreClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(client_module.HTTP_TIMEOUT_ENV, raising=False)
+        with patch("play_store_mcp.client.build") as mock_build:
+            client._get_service()
+
+        assert "credentials" not in mock_build.call_args.kwargs
+        assert self._built_timeout(mock_build) == client_module.DEFAULT_HTTP_TIMEOUT
+
+    def test_service_timeout_is_configurable(
+        self, client: PlayStoreClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(client_module.HTTP_TIMEOUT_ENV, "45")
+        with patch("play_store_mcp.client.build") as mock_build:
+            client._get_service()
+
+        assert self._built_timeout(mock_build) == 45.0
+
+    def test_upload_transport_waits_much_longer(
+        self, client: PlayStoreClient, _mock_service: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(client_module.UPLOAD_TIMEOUT_ENV, raising=False)
+        client._get_service()
+
+        upload_http = client._get_upload_http()
+
+        assert upload_http is not None
+        assert upload_http.http.timeout == client_module.DEFAULT_UPLOAD_TIMEOUT
+        assert client._get_upload_http() is upload_http  # cached
+
+    def test_upload_transport_timeout_is_configurable(
+        self, client: PlayStoreClient, _mock_service: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(client_module.UPLOAD_TIMEOUT_ENV, "1800")
+        client._get_service()
+
+        assert client._get_upload_http().http.timeout == 1800.0
+
+    def test_upload_transport_is_absent_without_credentials(self, client: PlayStoreClient) -> None:
+        """An injected service has no credentials to authorize a second transport."""
+        client._service = MagicMock()
+
+        assert client._get_upload_http() is None
+
+    @pytest.mark.parametrize("raw", ["", "abc", "0", "-5"])
+    def test_invalid_timeout_falls_back_to_default(
+        self, raw: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PLAY_STORE_MCP_TEST_TIMEOUT", raw)
+
+        assert client_module._timeout_from_env("PLAY_STORE_MCP_TEST_TIMEOUT", 99.0) == 99.0
 
 
 # =========================================================================

@@ -341,7 +341,15 @@ Add to `.kiro/settings/mcp.json`:
 | `PLAY_STORE_MCP_ADMIN_TOKEN` | Require `Authorization: Bearer <token>` on the `/credentials` endpoint (for deployments behind a reverse proxy) | No |
 | `PLAY_STORE_MCP_READ_ONLY` | Disable all write operations (deploy, promote, rollout, reply, listing/tester updates) | No (default: off) |
 | `PLAY_STORE_MCP_DOWNLOAD_DIR` | Directory that APK/AAB downloads are confined to (path-traversal / arbitrary-write protection). Downloads are always confined; defaults to the working directory when unset | No for `stdio` (defaults to cwd); **required** for network transports |
+| `PLAY_STORE_MCP_HTTP_TIMEOUT` | Socket read timeout, in seconds, for ordinary Play API calls | No (default: 120) |
+| `PLAY_STORE_MCP_UPLOAD_TIMEOUT` | Socket read timeout, in seconds, for artifact uploads (APK, AAB, mapping, expansion, internal app sharing). Play can take many minutes to answer a large upload; when the client gives up first the real HTTP status is lost and the failure looks like a network fault | No (default: 1200) |
 | `CODE_MODE` | Enable the experimental code-mode transform (opt-in; requires the `play-store-mcp[code-mode]` extra) | No (default: off) |
+
+> **Uploading large bundles:** the MCP *client* also applies its own tool-call
+> timeout, which is usually shorter than an upload takes. Raise it alongside
+> `PLAY_STORE_MCP_UPLOAD_TIMEOUT` (in Claude Code, `MCP_TOOL_TIMEOUT`, in
+> milliseconds) or the client will abandon the call while the server is still
+> waiting for Play.
 
 ## 🧪 Development
 
