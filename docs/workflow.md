@@ -21,7 +21,7 @@ pm_doctor { project: "...", ping: true }
 
 Mở một hội thoại thử vô hại (prompt chỉ yêu cầu trả lời `PONG`, cấm dùng tool, cấm sửa file) rồi gửi thêm một tin nhắn nữa. Mở Antigravity thấy `PONG` và `PONG2` ⇒ đường dây thông cả hai chiều.
 
-> **Bắt buộc:** mở đúng project trong app Antigravity trước khi giao việc. `new-conversation` không chọn được workspace.
+> **Bắt buộc:** project phải từng được mở trong Antigravity (để có trong sổ đăng ký `~/.gemini/config/projects/`) — `new-conversation` bắt buộc có project id. `pm_doctor` in ra id đã tìm được, kèm chính sách tự chạy lệnh của project đó.
 
 ## Giai đoạn 1 — PLAN
 

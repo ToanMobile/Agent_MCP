@@ -14,6 +14,7 @@ Antigravity viết code. Claude Code kiểm tra và chịu trách nhiệm nghi�
 - 🧪 Không nuốt exit code
 - 👀 Hội thoại audit độc lập, chỉ đọc
 - 🪙 Tiết kiệm context: ~1,8k token mỗi phiên, kết quả trả con trỏ thay vì nội dung
+- 🎯 Giao đúng repo: giải project id từ sổ đăng ký của Antigravity
 - 🧩 Dùng chung nhiều project
 
 ## Yêu cầu

@@ -18,6 +18,11 @@ Bản đầu tiên. Claude Code đứng vai Leader/PM giao việc cho Google Ant
 - **Cầu nối Antigravity**: gọi CLI nội bộ `agentapi` (`new-conversation`, `send-message`,
   `get-conversation-metadata`) qua gRPC loopback của IDE đang chạy. Tự dò địa chỉ language server
   từ process table, tự dò lại một lần khi IDE khởi động lại và cổng đổi.
+- **Giải project id**: `new-conversation` bắt buộc có project id (thiếu thì server trả
+  `project_id is required when providing project_env_config`). `src/projects.js` đọc sổ đăng ký
+  `~/.gemini/config/projects/<uuid>.json` để ánh xạ đường dẫn project → id, khớp cả khi project
+  đăng ký ở gốc monorepo còn ta làm việc trong thư mục con. `pm_doctor` in kèm chính sách tự chạy
+  lệnh của project (biết trước agent sẽ tự chạy hay dừng chờ bấm Accept).
 - **Máy trạng thái 7 giai đoạn** `PLAN → IMPLEMENT → AUDIT → REVIEW → TEST → PROOF → ACCEPTED`,
   hồ sơ task lưu ngay trong project đích (`.antigravity-pm/tasks/<id>/`).
 - **Cổng nghiệm thu cưỡng chế** trong `gate()`: thiếu kế hoạch đã duyệt, `result.json` mới,
@@ -36,7 +41,7 @@ Bản đầu tiên. Claude Code đứng vai Leader/PM giao việc cho Google Ant
   nhờ đó PM không cần giải mã protobuf trong CSDL hội thoại của Antigravity.
 - **Cấu hình theo project** `.antigravity-pm.json`: `testCommand`, `auditCommands`, `rulesFiles`,
   `commitPolicy`, `proof.providers`, `stallMinutes`; khoá lạ chỉ cảnh báo, không nổ.
-- **32 test** chạy offline, không cần Antigravity và không cần thiết bị.
+- **40 test** chạy offline, không cần Antigravity và không cần thiết bị.
 
 ### Security
 

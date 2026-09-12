@@ -3,7 +3,7 @@
 [![Node 20+](https://img.shields.io/badge/node-20%2B-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-1.30-blue.svg)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-32%20passing-brightgreen.svg)](#-phát-triển)
+[![Tests](https://img.shields.io/badge/tests-40%20passing-brightgreen.svg)](#-phát-triển)
 
 MCP server để **Claude Code đứng vai Leader/PM giao việc cho Google Antigravity** rồi tự audit, code review, chạy test và **đòi ảnh nghiệm thu** trước khi cho task đi qua. Antigravity viết code, Claude Code kiểm tra và chịu trách nhiệm nghiệm thu.
 
@@ -20,17 +20,18 @@ Dùng chung cho nhiều project: repo này là **công cụ**, còn trạng thá
 - 👀 **Con mắt thứ hai** — `pm_dispatch kind=audit` mở một hội thoại Antigravity audit độc lập, chỉ đọc, không được sửa file
 - 📄 **Báo cáo nghiệm thu** — xuất `report.md` có nhúng ảnh, bảng bằng chứng và toàn bộ lịch sử
 - 🔒 **Khoá phiên chỉ ở trong RAM** — không ghi ra file, không lọt vào log hay câu trả lời
+- 🎯 **Giao đúng repo** — giải project id từ sổ đăng ký của Antigravity, rồi vẫn kiểm lại workspace thật của hội thoại như lưới an toàn
 - 🧩 **Đa project** — mỗi project khai `testCommand`, `auditCommands`, cách chụp ảnh, file luật của riêng nó
 
 ## 🚀 Bắt đầu nhanh
 
 ### Yêu cầu
 
-1. **Google Antigravity** đã cài và **đang mở đúng project** cần làm (macOS/Linux)
+1. **Google Antigravity** đã cài, và project cần làm **đã từng được mở trong đó một lần** (macOS/Linux)
 2. **Node.js 20+**
 3. **Claude Code** (hoặc client MCP khác)
 
-> ⚠️ Antigravity `new-conversation` **không có tham số chọn workspace** — nó mở hội thoại trong project mà IDE đang mở. `pm_dispatch` tự kiểm tra và báo đỏ nếu lệch.
+> ⚠️ Project phải **đã từng được mở trong Antigravity một lần** để nó tự đăng ký vào `~/.gemini/config/projects/`. Server lấy project id từ sổ đăng ký đó để mở hội thoại đúng chỗ (`new-conversation` bắt buộc có project id). Chưa đăng ký ⇒ `pm_dispatch` báo đỏ kèm danh sách project đang có.
 
 ### Cài đặt
 
@@ -189,7 +190,7 @@ Chi tiết: [.github/SECURITY.md](.github/SECURITY.md).
 ## 🧪 Phát triển
 
 ```bash
-npm test                  # 32 test, không cần Antigravity, không cần mạng
+npm test                  # 40 test, không cần Antigravity, không cần mạng
 npm run test:coverage
 npm run lint              # kiểm tra cú pháp mọi file
 npm run doctor -- <proj>  # tự kiểm tra đường dây thật
@@ -210,7 +211,7 @@ Luật bất biến của repo này (đọc trước khi sửa): [AGENTS.md](AGE
 ## ⚠️ Giới hạn đã biết
 
 - `agentapi` là CLI **nội bộ** của Antigravity (bản 2.12.x), Google không tài liệu hoá — bản mới có thể đổi giao diện. Khi đổi, `src/agentapi.js` là chỗ duy nhất cần sửa và nó sẽ **nổ to** chứ không âm thầm bỏ qua.
-- Chỉ chọn được workspace bằng cách **mở project đó trong Antigravity**.
+- Project phải **đã từng được mở trong Antigravity** để có mặt trong sổ đăng ký `~/.gemini/config/projects/`; sau đó không cần IDE mở sẵn project đó nữa vì hội thoại được mở theo project id. Muốn bỏ qua sổ đăng ký thì khai thẳng `antigravity.projectId`.
 - Tin nhắn gửi bằng `send-message` có thể chỉ được agent đọc ở **lượt kế tiếp**; nếu 5–10 phút không thấy động tĩnh, mở Antigravity xem có đang chờ bấm Accept không (`pm_status` sẽ cảnh báo "có thể đang treo").
 - macOS/Linux. Chưa thử trên Windows.
 

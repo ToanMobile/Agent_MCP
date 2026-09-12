@@ -8,7 +8,7 @@
 
 ```bash
 npm install
-npm test            # phải xanh trước khi sửa, và sau khi sửa
+npm test            # 40 test, phải xanh trước khi sửa và sau khi sửa
 npm run lint
 npm run doctor -- <project>    # cần Antigravity đang mở
 ```

@@ -33,6 +33,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 | File | Trách nhiệm duy nhất |
 | --- | --- |
 | `src/discover.js` | Tìm địa chỉ + khoá phiên của language server đang chạy. Chỗ duy nhất chạm vào process table. |
+| `src/projects.js` | Giải đường dẫn project → project id của Antigravity. Chỗ duy nhất đọc `~/.gemini/config/projects/`. |
 | `src/agentapi.js` | Chỗ duy nhất gọi CLI `agentapi`. Đổi giao diện CLI ⇒ chỉ sửa ở đây. |
 | `src/tasks.js` | Máy trạng thái + `gate()`. Không I/O mạng, không gọi agent. |
 | `src/prompt.js` | Soạn prompt. Mọi ràng buộc gửi cho agent nằm ở đây, không rải rác trong tools. |
@@ -46,7 +47,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
   không phụ thuộc zod để không vỡ khi SDK đổi version.
 - **Sửa `gate()`**: phải kèm test trong [`tests/gate.test.js`](tests/gate.test.js) chứng minh trường hợp mới **bị chặn**,
   không chỉ test trường hợp qua được.
-- **Test không được cần Antigravity, không được cần mạng, không được cần thiết bị.** Cả 32 test hiện tại chạy offline.
+- **Test không được cần Antigravity, không được cần mạng, không được cần thiết bị.** Cả 40 test hiện tại chạy offline.
   Đường đi có gọi `agentapi` thì kiểm chứng bằng `pm_doctor ping=true` trên máy thật, không mock giả rồi tự tin.
 - **Tiếng Việt không dấu trong code/prompt** (chuỗi gửi cho agent và log), **tiếng Việt có dấu trong tài liệu**.
   Lý do: prompt đi qua nhiều tầng CLI/gRPC, tránh rủi ro mã hoá; tài liệu thì người đọc.
@@ -56,7 +57,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 ## 4. Kiểm tra trước khi giao
 
 ```bash
-npm test          # 32 test, phải xanh hết
+npm test          # 40 test, phải xanh hết
 npm run lint      # cú pháp mọi file
 npm run doctor -- <project>   # đường dây thật (cần Antigravity đang mở)
 ```
@@ -64,8 +65,10 @@ npm run doctor -- <project>   # đường dây thật (cần Antigravity đang m
 ## 5. Ràng buộc bên ngoài (không sửa được từ repo này)
 
 - `agentapi` chỉ có 3 lệnh: `new-conversation`, `send-message`, `get-conversation-metadata`. **Không có** lệnh
-  liệt kê hội thoại, **không có** tham số chọn workspace, **không có** trạng thái "đang chạy / đã xong".
-  Mọi thiết kế ở đây là hệ quả của ba giới hạn đó.
-- Workspace của hội thoại = project mà Antigravity **đang mở**. `pm_dispatch` kiểm tra và báo đỏ nếu lệch.
+  liệt kê hội thoại và **không có** trạng thái "đang chạy / đã xong". Mọi thiết kế ở đây là hệ quả của hai giới hạn đó.
+- `new-conversation` **bắt buộc** có project id (`ANTIGRAVITY_PROJECT_ID`), nếu không server trả
+  `project_id is required when providing project_env_config`. Id lấy từ sổ đăng ký
+  `~/.gemini/config/projects/<uuid>.json` (`src/projects.js`) — đo được trên máy thật 12/09/2026.
+  `pm_dispatch` vẫn kiểm lại workspace của hội thoại sau khi tạo, coi như lưới an toàn.
 - `send-message` có thể chỉ được agent đọc ở lượt kế tiếp ⇒ `pm_status` phải đo động tĩnh và cảnh báo treo,
   không được hứa "đã đánh thức agent".

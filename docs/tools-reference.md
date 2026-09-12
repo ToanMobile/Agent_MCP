@@ -47,7 +47,7 @@ Có `taskId` thì in: giai đoạn, vòng làm, id hội thoại, **thời đi�
 | `model` | không | Ghi đè model |
 | `force` | không | Bỏ qua kiểm tra giai đoạn |
 
-- `plan` — **mở hội thoại mới**. Prompt: yêu cầu + DoD + đường dẫn tuyệt đối file luật + **cấm sửa code** + hợp đồng ghi `plan.md`/`result.json`. Sau khi tạo, kiểm workspace: lệch ⇒ thất bại (khi `workspaceCheck: "strict"`) và đánh dấu task `blocked`.
+- `plan` — **mở hội thoại mới** bằng project id lấy từ sổ đăng ký `~/.gemini/config/projects/` (hoặc `antigravity.projectId`). Prompt: yêu cầu + DoD + đường dẫn tuyệt đối file luật + **cấm sửa code** + hợp đồng ghi `plan.md`/`result.json`. Sau khi tạo, kiểm lại workspace thật: lệch ⇒ thất bại (khi `workspaceCheck: "strict"`) và đánh dấu task `blocked`.
 - `implement` — đòi `verdict.plan = pass` và `plan.md` tồn tại (trừ khi `force`). Gửi tin nhắn duyệt plan + lệnh triển khai, chuyển giai đoạn sang `IMPLEMENT`.
 - `audit` — mở **hội thoại thứ hai**, chỉ đọc, cấm sửa file, ghi `audit-agent.json`.
 - `proof` — yêu cầu agent tự chụp ảnh vào `proof/`.

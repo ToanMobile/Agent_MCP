@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { run, redact, truncate } from './util.js';
 import { discover, forgetCache, AntigravityUnavailable, ENV_ADDRESS, ENV_TOKEN } from './discover.js';
+import { ENV_PROJECT_ID } from './projects.js';
 
 export const MODELS = ['flash_lite', 'flash', 'pro'];
 
@@ -16,13 +17,16 @@ export class AgentApiError extends Error {
   }
 }
 
-function connEnv(conn) {
-  return { [ENV_ADDRESS]: conn.address, [ENV_TOKEN]: conn.secret };
+function connEnv(conn, extra = {}) {
+  return { [ENV_ADDRESS]: conn.address, [ENV_TOKEN]: conn.secret, ...extra };
 }
 
-async function call(args, { timeoutMs = 180000, retryOnRpcError = true } = {}) {
+async function call(args, { timeoutMs = 180000, retryOnRpcError = true, projectId = null } = {}) {
+  // new-conversation bat buoc co project id; thieu no server bao
+  // "project_id is required when providing project_env_config".
+  const extraEnv = projectId ? { [ENV_PROJECT_ID]: projectId } : {};
   let conn = await discover();
-  let r = await run(conn.agentapi, args, { timeoutMs, env: connEnv(conn) });
+  let r = await run(conn.agentapi, args, { timeoutMs, env: connEnv(conn, extraEnv) });
   let parsed = parseJson(r.stdout);
 
   const rpcBroken = r.code !== 0 || /rpc error|Unauthenticated|connection (error|reset)/i.test(`${r.stdout}${r.stderr}`);
@@ -30,7 +34,7 @@ async function call(args, { timeoutMs = 180000, retryOnRpcError = true } = {}) {
     // IDE co the vua khoi dong lai => cong/khoa phien doi. Do lai 1 lan roi thoi.
     forgetCache();
     conn = await discover({ force: true });
-    r = await run(conn.agentapi, args, { timeoutMs, env: connEnv(conn) });
+    r = await run(conn.agentapi, args, { timeoutMs, env: connEnv(conn, extraEnv) });
     parsed = parseJson(r.stdout);
   }
 
@@ -81,7 +85,7 @@ function findAnyUuid(obj, depth = 0) {
   return null;
 }
 
-export async function newConversation({ prompt, model = 'pro', title, profile, timeoutMs = 180000 }) {
+export async function newConversation({ prompt, model = 'pro', title, profile, projectId, timeoutMs = 180000 }) {
   if (!prompt || !String(prompt).trim()) throw new AgentApiError('prompt rong');
   if (model && !MODELS.includes(model)) throw new AgentApiError(`model khong hop le: ${model} (chi nhan ${MODELS.join(', ')})`);
   const args = ['new-conversation'];
@@ -89,19 +93,19 @@ export async function newConversation({ prompt, model = 'pro', title, profile, t
   if (title) args.push(`--title=${title}`);
   if (profile) args.push(`--profile=${profile}`);
   args.push(String(prompt));
-  const { parsed, raw } = await call(args, { timeoutMs });
+  const { parsed, raw } = await call(args, { timeoutMs, projectId });
   const conversationId = findConversationId(parsed);
   if (!conversationId) throw new AgentApiError('Tao conversation xong nhung khong doc ra conversationId', raw);
   return { conversationId, raw, parsed };
 }
 
-export async function sendMessage({ conversationId, content, title, timeoutMs = 120000 }) {
+export async function sendMessage({ conversationId, content, title, projectId, timeoutMs = 120000 }) {
   if (!conversationId) throw new AgentApiError('thieu conversationId');
   if (!content || !String(content).trim()) throw new AgentApiError('noi dung tin nhan rong');
   const args = ['send-message'];
   if (title) args.push(`--title=${title}`);
   args.push(String(conversationId), String(content));
-  const { parsed, raw } = await call(args, { timeoutMs });
+  const { parsed, raw } = await call(args, { timeoutMs, projectId });
   return { ok: true, raw, parsed };
 }
 

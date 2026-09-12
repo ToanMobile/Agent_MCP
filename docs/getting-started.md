@@ -6,7 +6,7 @@
 git clone https://github.com/ToanMobile/antigravity-pm-mcp.git
 cd antigravity-pm-mcp
 npm install
-npm test        # 32 test, phải xanh hết
+npm test        # 40 test, phải xanh hết
 ```
 
 ## 2. Nối vào Claude Code
@@ -47,9 +47,10 @@ pm_doctor { project: "...", ping: true }
 
 Mở Antigravity, thấy một hội thoại "[PM] ping duong day" trả lời `PONG` rồi `PONG2` ⇒ xong.
 
-!!! warning "Mở đúng project trong Antigravity"
-    `new-conversation` không có tham số chọn workspace — hội thoại luôn mở trong project mà **IDE đang mở**.
-    `pm_dispatch` tự kiểm tra và báo đỏ nếu lệch, để bạn không giao việc vào repo khác.
+!!! warning "Project phải được Antigravity đăng ký một lần"
+    `new-conversation` **bắt buộc có project id**. Server lấy id từ sổ đăng ký `~/.gemini/config/projects/`,
+    nơi Antigravity tự ghi khi bạn mở project lần đầu. Chưa có ⇒ `pm_dispatch` báo đỏ kèm danh sách project đang có.
+    Sau khi tạo hội thoại, server vẫn kiểm lại workspace thật của nó — lưới an toàn để không giao việc nhầm repo.
 
 ## 5. Giao task đầu tiên
 

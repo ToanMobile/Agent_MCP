@@ -10,6 +10,7 @@ import {
   newConversation, sendMessage, getConversationMetadata, conversationProgress, MODELS,
 } from './agentapi.js';
 import { discover, agentapiPath } from './discover.js';
+import { requireProjectId, resolveProject } from './projects.js';
 import {
   buildPlanPrompt, buildImplementMessage, buildReworkMessage, buildAuditPrompt, buildProofRequestMessage,
 } from './prompt.js';
@@ -119,6 +120,17 @@ export const TOOLS = [
       L.push(`So anh toi thieu de nghiem thu: ${cfg.proof.require}`);
       L.push('');
       L.push(`agentapi: ${agentapiPath() || 'KHONG TIM THAY'}`);
+      const proj = resolveProject(cfg.projectRoot);
+      if (proj) {
+        L.push(`Project trong Antigravity: ${proj.name} · id ${proj.id}${proj.match === 'parent' ? ' (khop qua thu muc cha)' : ''}`);
+        const eager = /EAGER|TURBO/i.test(`${proj.autoExecution} ${proj.artifactReview}`);
+        L.push(`  Tu chay lenh: ${proj.autoExecution || '?'} · duyet artifact: ${proj.artifactReview || '?'}`
+          + (eager ? ' => agent tu chay, khong ket o man hinh cho bam Accept' : ' => agent CO THE dung cho ban bam Accept trong IDE'));
+      } else if (cfg.antigravity.projectId) {
+        L.push(`Project id: ${cfg.antigravity.projectId} (khai trong cau hinh)`);
+      } else {
+        L.push('Project trong Antigravity: CHUA DANG KY — pm_dispatch se that bai. Mo project nay trong Antigravity 1 lan.');
+      }
       try {
         const conn = await discover();
         L.push(`Antigravity language server: noi duoc tai ${conn.address} (nguon: ${conn.source})`);
@@ -131,14 +143,17 @@ export const TOOLS = [
       L.push(`Task hien co: ${tasks.length}`);
       for (const t of tasks.slice(-8)) L.push(`  ${taskLine(t)}`);
       L.push('');
-      L.push('LUU Y QUAN TRONG: `new-conversation` khong co tham so chon workspace — no mo hoi thoai TRONG PROJECT MA ANTIGRAVITY DANG MO.');
-      L.push('Vi vay: mo dung project trong Antigravity truoc khi pm_dispatch (pm_dispatch se tu kiem tra va bao do neu lech).');
+      L.push('Workspace duoc chon bang PROJECT ID (lay tu so dang ky ~/.gemini/config/projects), khong phai bang project ma IDE dang mo.');
+      L.push('Project phai tung duoc mo trong Antigravity 1 lan de duoc dang ky. pm_dispatch van kiem lai workspace sau khi tao, coi nhu luoi an toan.');
 
       if (args?.ping) {
         L.push('');
         L.push('--- ping: mo 1 hoi thoai thu ---');
         try {
+          const pid = requireProjectId(cfg);
+          L.push(`Dung project id: ${pid.id} (${pid.name})`);
           const { conversationId } = await newConversation({
+            projectId: pid.id,
             model: 'flash_lite',
             title: '[PM] ping duong day',
             prompt: 'Day la phep thu duong day tu Claude Code. Tra loi dung 1 tu: PONG. '
@@ -148,7 +163,7 @@ export const TOOLS = [
           const md = await getConversationMetadata(conversationId);
           L.push(`Workspace cua hoi thoai: ${md.workspace || '(khong ro)'}${md.branch ? ` · nhanh ${md.branch}` : ''}`);
           L.push(`Khop voi project dang hoi: ${md.workspace && exists(md.workspace) && fs.realpathSync(md.workspace) === fs.realpathSync(cfg.projectRoot) ? 'CO' : 'KHONG — hay mo dung project trong Antigravity'}`);
-          await sendMessage({ conversationId, content: 'Phep thu tin nhan tiep theo. Tra loi dung 1 tu: PONG2. Khong dung tool.' });
+          await sendMessage({ conversationId, projectId: pid.id, content: 'Phep thu tin nhan tiep theo. Tra loi dung 1 tu: PONG2. Khong dung tool.' });
           L.push('Gui tin nhan tiep vao hoi thoai cu: OK');
           const prog = conversationProgress(conversationId);
           L.push(`Dong tinh ghi nhan duoc: ${prog.found ? prog.lastActivityAt : 'chua thay (agent co the chua chay)'}`);
@@ -274,8 +289,9 @@ export const TOOLS = [
         }
         const prompt = buildPlanPrompt(cfg, task);
         const promptFile = saveOutgoing(cfg, task, `prompt-plan-r${task.round}`, prompt);
+        const pid = requireProjectId(cfg);
         const { conversationId } = await newConversation({
-          prompt, model: args.model || task.model, title: `[PM] ${task.id} · PLAN · ${task.title}`,
+          prompt, projectId: pid.id, model: args.model || task.model, title: `[PM] ${task.id} · PLAN · ${task.title}`,
         });
         task.conversationId = conversationId;
         task.state = 'awaiting_agent';
@@ -309,7 +325,7 @@ export const TOOLS = [
         if (!fresh.planExists && !args.force) fail('Chua thay plan.md — agent chua lap ke hoach xong.');
         const msg = buildImplementMessage(cfg, task, args.notes || '');
         const promptFile = saveOutgoing(cfg, task, `prompt-implement-r${task.round}`, msg);
-        await sendMessage({ conversationId: task.conversationId, content: msg });
+        await sendMessage({ conversationId: task.conversationId, projectId: resolveProject(cfg.projectRoot)?.id, content: msg });
         setPhase(cfg, task, 'IMPLEMENT', 'pm', 'plan da duyet');
         task.state = 'awaiting_agent';
         recordDispatch(cfg, task, { kind: 'implement', promptFile });
@@ -323,8 +339,9 @@ export const TOOLS = [
       if (kind === 'audit') {
         const prompt = buildAuditPrompt(cfg, task, args.message || '');
         const promptFile = saveOutgoing(cfg, task, `prompt-audit-r${task.round}`, prompt);
+        const pidA = requireProjectId(cfg);
         const { conversationId } = await newConversation({
-          prompt, model: args.model || task.model, title: `[PM] ${task.id} · AUDIT doc lap`,
+          prompt, projectId: pidA.id, model: args.model || task.model, title: `[PM] ${task.id} · AUDIT doc lap`,
         });
         task.auditConversationId = conversationId;
         recordDispatch(cfg, task, { kind: 'audit', conversationId, promptFile });

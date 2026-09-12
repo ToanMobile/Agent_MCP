@@ -28,7 +28,8 @@ if (argv.includes('--tools')) {
 
 if (argv.includes('--doctor')) {
   const project = argv.find((a) => !a.startsWith('--'));
-  const out = await TOOLS_BY_NAME.get('pm_doctor').handler({ project });
+  const ping = argv.includes('--ping');
+  const out = await TOOLS_BY_NAME.get('pm_doctor').handler({ project, ping });
   process.stdout.write(`${typeof out === 'string' ? out : out.text}\n`);
   process.exit(0);
 }

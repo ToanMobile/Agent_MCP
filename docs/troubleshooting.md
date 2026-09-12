@@ -12,9 +12,19 @@ IDE đang khởi động, hoặc vừa cập nhật phiên bản. Chờ vài gi�
 
 Mở Antigravity một lần để nó sinh `~/.gemini/antigravity/bin/agentapi`. Cài ở chỗ khác thì trỏ biến `ANTIGRAVITY_PM_AGENTAPI` vào đúng file.
 
+## "Antigravity chua dang ky project ..."
+
+`new-conversation` bắt buộc có project id, mà project của bạn chưa có trong `~/.gemini/config/projects/`. Mở project đó trong app Antigravity **một lần** để nó tự đăng ký, rồi thử lại. Thông báo lỗi có liệt kê các project đang đăng ký để bạn đối chiếu.
+
+Biết chắc id rồi thì khai thẳng:
+
+```json
+{ "antigravity": { "projectId": "355fd7f8-...-84b22fbdf41c" } }
+```
+
 ## "Hoi thoai duoc mo trong workspace X chu KHONG phai Y"
 
-Antigravity đang mở project khác. Mở đúng project rồi `pm_dispatch kind=plan force=true`. Hội thoại lỡ tạo thì đóng trong IDE.
+Project id giải ra trỏ tới thư mục khác — thường do sổ đăng ký còn giữ đường dẫn cũ sau khi bạn di chuyển/đổi tên repo. Mở lại project trong Antigravity để nó cập nhật, hoặc khai thẳng `antigravity.projectId` đúng.
 
 Chấp nhận lệch (không khuyến khích): đặt `antigravity.workspaceCheck: "warn"`.
 
