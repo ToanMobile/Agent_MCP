@@ -1,0 +1,4 @@
+{
+  "testCommand": "make test",
+  "proof": { "require": 1, "providers": { "man": { "type": "macos" } } }
+}

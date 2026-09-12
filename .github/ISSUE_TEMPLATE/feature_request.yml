@@ -1,0 +1,24 @@
+name: Đề xuất tính năng
+description: Muốn thêm gì
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Vấn đề đang gặp
+      description: Đang bị vướng gì trong quy trình plan → audit → review → test → nghiệm thu?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Đề xuất
+    validations:
+      required: true
+  - type: checkboxes
+    id: gate
+    attributes:
+      label: Xác nhận
+      options:
+        - label: Đề xuất này KHÔNG làm mềm cổng nghiệm thu (không thêm cách bỏ qua bằng chứng)
+          required: true
