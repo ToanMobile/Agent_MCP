@@ -3,7 +3,7 @@
 [![Node 20+](https://img.shields.io/badge/node-20%2B-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-1.30-blue.svg)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-40%20passing-brightgreen.svg)](#-phát-triển)
+[![Tests](https://img.shields.io/badge/tests-43%20passing-brightgreen.svg)](#-phát-triển)
 
 MCP server để **Claude Code đứng vai Leader/PM giao việc cho Google Antigravity** rồi tự audit, code review, chạy test và **đòi ảnh nghiệm thu** trước khi cho task đi qua. Antigravity viết code, Claude Code kiểm tra và chịu trách nhiệm nghiệm thu.
 
@@ -190,7 +190,7 @@ Chi tiết: [.github/SECURITY.md](.github/SECURITY.md).
 ## 🧪 Phát triển
 
 ```bash
-npm test                  # 40 test, không cần Antigravity, không cần mạng
+npm test                  # 43 test, không cần Antigravity, không cần mạng
 npm run test:coverage
 npm run lint              # kiểm tra cú pháp mọi file
 npm run doctor -- <proj>  # tự kiểm tra đường dây thật
@@ -212,7 +212,7 @@ Luật bất biến của repo này (đọc trước khi sửa): [AGENTS.md](AGE
 
 - `agentapi` là CLI **nội bộ** của Antigravity (bản 2.12.x), Google không tài liệu hoá — bản mới có thể đổi giao diện. Khi đổi, `src/agentapi.js` là chỗ duy nhất cần sửa và nó sẽ **nổ to** chứ không âm thầm bỏ qua.
 - Project phải **đã từng được mở trong Antigravity** để có mặt trong sổ đăng ký `~/.gemini/config/projects/`; sau đó không cần IDE mở sẵn project đó nữa vì hội thoại được mở theo project id. Muốn bỏ qua sổ đăng ký thì khai thẳng `antigravity.projectId`.
-- Tin nhắn gửi bằng `send-message` có thể chỉ được agent đọc ở **lượt kế tiếp**; nếu 5–10 phút không thấy động tĩnh, mở Antigravity xem có đang chờ bấm Accept không (`pm_status` sẽ cảnh báo "có thể đang treo").
+- `send-message` **đánh thức được hội thoại đang im** (đo 12/09/2026: hội thoại im 11 phút, động tĩnh trở lại sau ~1,6 giây). Nếu 5–10 phút vẫn im thì mới là bất thường — thường là agent đang chờ bấm Accept trong IDE khi project không đặt `EAGER`/`TURBO`; `pm_doctor` in sẵn chính sách đó.
 - macOS/Linux. Chưa thử trên Windows.
 
 ## 📄 Giấy phép

@@ -5,7 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { loadConfig } from '../src/config.js';
 import {
-  createTask, recordVerdict, recordRun, recordProof, markRework, gate, accept, contractPaths, loadTask,
+  createTask, recordVerdict, recordRun, recordProof, recordDispatch, markRework, gate, accept, contractPaths, loadTask,
 } from '../src/tasks.js';
 import { tmpProject, cleanup, writeFile, sampleTaskArgs, PNG_1PX } from './helpers.js';
 
@@ -158,5 +158,63 @@ test('ho so task doc lai duoc tu dia (khong mat trang thai giua cac phien)', () 
   assert.equal(again.id, task.id);
   assert.equal(again.verdicts.review.verdict, 'pass');
   assert.equal(gate(loadConfig(dir), again).ok, true);
+  cleanup(dir);
+});
+
+test('KHONG duoc nghiem thu bang result.json cua giai doan PLAN (agent khong lam gi)', () => {
+  const { dir, cfg, task } = setupTask();
+  const p = contractPaths(cfg, task);
+  // Agent lap ke hoach xong, bao cao phase=PLAN.
+  writeFile(p.plan, '# Ke hoach');
+  writeFile(p.result, JSON.stringify({ phase: 'PLAN', summary: 'se lam', files_to_change: ['a.kt'] }));
+  recordVerdict(cfg, task, { kind: 'plan', verdict: 'pass' });
+  // PM giao trien khai...
+  recordDispatch(cfg, task, { kind: 'implement' });
+  // ...nhung agent KHONG lam gi. PM (hoac mot PM lo la) van chay test tren code cu va chup anh.
+  recordVerdict(cfg, task, { kind: 'audit', verdict: 'pass' });
+  recordVerdict(cfg, task, { kind: 'review', verdict: 'pass' });
+  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 5 });
+  const img = writeFile(path.join(p.proofDir, 'shot.png'), PNG_1PX);
+  recordProof(cfg, task, { label: 'anh', provider: 'adb', file: img, bytes: PNG_1PX.length });
+
+  const g = gate(cfg, task);
+  assert.equal(g.ok, false, 'khong duoc nghiem thu khi agent chua trien khai');
+  const joined = g.missing.join('\n');
+  assert.ok(joined.includes('van la bao cao "PLAN"'), joined);
+  assert.ok(joined.includes('TRUOC luc giao trien khai'), joined);
+  assert.throws(() => accept(cfg, task), /CHUA DU BANG CHUNG/);
+  cleanup(dir);
+});
+
+test('result.json thieu truong phase cung khong duoc tinh la da trien khai', () => {
+  const { dir, cfg, task } = setupTask();
+  makeEverythingGreen(cfg, task);
+  const p = contractPaths(cfg, task);
+  writeFile(p.result, JSON.stringify({ summary: 'xong roi ma' }));
+  assert.equal(gate(cfg, task).ok, false);
+  assert.ok(gate(cfg, task).missing.join('\n').includes('khong ro phase'));
+  cleanup(dir);
+});
+
+test('agent trien khai THAT sau khi duoc giao thi nghiem thu duoc', () => {
+  const { dir, cfg, task } = setupTask();
+  const p = contractPaths(cfg, task);
+  writeFile(p.plan, '# Ke hoach');
+  recordVerdict(cfg, task, { kind: 'plan', verdict: 'pass' });
+  recordDispatch(cfg, task, { kind: 'implement' });
+
+  // Agent bao cao SAU khi duoc giao (test chay trong 1ms nen phai gia lap moc thoi gian).
+  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da sua', files_changed: ['a.kt'] }));
+  const later = new Date(Date.now() + 2000);
+  fs.utimesSync(p.result, later, later);
+
+  recordVerdict(cfg, task, { kind: 'audit', verdict: 'pass' });
+  recordVerdict(cfg, task, { kind: 'review', verdict: 'pass' });
+  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 5 });
+  const img = writeFile(path.join(p.proofDir, 'shot.png'), PNG_1PX);
+  recordProof(cfg, task, { label: 'anh', provider: 'adb', file: img, bytes: PNG_1PX.length });
+
+  const g = gate(cfg, task);
+  assert.equal(g.ok, true, g.missing.join(' | '));
   cleanup(dir);
 });

@@ -84,6 +84,11 @@ async function ensureWorkspaceMatches(cfg, conversationId) {
   return { ok, md, want, got };
 }
 
+/** Project id de gui kem moi loi goi; khong giai ra duoc thi bo trong (hoi thoai da ton tai). */
+function projectIdFor(cfg) {
+  try { return requireProjectId(cfg).id; } catch { return undefined; }
+}
+
 function saveOutgoing(cfg, task, name, text) {
   const p = contractPaths(cfg, task);
   const file = path.join(ensureDir(p.logsDir), `${name}.md`);
@@ -325,14 +330,15 @@ export const TOOLS = [
         if (!fresh.planExists && !args.force) fail('Chua thay plan.md — agent chua lap ke hoach xong.');
         const msg = buildImplementMessage(cfg, task, args.notes || '');
         const promptFile = saveOutgoing(cfg, task, `prompt-implement-r${task.round}`, msg);
-        await sendMessage({ conversationId: task.conversationId, projectId: resolveProject(cfg.projectRoot)?.id, content: msg });
+        await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
         setPhase(cfg, task, 'IMPLEMENT', 'pm', 'plan da duyet');
         task.state = 'awaiting_agent';
         recordDispatch(cfg, task, { kind: 'implement', promptFile });
         return [
           `Da duyet plan va yeu cau trien khai (${task.id}).`,
           `Noi dung da gui: ${promptFile}`,
-          'LUU Y: tin nhan co the chi duoc agent doc o luot ke tiep. Neu 5-10 phut khong thay dong tinh, mo Antigravity xem co dang doi bam Accept khong.',
+          'Do tren may that 12/09/2026: send-message danh thuc duoc hoi thoai da im 11 phut (dong tinh sau ~1,6 giay).',
+          'Neu 5-10 phut khong thay dong tinh thi moi la bat thuong — xem pm_status.',
         ].join('\n');
       }
 
@@ -356,14 +362,14 @@ export const TOOLS = [
         if (!args.message) fail('kind=proof can "message": can chung minh dieu gi bang hinh.');
         const msg = buildProofRequestMessage(cfg, task, args.message);
         const promptFile = saveOutgoing(cfg, task, `prompt-proof-r${task.round}`, msg);
-        await sendMessage({ conversationId: task.conversationId, content: msg });
+        await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
         recordDispatch(cfg, task, { kind: 'proof', promptFile });
         return `Da yeu cau agent chup anh nghiem thu. Khi co anh, dung pm_capture_proof voi sourceFile=<duong dan anh> de PM xac nhan va dua vao ho so.`;
       }
 
       // custom
       if (!args.message) fail('kind=custom can "message".');
-      await sendMessage({ conversationId: task.conversationId, content: args.message });
+      await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: args.message });
       const promptFile = saveOutgoing(cfg, task, `prompt-custom-${Date.now()}`, args.message);
       recordDispatch(cfg, task, { kind: 'custom', promptFile });
       return 'Da gui tin nhan cho agent.';
@@ -382,7 +388,7 @@ export const TOOLS = [
       const { cfg, task } = withTask(args);
       const cid = args.toAudit ? task.auditConversationId : task.conversationId;
       if (!cid) fail(args.toAudit ? 'Task chua co hoi thoai audit.' : 'Task chua co hoi thoai.');
-      await sendMessage({ conversationId: cid, content: args.content });
+      await sendMessage({ conversationId: cid, projectId: projectIdFor(cfg), content: args.content });
       addHistory(task, 'pm', 'message', args.content);
       save(cfg, task);
       return `Da gui tin nhan vao hoi thoai ${cid}.`;
@@ -596,7 +602,7 @@ export const TOOLS = [
       const msg = buildReworkMessage(cfg, task, { findings, notes: args.notes || '', failedRuns });
       const promptFile = saveOutgoing(cfg, task, `prompt-rework-r${task.round}`, msg);
       if (task.conversationId) {
-        await sendMessage({ conversationId: task.conversationId, content: msg });
+        await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
         recordDispatch(cfg, task, { kind: 'rework', promptFile });
       }
       return [

@@ -47,7 +47,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
   không phụ thuộc zod để không vỡ khi SDK đổi version.
 - **Sửa `gate()`**: phải kèm test trong [`tests/gate.test.js`](tests/gate.test.js) chứng minh trường hợp mới **bị chặn**,
   không chỉ test trường hợp qua được.
-- **Test không được cần Antigravity, không được cần mạng, không được cần thiết bị.** Cả 40 test hiện tại chạy offline.
+- **Test không được cần Antigravity, không được cần mạng, không được cần thiết bị.** Cả 43 test hiện tại chạy offline.
   Đường đi có gọi `agentapi` thì kiểm chứng bằng `pm_doctor ping=true` trên máy thật, không mock giả rồi tự tin.
 - **Tiếng Việt không dấu trong code/prompt** (chuỗi gửi cho agent và log), **tiếng Việt có dấu trong tài liệu**.
   Lý do: prompt đi qua nhiều tầng CLI/gRPC, tránh rủi ro mã hoá; tài liệu thì người đọc.
@@ -57,7 +57,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 ## 4. Kiểm tra trước khi giao
 
 ```bash
-npm test          # 40 test, phải xanh hết
+npm test          # 43 test, phải xanh hết
 npm run lint      # cú pháp mọi file
 npm run doctor -- <project>   # đường dây thật (cần Antigravity đang mở)
 ```
@@ -70,5 +70,6 @@ npm run doctor -- <project>   # đường dây thật (cần Antigravity đang m
   `project_id is required when providing project_env_config`. Id lấy từ sổ đăng ký
   `~/.gemini/config/projects/<uuid>.json` (`src/projects.js`) — đo được trên máy thật 12/09/2026.
   `pm_dispatch` vẫn kiểm lại workspace của hội thoại sau khi tạo, coi như lưới an toàn.
-- `send-message` có thể chỉ được agent đọc ở lượt kế tiếp ⇒ `pm_status` phải đo động tĩnh và cảnh báo treo,
-  không được hứa "đã đánh thức agent".
+- `send-message` **đánh thức được hội thoại đang im** — đo trên máy thật 12/09/2026: hội thoại im 11 phút,
+  động tĩnh trở lại sau ~1,6 giây. Vẫn giữ đo động tĩnh trong `pm_status` vì agent có thể dừng chờ bấm Accept
+  khi project không đặt `EAGER`/`TURBO`.

@@ -132,10 +132,18 @@ function mtimeMs(file) {
   try { return fs.statSync(file).mtimeMs; } catch { return 0; }
 }
 
-/** Bang chung cua agent con "tuoi" khong (ghi SAU lan rework gan nhat)? */
+/**
+ * Bang chung cua agent con "tuoi" khong?
+ * Moc chan: MUON NHAT trong hai moc — lan giao trien khai va lan rework gan nhat.
+ * Vi sao can moc giao trien khai: result.json cua giai doan PLAN khong duoc phep
+ * dung lam bang chung da trien khai (neu khong, agent khong lam gi van nghiem thu duoc).
+ */
 export function freshness(cfg, task) {
   const p = contractPaths(cfg, task);
-  const cut = task.lastReworkAt ? Date.parse(task.lastReworkAt) : 0;
+  const cut = Math.max(
+    task.lastReworkAt ? Date.parse(task.lastReworkAt) : 0,
+    task.implementDispatchedAt ? Date.parse(task.implementDispatchedAt) : 0,
+  );
   const planMs = mtimeMs(p.plan);
   const resultMs = mtimeMs(p.result);
   return {
@@ -146,6 +154,7 @@ export function freshness(cfg, task) {
     // con moc rework chi luu tron mili-giay => nghieng ve phia "coi la cu" cho an toan.
     resultFresh: resultMs > 0 && Math.floor(resultMs) > cut,
     resultMtime: resultMs ? new Date(resultMs).toISOString() : null,
+    cutAt: cut ? new Date(cut).toISOString() : null,
     result: readJsonIfExists(p.result),
     plan: planMs > 0 ? fs.readFileSync(p.plan, 'utf8') : null,
   };
@@ -201,6 +210,8 @@ export function recordProof(cfg, task, rec) {
 /** Ghi nhan 1 lan giao viec / nhac viec cho agent. */
 export function recordDispatch(cfg, task, rec) {
   task.dispatches = task.dispatches || [];
+  // Moc nay la mot phan cua cong nghiem thu: bang chung phai co SAU khi giao trien khai.
+  if (rec.kind === 'implement' || rec.kind === 'rework') task.implementDispatchedAt = nowIso();
   task.dispatches.push({
     kind: rec.kind,
     conversationId: rec.conversationId || task.conversationId,
@@ -247,8 +258,20 @@ export function gate(cfg, task) {
   if (!fresh.planExists) missing.push('Thieu plan.md do agent viet (chua qua buoc PLAN)');
   if (!planVerdict || planVerdict.verdict !== 'pass') missing.push('PM chua duyet plan (pm_verdict kind=plan verdict=pass)');
 
-  if (!fresh.resultExists) missing.push('Thieu result.json — agent chua bao cao ket qua theo hop dong');
-  else if (!fresh.resultFresh) missing.push('result.json cu hon lan rework gan nhat — agent chua lam lai');
+  if (!fresh.resultExists) {
+    missing.push('Thieu result.json — agent chua bao cao ket qua theo hop dong');
+  } else {
+    const rphase = String(fresh.result?.phase || '').toUpperCase();
+    if (rphase !== 'IMPLEMENT') {
+      // Bao cao cua giai doan PLAN (hoac thieu phase) KHONG phai bang chung da trien khai.
+      missing.push(`result.json van la bao cao "${rphase || 'khong ro phase'}" — agent chua trien khai`);
+    }
+    if (!fresh.resultFresh) {
+      missing.push(task.lastReworkAt
+        ? 'result.json cu hon lan rework gan nhat — agent chua lam lai'
+        : 'result.json duoc ghi TRUOC luc giao trien khai — agent chua lam gi sau khi duyet plan');
+    }
+  }
 
   const audit = task.verdicts?.audit;
   if (!audit || audit.verdict !== 'pass' || audit.round !== round) {

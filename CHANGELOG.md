@@ -9,6 +9,21 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lỗ hổng cổng nghiệm thu**: `result.json` của giai đoạn PLAN từng được tính là bằng chứng đã triển khai.
+  Chuỗi lọt: agent ghi `result.json {phase:"PLAN"}` → PM duyệt plan → giao triển khai → **agent không làm gì**
+  → test chạy trên code cũ vẫn xanh → chụp ảnh → `pm_accept` **đạt**. Nay `gate()` đòi `result.phase === "IMPLEMENT"`
+  và mốc chặn là muộn nhất giữa *lần giao triển khai* và *lần rework*, nên báo cáo cũ không lọt. 3 test mới
+  khoá đúng chuỗi này.
+- Mọi đường gửi tin nhắn (`pm_message`, `pm_rework`, `dispatch proof/custom`) nay đều kèm project id như
+  `dispatch implement`, không còn nửa nọ nửa kia.
+
+### Changed
+
+- Bỏ cách nói dè dặt về `send-message`. Đo trên máy thật 12/09/2026: nó **đánh thức được** hội thoại đã im
+  11 phút (động tĩnh trở lại sau ~1,6 giây), nên không cần bước "nhắc" nào trong quy trình.
+
 ## [0.1.0] — 2026-09-12
 
 Bản đầu tiên. Claude Code đứng vai Leader/PM giao việc cho Google Antigravity.
@@ -41,7 +56,7 @@ Bản đầu tiên. Claude Code đứng vai Leader/PM giao việc cho Google Ant
   nhờ đó PM không cần giải mã protobuf trong CSDL hội thoại của Antigravity.
 - **Cấu hình theo project** `.antigravity-pm.json`: `testCommand`, `auditCommands`, `rulesFiles`,
   `commitPolicy`, `proof.providers`, `stallMinutes`; khoá lạ chỉ cảnh báo, không nổ.
-- **40 test** chạy offline, không cần Antigravity và không cần thiết bị.
+- **43 test** chạy offline, không cần Antigravity và không cần thiết bị.
 
 ### Security
 

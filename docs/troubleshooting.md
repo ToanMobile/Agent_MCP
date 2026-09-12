@@ -32,9 +32,9 @@ Chấp nhận lệch (không khuyến khích): đặt `antigravity.workspaceChec
 
 Ba khả năng, theo thứ tự hay gặp:
 
-1. **Đang chờ bạn bấm Accept** trong Antigravity (agent xin phép chạy lệnh) — mở IDE xem
-2. Tin nhắn `send-message` chỉ được đọc ở **lượt kế tiếp** — gửi thêm một `pm_message` ngắn để đánh thức
-3. Agent đã xong nhưng **quên ghi `result.json`** — kiểm bằng `pm_diff`; nếu code đã sửa thật thì `pm_message` nhắc nó ghi đúng hợp đồng
+1. **Đang chờ bạn bấm Accept** trong Antigravity (agent xin phép chạy lệnh) — mở IDE xem. `pm_doctor` in chính sách của project: không phải `EAGER`/`TURBO` thì khả năng này cao nhất
+2. Agent đã xong nhưng **quên ghi `result.json`** — kiểm bằng `pm_diff`; nếu code đã sửa thật thì `pm_message` nhắc nó ghi đúng hợp đồng
+3. Thật sự treo — `pm_message` một câu ngắn để đánh thức (đo 12/09/2026: `send-message` gọi lại được hội thoại đã im 11 phút, động tĩnh sau ~1,6 giây)
 
 ## `pm_run kind=test` báo "Chua khai testCommand"
 
