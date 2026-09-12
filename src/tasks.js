@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureDir, writeJsonAtomic, readJsonIfExists, nowIso, slug, exists } from './util.js';
+import { checkTestChange, checkProofProvider } from './policy.js';
 
 export const PHASES = ['PLAN', 'IMPLEMENT', 'AUDIT', 'REVIEW', 'TEST', 'PROOF', 'ACCEPTED'];
 export const VERDICT_KINDS = ['plan', 'audit', 'review'];
@@ -248,8 +249,11 @@ export function markRework(cfg, task, feedback) {
 /**
  * CONG NGHIEM THU. Tra ve { ok, missing[], evidence }.
  * Bang chung phai thuoc vong hien tai (round) — ban xanh cua ban code cu khong tinh.
+ *
+ * ctx.changedFiles: danh sach file dang thay doi trong cay lam viec (do tools.js do bang git).
+ * KHONG truyen = chua do duoc => luat "phai kem file test" bao CHUA XAC MINH, khong coi la dat.
  */
-export function gate(cfg, task) {
+export function gate(cfg, task, ctx = {}) {
   const fresh = freshness(cfg, task);
   const round = task.round || 0;
   const missing = [];
@@ -296,6 +300,21 @@ export function gate(cfg, task) {
     missing.push(`Thieu anh nghiem thu: can ${need}, dang co ${proofsThisRound.length} (vong ${round})`);
   }
 
+  // LUAT BAT BUOC 1: thay doi phai kem file test.
+  const testChange = checkTestChange(cfg, ctx.changedFiles);
+  if (testChange.required && !testChange.ok) {
+    missing.push(testChange.unknown
+      ? 'CHUA XAC MINH duoc co file test nao thay doi (khong doc duoc git cua project)'
+      : `Thay doi KHONG kem file test nao (${testChange.changedCount} file thay doi) — test cu xanh khong chung minh duoc phan moi`);
+  }
+
+  // LUAT BAT BUOC 2: anh phai chup tu thiet bi that.
+  const proofFrom = checkProofProvider(cfg, proofsThisRound);
+  if (proofFrom.required && !proofFrom.ok) {
+    missing.push(`Anh nghiem thu phai chup tu thiet bi that (${proofFrom.allowed.join(' hoac ')}), `
+      + `dang co: ${proofFrom.from.join(', ') || 'khong co anh nao'}`);
+  }
+
   return {
     ok: missing.length === 0,
     missing,
@@ -307,13 +326,15 @@ export function gate(cfg, task) {
       audit: audit?.verdict || null,
       review: review?.verdict || null,
       testRuns: testsThisRound.map((r) => ({ command: r.command, exitCode: r.exitCode })),
-      proofs: proofsThisRound.map((p) => ({ label: p.label, file: p.file })),
+      proofs: proofsThisRound.map((p) => ({ label: p.label, file: p.file, provider: p.provider })),
+      testFilesChanged: testChange.testFiles,
+      proofFromDevice: proofFrom.required ? proofFrom.ok : null,
     },
   };
 }
 
-export function accept(cfg, task) {
-  const g = gate(cfg, task);
+export function accept(cfg, task, ctx = {}) {
+  const g = gate(cfg, task, ctx);
   if (!g.ok) {
     const err = new Error(`CHUA DU BANG CHUNG de nghiem thu:\n- ${g.missing.join('\n- ')}`);
     err.gate = g;

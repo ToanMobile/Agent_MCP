@@ -6,6 +6,7 @@
 import path from 'node:path';
 import { existingRulesFiles } from './config.js';
 import { contractPaths } from './tasks.js';
+import { mustHaveLines } from './policy.js';
 
 function rulesBlock(cfg) {
   const files = existingRulesFiles(cfg);
@@ -17,10 +18,25 @@ function rulesBlock(cfg) {
   ].join('\n');
 }
 
-function dodBlock(task) {
+// Rule lay tu AGENTS.md cua project that: agent bao cao tron tru ma khong co gi chong lung
+// la kieu hong dat nhat, vi PM khong co cach nao phat hien bang mat thuong.
+function noFabricationBlock() {
+  return [
+    '## Cam bia — bao cao sai con te hon khong bao cao gi',
+    '- Moi con so, version, URL, ten loi, duong dan file:dong ban viet ra phai lay tu LENH DA CHAY hoac FILE DA DOC trong may nay. Khong nho, khong doan.',
+    '- "Da chay X" / "da sua Y" chi duoc viet khi lenh do that su da chay va ban thay ket qua that cua no. Chay xong exit 0 chi chung minh LENH da chay, chua chung minh KET QUA dung.',
+    '- Cau phu dinh ("cho khac khong bi anh huong", "chi dung o day", "khong con noi nao goi ham nay") phai search truoc, roi noi dung pham vi da search.',
+    '- Khong biet thi ghi thang: "toi khong co du lieu nay — can <lenh/thiet bi gi>". CAM lap lo bang "co le", "khoang", "hinh nhu", "chac la".',
+    '',
+  ].join('\n');
+}
+
+function dodBlock(task, cfg) {
+  const must = cfg ? mustHaveLines(cfg) : [];
   return [
     '## Dinh nghia HOAN THANH (Definition of Done) — PM se nghiem thu dung theo day',
     ...task.definitionOfDone.map((d, i) => `${i + 1}. ${d}`),
+    ...(must.length ? ['', '### Luat bat buoc cua du an (ap cho MOI task, khong co ngoai le)', ...must.map((l) => `- ${l}`)] : []),
     '',
   ].join('\n');
 }
@@ -35,6 +51,10 @@ function guardrails(cfg) {
   if (cfg.commitPolicy === 'forbid') {
     lines.push('- TUYET DOI KHONG chay `git commit`, `git push`, `git reset --hard`, `git checkout -- .` hay bat ky lenh lam mat thay doi dang co trong cay lam viec. PM se tu commit.');
   }
+  lines.push('- Test dang do SAU KHI ban sua: mac dinh coi la BAN vua lam hong. CAM sua test / assertion / mock cho no xanh tro lai. '
+    + 'Chi duoc doi test khi chung minh duoc ky vong cu la sai (dan spec, bug report, hoac yeu cau cua PM) — va phai ghi ly do vao result.json.');
+  lines.push('- Sua di sua lai CUNG MOT FILE den lan thu 3 ma khong co bang chung moi xen giua: DUNG LAI. Do la dau hieu dang doan chu chua nam co che gay loi. '
+    + 'Ghi vao result.json -> "blocked" roi de PM quyet.');
   lines.push('- Neu bi vuong (thieu quyen, thieu thiet bi, lenh treo): ghi ro vao result.json o truong `blocked` roi dung lai, DUNG doan buoc tiep.');
   lines.push('');
   return lines.join('\n');
@@ -56,7 +76,12 @@ function resultContract(paths, phase, cfg) {
   "summary": "<da lam gi>",
   "files_changed": ["<duong dan tuong doi>", "..."],
   "commands_run": ["<lenh da chay>"],
-  "tests": { "command": "<lenh test>", "exitCode": 0, "note": "<so test pass/fail>" },
+  "tests": { "command": "<lenh test>", "exitCode": 0, "passed": 0, "failed": 0, "skipped": 0, "note": "<doc tu ket qua that>" },
+  "oracle": {
+    "command": "<lenh/test tai hien duoc loi — null neu task nay khong phai sua loi>",
+    "before": "<chay TRUOC khi sua: no do the nao>",
+    "after": "<chay LAI sau khi sua: no xanh the nao>"
+  },
   "screenshots": ["<duong dan anh trong ${path.basename(paths.proofDir)}/ neu co>"],
   "notes": "<luu y cho PM khi review>",
   "blocked": null
@@ -69,6 +94,10 @@ function resultContract(paths, phase, cfg) {
     '```',
     `- Ghi dung duong dan tuyet doi tren, ghi de neu da ton tai.`,
     `- Ghi XONG file nay roi moi dung. PM doc file nay de biet task da xong hay chua.`,
+    ...(phase === 'IMPLEMENT' ? [
+      '- KHONG chay test nao thi KHONG PHAI xanh: "0 test", "UP-TO-DATE", "No tests found", "No tests ran" deu la CHUA CHAY.',
+      '- Ghi so pass / fail / skipped DOC DUOC TU KET QUA THAT. Test bi skip phai noi ra, khong duoc gom vao "tat ca xanh".',
+    ] : []),
     '',
   ].join('\n');
 }
@@ -86,16 +115,20 @@ export function buildPlanPrompt(cfg, task) {
     '## Yeu cau',
     task.brief,
     '',
-    dodBlock(task),
+    dodBlock(task, cfg),
     rulesBlock(cfg),
     '## GIAI DOAN 1 — CHI LAP KE HOACH, CHUA SUA CODE',
     `1. Doc cac file luat o tren + doc code lien quan trong ${cfg.projectRoot}.`,
     `2. Viet ke hoach vao: ${paths.plan}`,
     '   Ke hoach phai co: hien trang (dan chung file:dong that), cach sua theo tung buoc,',
     '   danh sach file se sua, rui ro/hoi quy, va cach CHUNG MINH la dung (test nao, anh nao).',
-    '3. TUYET DOI KHONG sua bat ky file source nao trong giai doan nay.',
-    `4. Ghi ${paths.result} theo hop dong ben duoi roi DUNG LAI cho PM duyet.`,
+    '3. Neu ke hoach cham vao signature cua ham/lop, thanh vien cua lop cha / interface, API cong khai hay object dung chung:',
+    '   liet ke HET noi dang dung no vao plan.md TRUOC khi de xuat cach sua (grep ca thu muc test — src/test, tests/ hay bi bo sot).',
+    '   Khong liet ke duoc thi ghi ro la chua liet ke duoc, dung im lang sua.',
+    '4. TUYET DOI KHONG sua bat ky file source nao trong giai doan nay.',
+    `5. Ghi ${paths.result} theo hop dong ben duoi roi DUNG LAI cho PM duyet.`,
     '',
+    noFabricationBlock(),
     guardrails(cfg),
     resultContract(paths, 'PLAN', cfg),
     'Bat dau lam ngay, khong hoi lai — neu co diem can chot thi ghi vao "open_questions".',
@@ -117,7 +150,15 @@ export function buildImplementMessage(cfg, task, pmNotes = '') {
     `- Neu thay doi co the nhin thay (UI, man hinh, log chay that): luu anh chung minh vao ${paths.proofDir}/ va liet ke trong result.json -> "screenshots".`,
     `- Cap nhat ${paths.result} voi phase = "IMPLEMENT" theo dung schema da gui.`,
     '',
-    dodBlock(task),
+    '## Sua loi thi BAT BUOC co oracle DO -> XANH',
+    '- TRUOC khi sua dong code dau tien: chay mot test/lenh that su tai hien duoc loi va THAY NO DO. Ghi lai lenh + ket qua vao result.json -> "oracle.before".',
+    '- SAU khi sua: chay LAI DUNG lenh do, cung kich ban, cung cach chay, thay no XANH. Ghi vao "oracle.after".',
+    '- Doc log cu, doc bao cao loi, doc source roi suy luan "chac la do cho nay": KHONG tinh la oracle. Phai la lenh chay that, co the do lai duoc.',
+    '- Khong chay duoc oracle truoc khi sua (thieu thiet bi, khong tai hien duoc) thi ghi vao result.json -> "blocked" roi dung, DUNG sua mo.',
+    '- Task khong phai sua loi (them tinh nang, refactor, tai lieu) thi de "oracle": null va noi ro ban chung minh dung bang cach nao.',
+    '',
+    dodBlock(task, cfg),
+    noFabricationBlock(),
     guardrails(cfg),
     resultContract(paths, 'IMPLEMENT', cfg),
     'Lam xong thi dung lai. PM se audit + code review + chay test doc lap truoc khi nghiem thu.',
@@ -140,6 +181,7 @@ export function buildReworkMessage(cfg, task, { findings = [], notes = '', faile
     '- Neu ban cho rang mot phat hien la SAI: ghi phan bien vao result.json -> "notes" kem dan chung file:dong, dung im lang bo qua.',
     `- Ghi lai ${paths.result} (phase = "IMPLEMENT") sau khi sua xong.`,
     '',
+    noFabricationBlock(),
     guardrails(cfg),
   ].filter(Boolean).join('\n');
 }
@@ -163,6 +205,7 @@ export function buildPlanReworkMessage(cfg, task, { findings = [], notes = '' })
     '- Neu ban cho rang mot y kien cua PM la sai: ghi phan bien kem dan chung file:dong vao plan.md, dung im lang lam theo.',
     `- Ghi lai ${paths.result} voi phase = "PLAN" roi DUNG LAI cho PM duyet.`,
     '',
+    noFabricationBlock(),
     guardrails(cfg),
   ].filter(Boolean).join('\n');
 }
@@ -184,8 +227,9 @@ export function buildAuditPrompt(cfg, task, scope = '') {
     '3. Doi chieu voi Definition of Done ben duoi — cai nao CHUA dat thi noi ro.',
     scope ? `4. PM yeu cau soi ky them: ${scope}` : '',
     '',
-    dodBlock(task),
+    dodBlock(task, cfg),
     rulesBlock(cfg),
+    noFabricationBlock(),
     '## HOP DONG BAO CAO',
     `Ghi ${path.join(paths.dir, 'audit-agent.json')}:`,
     '```json',

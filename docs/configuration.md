@@ -15,6 +15,9 @@ Thứ tự đè lên nhau: **mặc định → cấu hình chung → cấu hình
 - Đường dẫn tương đối trong cấu hình chung (`rulesFiles`, `stateDir`) tính theo gốc **của từng project**, không phải
   theo `$HOME`.
 - Không có tầng chung thì mọi thứ chạy y như cũ. `pm_doctor` in ra cả hai dòng để biết giá trị đến từ đâu.
+- **`projectName` và `antigravity.projectId` bị bỏ qua ở tầng chung** (kèm cảnh báo trong `pm_doctor`): hai khoá đó
+  là của riêng từng project, để ở tầng chung thì mọi project bị đặt cùng tên / trỏ về cùng một workspace.
+- File cấu hình **hỏng JSON** ⇒ cảnh báo nêu tên file rồi bỏ qua cả file đó, không âm thầm nuốt lỗi.
 
 > `~/.antigravity-pm.json` **không** bị tính là gốc project: một repo nằm dưới `$HOME` mà chưa khai cấu hình riêng
 > vẫn lấy gốc theo `.git` của chính nó.
@@ -40,6 +43,35 @@ Thứ tự đè lên nhau: **mặc định → cấu hình chung → cấu hình
 | `antigravity.projectId` | `null` | Thử nghiệm, chưa chắc Antigravity tôn trọng |
 
 Khoá lạ chỉ sinh cảnh báo trong `pm_doctor`, không làm server nổ.
+
+## Luật bắt buộc (`mustHave`)
+
+Hai điều kiện này **nằm trong cổng nghiệm thu**, áp cho mọi task, không phụ thuộc PM có ghi vào `definitionOfDone` hay không. Agent cũng được nhắc thẳng trong prompt.
+
+| Khoá | Mặc định | Ý nghĩa |
+| --- | --- | --- |
+| `mustHave.testChange` | `true` | Thay đổi **phải kèm file test** (thêm mới hoặc sửa test hiện có). Test cũ vẫn xanh **không** chứng minh được gì về phần mới ⇒ `pm_accept` từ chối |
+| `mustHave.testFilePatterns` | glob mặc định | Cách nhận diện file test. Mặc định phủ `**/src/test/**`, `**/src/androidTest/**`, `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/*Test.*`, `**/*_test.*`, `**/*.test.*`, `**/*.spec.*` |
+| `mustHave.proofFrom` | `[]` | Ảnh nghiệm thu **phải** chụp bằng một trong các provider này. Rỗng = nhận mọi provider |
+
+```json
+{
+  "mustHave": {
+    "testChange": true,
+    "proofFrom": ["xe", "mayao"]
+  }
+}
+```
+
+Với cấu hình trên (GeelyEx2 đang dùng): ảnh chụp bằng `man` (màn hình máy) hay ảnh agent tự đưa (`sourceFile` ⇒ provider `file`) **không được tính** — phải là ảnh chụp từ đầu xe hoặc máy ảo.
+
+Danh sách file thay đổi được đo bằng `git status` **ngay lúc gọi** `pm_accept`. Không đọc được git (project không phải repo) ⇒ cổng chặn báo `CHUA XAC MINH duoc co file test nao thay doi` và **không** cho qua — nghiêng về phía chặn, không phía tin.
+
+`pm_doctor` in ra luật đang hiệu lực:
+
+```
+LUAT BAT BUOC — thay doi phai kem file test: CO · anh phai chup tu: xe hoac mayao
+```
 
 ## Cách chụp ảnh nghiệm thu
 

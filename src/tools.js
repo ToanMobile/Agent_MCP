@@ -17,6 +17,7 @@ import {
 } from './prompt.js';
 import { captureProof, describeProviders } from './proof.js';
 import { renderReport } from './report.js';
+import { mustHaveOf } from './policy.js';
 import { runShell, writeFileAtomic, ensureDir, exists, tail, truncate, nowIso } from './util.js';
 
 // ---------------------------------------------------------------- kiem tra tham so
@@ -64,6 +65,25 @@ function withTask(args) {
   const cfg = ctx(args);
   const task = loadTask(cfg, args.taskId);
   return { cfg, task };
+}
+
+/**
+ * Danh sach file dang thay doi trong cay lam viec (da track + chua track).
+ * Tra ve undefined khi khong doc duoc git => cong chan se bao CHUA XAC MINH thay vi coi la dat.
+ */
+async function changedFilesOf(cfg) {
+  const r = await runShell('git status --porcelain=v1', { cwd: cfg.projectRoot, timeoutMs: 60000 });
+  if (r.code !== 0) return undefined;
+  return r.stdout.split('\n')
+    .map((l) => l.slice(3).trim())
+    .filter(Boolean)
+    .map((l) => (l.includes(' -> ') ? l.split(' -> ')[1] : l))
+    .map((l) => l.replace(/^"|"$/g, ''));
+}
+
+/** Cong chan kem bang chung do duoc tu git ngay luc goi. */
+async function gateNow(cfg, task) {
+  return gate(cfg, task, { changedFiles: await changedFilesOf(cfg) });
 }
 
 function gateLines(g) {
@@ -126,6 +146,9 @@ export const TOOLS = [
       const provs = describeProviders(cfg);
       L.push(`Cach chup anh nghiem thu: ${provs.length ? provs.map((p) => `${p.name}(${p.type})`).join(', ') : '(chua khai — van co the dung sourceFile de nhan anh do agent tu chup)'}`);
       L.push(`So anh toi thieu de nghiem thu: ${cfg.proof.require}`);
+      const must = mustHaveOf(cfg);
+      L.push(`LUAT BAT BUOC — thay doi phai kem file test: ${must.testChange ? 'CO' : 'tat'}`
+        + ` · anh phai chup tu: ${must.proofFrom.length ? must.proofFrom.join(' hoac ') : '(bat ky provider nao)'}`);
       L.push('');
       L.push(`agentapi: ${agentapiPath() || 'KHONG TIM THAY'}`);
       const proj = resolveProject(cfg.projectRoot);
@@ -229,7 +252,7 @@ export const TOOLS = [
       const { cfg, task } = withTask(args);
       const p = contractPaths(cfg, task);
       const fresh = freshness(cfg, task);
-      const g = gate(cfg, task);
+      const g = await gateNow(cfg, task);
       const L = [];
       L.push(`${task.id} — ${task.title}`);
       L.push(`Giai doan: ${task.phase} · trang thai: ${task.state} · vong: ${task.round}`);
@@ -445,7 +468,7 @@ export const TOOLS = [
       } else {
         L.push('Buoc tiep: pm_rework de tra viec cho agent (kem findings).');
       }
-      L.push(gateLines(gate(cfg, task)));
+      L.push(gateLines(await gateNow(cfg, task)));
       return L.join('\n');
     },
   },
@@ -497,7 +520,7 @@ export const TOOLS = [
         L.push(tail(`${r.stdout}\n${r.stderr}`.trim(), lines));
         L.push('');
       }
-      L.push(gateLines(gate(cfg, task)));
+      L.push(gateLines(await gateNow(cfg, task)));
       return L.join('\n');
     },
   },
@@ -589,7 +612,7 @@ export const TOOLS = [
         `Cach chup: ${shot.provider} · ${Math.round(shot.bytes / 1024)} KB${shot.width ? ` · ${shot.width}px` : ''}`,
         ...shot.warnings.map((w) => `CANH BAO: ${w}`),
         '',
-        gateLines(gate(cfg, task)),
+        gateLines(await gateNow(cfg, task)),
       ].join('\n');
       return { text, images: [{ mime: shot.mime, base64: shot.base64 }] };
     },
@@ -645,7 +668,7 @@ export const TOOLS = [
     },
     async handler(args) {
       const { cfg, task } = withTask(args);
-      const g = gate(cfg, task);
+      const g = await gateNow(cfg, task);
       if (!g.ok) {
         const rep = renderReport(cfg, task, { summary: args.summary || '' });
         return {
@@ -658,7 +681,7 @@ export const TOOLS = [
           isError: true,
         };
       }
-      accept(cfg, task);
+      accept(cfg, task, { changedFiles: await changedFilesOf(cfg) });
       const rep = renderReport(cfg, task, { summary: args.summary || '' });
       const proofs = (task.proofs || []).filter((p) => p.round === task.round);
       return [

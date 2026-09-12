@@ -4,7 +4,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { readJsonIfExists } from './util.js';
 
 export const CONFIG_NAME = '.antigravity-pm.json';
 
@@ -46,6 +45,16 @@ export const DEFAULT_CONFIG = {
     providers: {},
     // Chieu ngang toi da cua anh luu lai (downscale cho nhe).
     maxWidth: 1280,
+  },
+  // LUAT BAT BUOC ap cho moi task, xem src/policy.js.
+  mustHave: {
+    // Thay doi phai kem file test (them moi hoac sua test hien co).
+    testChange: true,
+    // Glob nhan dien file test; rong = dung mac dinh trong policy.js.
+    testFilePatterns: [],
+    // Anh nghiem thu phai chup bang mot trong cac provider nay (thiet bi that).
+    // Rong = chap nhan moi provider.
+    proofFrom: [],
   },
   antigravity: {
     // strict = dispatch that bai neu workspace cua conversation khong phai goc project nay.
@@ -94,13 +103,41 @@ export function resolveProjectRoot(input) {
 
 const KNOWN_KEYS = new Set(Object.keys(DEFAULT_CONFIG));
 
+// Khoa chi co nghia cho DUNG mot project: de o cau hinh chung thi moi project deu bi dat
+// cung ten / cung workspace id, nen bo qua kem canh bao thay vi am tham nhan.
+const GLOBAL_IGNORED = [
+  ['projectName', (o) => 'projectName' in o, (o) => { delete o.projectName; }],
+  ['antigravity.projectId', (o) => isPlainObject(o.antigravity) && 'projectId' in o.antigravity,
+    (o) => { o.antigravity = { ...o.antigravity }; delete o.antigravity.projectId; }],
+];
+
+/** Doc file cau hinh. File hong thi CANH BAO roi bo qua ca file, khong im lang nuot loi. */
+function readConfigFile(file, warnings) {
+  if (!fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    warnings.push(`Cau hinh doc khong duoc (JSON hong) nen bo qua ca file: ${file} — ${e.message}`);
+    return null;
+  }
+}
+
 export function loadConfig(projectInput) {
   const root = resolveProjectRoot(projectInput);
   const file = path.join(root, CONFIG_NAME);
   const globalFile = globalConfigPath();
-  const raw = readJsonIfExists(file);
-  const rawGlobal = realpathSafe(globalFile) === realpathSafe(file) ? null : readJsonIfExists(globalFile);
   const warnings = [];
+  const raw = readConfigFile(file, warnings);
+  // Project nam dung cho file cau hinh chung: chi tinh la cau hinh project, khong dem hai lan.
+  let rawGlobal = realpathSafe(globalFile) === realpathSafe(file) ? null : readConfigFile(globalFile, warnings);
+  if (rawGlobal) {
+    for (const [name, has, drop] of GLOBAL_IGNORED) {
+      if (!has(rawGlobal)) continue;
+      warnings.push(`Bo qua "${name}" trong cau hinh chung ${globalFile}: khoa nay la cua rieng tung project`);
+      rawGlobal = { ...rawGlobal };
+      drop(rawGlobal);
+    }
+  }
   for (const [src, obj] of [[globalFile, rawGlobal], [file, raw]]) {
     for (const k of Object.keys(obj || {})) {
       if (!KNOWN_KEYS.has(k)) warnings.push(`Khoa la trong ${src}: "${k}" (bi bo qua)`);

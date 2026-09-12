@@ -11,10 +11,32 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sáu luật lấy từ `AGENTS.md` của project thật nay nằm thẳng trong hợp đồng prompt** (`src/prompt.js`),
+  không phụ thuộc project có khai `rulesFiles` hay không: (1) cấm bịa — số/version/URL/tên lỗi/`file:dòng`
+  phải lấy từ lệnh đã chạy, câu phủ định phải search trước, không biết thì nói thẳng; (2) sửa lỗi phải có
+  **oracle đỏ → xanh** (thêm trường `oracle` vào `result.json`, đọc được cả báo cáo cũ không có trường này);
+  (3) cấm sửa test cho xanh; (4) không chạy test nào ≠ xanh (`UP-TO-DATE`, `No tests found`) và phải ghi số
+  pass/fail/skipped; (5) đổi signature/API dùng chung thì phải liệt kê nơi đang dùng **trước**, kể cả thư mục
+  test; (6) sửa cùng một file đến lần thứ 3 mà không có bằng chứng mới thì dừng và báo PM. 6 test mới khoá
+  từng luật. Cổng nghiệm thu **chưa** siết theo `oracle` — task đang chạy dở ở project khác không bị vỡ.
+
+- **Hai luật bắt buộc của chủ dự án, cưỡng chế trong cổng nghiệm thu** (`mustHave`, [`src/policy.js`](src/policy.js)) —
+  không còn phụ thuộc việc PM có gõ vào `definitionOfDone` hay không:
+  1. `mustHave.testChange` (mặc định **bật**): thay đổi phải **kèm file test**. Danh sách file thay đổi được đo bằng
+     `git status` ngay lúc `pm_accept`; không đọc được git ⇒ báo `CHUA XAC MINH` và **chặn**.
+  2. `mustHave.proofFrom`: ảnh nghiệm thu phải chụp từ provider thiết bị thật. GeelyEx2 đặt `["xe", "mayao"]` ⇒
+     ảnh màn hình máy hoặc ảnh agent tự đưa không được tính.
+  Cả hai luật được nhắc thẳng cho agent trong prompt (`mustHaveLines`), và `pm_doctor` in ra luật đang hiệu lực.
+
+### Added
+
 - **Cấu hình chung `~/.antigravity-pm.json`** cho mọi project: mặc định → cấu hình chung → cấu hình project.
   Object gộp theo khoá (`proof.providers`), mảng thay thế hẳn (`rulesFiles`, `auditCommands`). `pm_doctor` in
   riêng hai dòng để biết giá trị đến từ đâu; `ANTIGRAVITY_PM_GLOBAL_CONFIG` trỏ sang file khác. File cấu hình
-  chung **không** bị tính là gốc project, nên repo nằm dưới `$HOME` không bị kéo gốc về `$HOME`. 5 test mới.
+  chung **không** bị tính là gốc project, nên repo nằm dưới `$HOME` không bị kéo gốc về `$HOME`.
+  `projectName` / `antigravity.projectId` ở tầng chung bị bỏ qua kèm cảnh báo (là khoá của riêng từng project),
+  và file cấu hình hỏng JSON nay cảnh báo nêu tên file thay vì âm thầm bỏ qua. Mẫu:
+  [`examples/antigravity-pm.global.json`](examples/antigravity-pm.global.json). 8 test mới.
 
 ### Added
 

@@ -56,6 +56,7 @@ test('ca luong: tao task -> duyet plan -> audit/review -> test -> anh -> nghiem 
 
   // Gia lap agent sua code + bao cao.
   writeFile(path.join(dir, 'src', 'Kinh.kt'), 'fun haKinh() {\n  xacNhan()\n}\n');
+  writeFile(path.join(dir, 'src', 'test', 'KinhTest.kt'), '// test cho nhanh xac nhan\n');
   writeFile(path.join(dir, 'src', 'Ngoai.kt'), '// file nam ngoai khai bao\n');
   const later = new Date(Date.now() + 2000);
   writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da them xac nhan', files_changed: ['src/Kinh.kt'], tests: { command: 'echo', exitCode: 0 } }));
@@ -127,6 +128,7 @@ test('test do that su chan nghiem thu o tang tool (khong nuot exit code)', async
   const r = await call('pm_run', { project: dir, taskId, kind: 'test' });
   assert.ok(r.text.includes('exit=1'), r.text);
   assert.ok(r.text.includes('1 test failed'), 'phai hien log do');
+  writeFile(path.join(dir, 'src', 'test', 'ChoDu.kt'), '// test\n');
   const shot = writeFile(path.join(dir, 's.png'), PNG_1PX);
   await call('pm_capture_proof', { project: dir, taskId, label: 'anh', sourceFile: shot });
   const acc = await call('pm_accept', { project: dir, taskId });

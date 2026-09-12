@@ -76,6 +76,39 @@ test('khoa la trong cau hinh chung cung canh bao va noi ro no nam o file nao', (
   g.restore();
 });
 
+test('cau hinh chung khong duoc dat ten/id rieng cua mot project', () => {
+  const g = tmpGlobalConfig({ projectName: 'Ten Chung', antigravity: { projectId: 'id-chung' }, defaultModel: 'flash' });
+  const dir = tmpProject({});
+  const cfg = loadConfig(dir);
+  assert.equal(cfg.projectName, path.basename(fs.realpathSync(dir)), 'phai lay ten thu muc, khong lay ten o cau hinh chung');
+  assert.equal(cfg.antigravity.projectId, null, 'projectId cua rieng mot project khong duoc dung chung');
+  assert.equal(cfg.defaultModel, 'flash', 'cac khoa khac van phai an sang');
+  assert.ok(cfg.warnings.some((w) => w.includes('projectName')));
+  assert.ok(cfg.warnings.some((w) => w.includes('antigravity.projectId')));
+  cleanup(dir);
+  g.restore();
+});
+
+test('cau hinh hong (JSON sai) thi canh bao chu khong im lang bo qua', () => {
+  const g = tmpGlobalConfig({});
+  fs.writeFileSync(g.file, '{ day khong phai json');
+  const dir = tmpProject({});
+  const cfg = loadConfig(dir);
+  assert.ok(cfg.warnings.some((w) => w.includes(g.file) && /doc khong duoc|hong/i.test(w)),
+    'phai noi ro file cau hinh doc khong duoc');
+  cleanup(dir);
+  g.restore();
+});
+
+test('project nam dung cho file cau hinh chung thi chi ap dung mot lan', () => {
+  const g = tmpGlobalConfig({ testCommand: 'make test' });
+  const cfg = loadConfig(g.dir);
+  assert.equal(cfg.testCommand, 'make test');
+  assert.equal(cfg.configFile, g.file, 'phai tinh la cau hinh project');
+  assert.equal(cfg.globalConfigFile, null, 'khong duoc dem lai chinh no lam tang chung');
+  g.restore();
+});
+
 test('goc project khong bi keo ve HOME chi vi HOME co file cau hinh chung', () => {
   const g = tmpGlobalConfig({ testCommand: 'make test' });
   const proj = path.join(g.dir, 'repo-con');

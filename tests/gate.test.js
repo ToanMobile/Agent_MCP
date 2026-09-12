@@ -9,6 +9,9 @@ import {
 } from '../src/tasks.js';
 import { tmpProject, cleanup, writeFile, sampleTaskArgs, PNG_1PX } from './helpers.js';
 
+// Luat bat buoc: thay doi phai kem file test. Moi test "phai dat" deu phai dua ctx nay vao.
+const CO_FILE_TEST = { changedFiles: ['src/Kinh.kt', 'src/test/java/KinhTest.kt'] };
+
 function setupTask(cfgOver = {}) {
   const dir = tmpProject({ testCommand: 'echo ok', ...cfgOver });
   const cfg = loadConfig(dir);
@@ -33,22 +36,22 @@ function makeEverythingGreen(cfg, task) {
 
 test('task moi thi cong chan chan het, va liet ke du thu con thieu', () => {
   const { dir, cfg, task } = setupTask();
-  const g = gate(cfg, task);
+  const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, false);
   const joined = g.missing.join('\n');
   for (const phrase of ['plan.md', 'duyet plan', 'result.json', 'AUDIT', 'CODE REVIEW', 'test', 'anh nghiem thu']) {
     assert.ok(joined.includes(phrase), `thieu canh bao ve "${phrase}" trong:\n${joined}`);
   }
-  assert.throws(() => accept(cfg, task), /CHUA DU BANG CHUNG/);
+  assert.throws(() => accept(cfg, task, CO_FILE_TEST), /CHUA DU BANG CHUNG/);
   cleanup(dir);
 });
 
 test('du het bang chung thi nghiem thu duoc', () => {
   const { dir, cfg, task } = setupTask();
   makeEverythingGreen(cfg, task);
-  const g = gate(cfg, task);
+  const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, true, `van con thieu: ${g.missing.join(' | ')}`);
-  const accepted = accept(cfg, task);
+  const accepted = accept(cfg, task, CO_FILE_TEST);
   assert.equal(accepted.phase, 'ACCEPTED');
   assert.ok(accepted.acceptedAt);
   cleanup(dir);
@@ -59,7 +62,7 @@ test('test do (exit != 0) thi KHONG duoc nghiem thu', () => {
   makeEverythingGreen(cfg, task);
   task.runs = task.runs.filter((r) => r.kind !== 'test');
   recordRun(cfg, task, { kind: 'test', command: './gradlew test', exitCode: 1, durationMs: 10 });
-  const g = gate(cfg, task);
+  const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, false);
   assert.ok(g.missing.some((m) => m.includes('exit 0')), g.missing.join(' | '));
   cleanup(dir);
@@ -70,7 +73,7 @@ test('test qua han thi khong tinh la xanh', () => {
   makeEverythingGreen(cfg, task);
   task.runs = [];
   recordRun(cfg, task, { kind: 'test', command: './gradlew test', exitCode: 0, durationMs: 10, timedOut: true });
-  assert.equal(gate(cfg, task).ok, false);
+  assert.equal(gate(cfg, task, CO_FILE_TEST).ok, false);
   cleanup(dir);
 });
 
@@ -78,7 +81,7 @@ test('thieu anh nghiem thu thi khong nghiem thu duoc, du code xanh', () => {
   const { dir, cfg, task } = setupTask();
   makeEverythingGreen(cfg, task);
   task.proofs = [];
-  const g = gate(cfg, task);
+  const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, false);
   assert.ok(g.missing.some((m) => m.includes('anh nghiem thu')));
   cleanup(dir);
@@ -88,14 +91,14 @@ test('anh bi xoa khoi dia thi khong con tinh la bang chung', () => {
   const { dir, cfg, task } = setupTask();
   makeEverythingGreen(cfg, task);
   fs.rmSync(task.proofs[0].file);
-  assert.equal(gate(cfg, task).ok, false);
+  assert.equal(gate(cfg, task, CO_FILE_TEST).ok, false);
   cleanup(dir);
 });
 
 test('rework huy bang chung cua vong truoc: audit/review/test/anh deu khong con tinh', () => {
   const { dir, cfg, task } = setupTask();
   makeEverythingGreen(cfg, task);
-  assert.equal(gate(cfg, task).ok, true);
+  assert.equal(gate(cfg, task, CO_FILE_TEST).ok, true);
 
   markRework(cfg, task, 'thieu xu ly truong hop kinh dang keo');
   assert.equal(task.round, 1);
@@ -105,7 +108,7 @@ test('rework huy bang chung cua vong truoc: audit/review/test/anh deu khong con 
   // Plan van con hieu luc (ke hoach chua bi bac).
   assert.equal(task.verdicts.plan.verdict, 'pass');
 
-  const g = gate(cfg, task);
+  const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, false);
   const joined = g.missing.join('\n');
   assert.ok(joined.includes('vong 1'), joined);
@@ -129,7 +132,7 @@ test('sau rework: result.json ghi lai + bang chung moi thi nghiem thu lai duoc',
   const img = writeFile(path.join(p.proofDir, 'shot2.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'lan 2', provider: 'adb', file: img, bytes: PNG_1PX.length });
 
-  const g = gate(cfg, task);
+  const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, true, g.missing.join(' | '));
   cleanup(dir);
 });
@@ -143,11 +146,11 @@ test('rework rong feedback thi bi chan', () => {
 test('project yeu cau 2 anh thi 1 anh la chua du', () => {
   const { dir, cfg, task } = setupTask({ proof: { require: 2 } });
   makeEverythingGreen(cfg, task);
-  assert.equal(gate(cfg, task).ok, false);
+  assert.equal(gate(cfg, task, CO_FILE_TEST).ok, false);
   const p = contractPaths(cfg, task);
   const img = writeFile(path.join(p.proofDir, 'shot-b.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'anh 2', provider: 'adb', file: img, bytes: PNG_1PX.length });
-  assert.equal(gate(cfg, task).ok, true);
+  assert.equal(gate(cfg, task, CO_FILE_TEST).ok, true);
   cleanup(dir);
 });
 
@@ -157,7 +160,7 @@ test('ho so task doc lai duoc tu dia (khong mat trang thai giua cac phien)', () 
   const again = loadTask(loadConfig(dir), task.id);
   assert.equal(again.id, task.id);
   assert.equal(again.verdicts.review.verdict, 'pass');
-  assert.equal(gate(loadConfig(dir), again).ok, true);
+  assert.equal(gate(loadConfig(dir), again, CO_FILE_TEST).ok, true);
   cleanup(dir);
 });
 
@@ -177,12 +180,12 @@ test('KHONG duoc nghiem thu bang result.json cua giai doan PLAN (agent khong lam
   const img = writeFile(path.join(p.proofDir, 'shot.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'anh', provider: 'adb', file: img, bytes: PNG_1PX.length });
 
-  const g = gate(cfg, task);
+  const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, false, 'khong duoc nghiem thu khi agent chua trien khai');
   const joined = g.missing.join('\n');
   assert.ok(joined.includes('van la bao cao "PLAN"'), joined);
   assert.ok(joined.includes('TRUOC luc giao trien khai'), joined);
-  assert.throws(() => accept(cfg, task), /CHUA DU BANG CHUNG/);
+  assert.throws(() => accept(cfg, task, CO_FILE_TEST), /CHUA DU BANG CHUNG/);
   cleanup(dir);
 });
 
@@ -191,8 +194,8 @@ test('result.json thieu truong phase cung khong duoc tinh la da trien khai', () 
   makeEverythingGreen(cfg, task);
   const p = contractPaths(cfg, task);
   writeFile(p.result, JSON.stringify({ summary: 'xong roi ma' }));
-  assert.equal(gate(cfg, task).ok, false);
-  assert.ok(gate(cfg, task).missing.join('\n').includes('khong ro phase'));
+  assert.equal(gate(cfg, task, CO_FILE_TEST).ok, false);
+  assert.ok(gate(cfg, task, CO_FILE_TEST).missing.join('\n').includes('khong ro phase'));
   cleanup(dir);
 });
 
@@ -214,7 +217,7 @@ test('agent trien khai THAT sau khi duoc giao thi nghiem thu duoc', () => {
   const img = writeFile(path.join(p.proofDir, 'shot.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'anh', provider: 'adb', file: img, bytes: PNG_1PX.length });
 
-  const g = gate(cfg, task);
+  const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, true, g.missing.join(' | '));
   cleanup(dir);
 });
