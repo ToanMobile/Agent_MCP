@@ -1,11 +1,22 @@
-// Cau hinh theo tung project. File: <project>/.antigravity-pm.json
-// Repo MCP nay la CONG CU dung chung; moi project tu khai testCommand / auditCommands /
-// cach chup anh nghiem thu cua rieng no.
+// Cau hinh hai tang: cau hinh chung ~/.antigravity-pm.json lam mac dinh cho MOI project,
+// roi <project>/.antigravity-pm.json ghi de len. Repo MCP nay la CONG CU dung chung; moi
+// project tu khai testCommand / auditCommands / cach chup anh nghiem thu cua rieng no.
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { readJsonIfExists } from './util.js';
 
 export const CONFIG_NAME = '.antigravity-pm.json';
+
+/** Duong dan cau hinh chung. ANTIGRAVITY_PM_GLOBAL_CONFIG de tro sang cho khac (test dung). */
+export function globalConfigPath() {
+  return process.env.ANTIGRAVITY_PM_GLOBAL_CONFIG || path.join(os.homedir(), CONFIG_NAME);
+}
+
+/** realpath nhung khong nem loi: duong dan chua ton tai thi tra ve chinh no. */
+function realpathSafe(p) {
+  try { return fs.realpathSync(p); } catch { return path.resolve(p); }
+}
 
 export const DEFAULT_CONFIG = {
   // Ten hien thi cua project (chi de bao cao cho dep).
@@ -39,7 +50,8 @@ export const DEFAULT_CONFIG = {
   antigravity: {
     // strict = dispatch that bai neu workspace cua conversation khong phai goc project nay.
     workspaceCheck: 'strict',
-    // Ghi de ANTIGRAVITY_PROJECT_ID (THU NGHIEM — chua chac Antigravity ton trong).
+    // Ghi de project id. BINH THUONG khong can khai: tu giai tu so dang ky
+    // ~/.gemini/config/projects (xem src/projects.js). new-conversation BAT BUOC co id nay.
     projectId: null,
   },
 };
@@ -59,9 +71,13 @@ function deepMerge(base, over) {
 /** Tim goc project: di len tim .antigravity-pm.json, roi .git; khong thay thi lay chinh duong dan. */
 export function resolveProjectRoot(input) {
   const start = path.resolve(input || process.env.ANTIGRAVITY_PM_PROJECT || process.cwd());
+  // Cau hinh chung nam o HOME cung ten file, khong duoc tinh la goc project — neu khong,
+  // moi project nam duoi HOME ma chua khai gi se bi keo goc ve thang HOME.
+  const globalFile = realpathSafe(globalConfigPath());
   let dir = start;
   for (let i = 0; i < 12; i += 1) {
-    if (fs.existsSync(path.join(dir, CONFIG_NAME))) return dir;
+    const here = path.join(dir, CONFIG_NAME);
+    if (fs.existsSync(here) && realpathSafe(here) !== globalFile) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -81,16 +97,22 @@ const KNOWN_KEYS = new Set(Object.keys(DEFAULT_CONFIG));
 export function loadConfig(projectInput) {
   const root = resolveProjectRoot(projectInput);
   const file = path.join(root, CONFIG_NAME);
+  const globalFile = globalConfigPath();
   const raw = readJsonIfExists(file);
+  const rawGlobal = realpathSafe(globalFile) === realpathSafe(file) ? null : readJsonIfExists(globalFile);
   const warnings = [];
-  if (raw) {
-    for (const k of Object.keys(raw)) {
-      if (!KNOWN_KEYS.has(k)) warnings.push(`Khoa la trong ${CONFIG_NAME}: "${k}" (bi bo qua)`);
+  for (const [src, obj] of [[globalFile, rawGlobal], [file, raw]]) {
+    for (const k of Object.keys(obj || {})) {
+      if (!KNOWN_KEYS.has(k)) warnings.push(`Khoa la trong ${src}: "${k}" (bi bo qua)`);
     }
   }
-  const cfg = deepMerge(DEFAULT_CONFIG, raw || {});
+  // Thu tu de len nhau: mac dinh <- cau hinh chung <- cau hinh project.
+  // Object (vi du proof.providers) gop theo khoa; mang (rulesFiles, auditCommands) bi THAY THE han,
+  // de project van bo duoc mot muc ma cau hinh chung khai.
+  const cfg = deepMerge(deepMerge(DEFAULT_CONFIG, rawGlobal || {}), raw || {});
   cfg.projectRoot = root;
   cfg.configFile = raw ? file : null;
+  cfg.globalConfigFile = rawGlobal ? globalFile : null;
   cfg.projectName = cfg.projectName || path.basename(root);
   cfg.stateRoot = path.resolve(root, cfg.stateDir);
   cfg.tasksRoot = path.join(cfg.stateRoot, 'tasks');

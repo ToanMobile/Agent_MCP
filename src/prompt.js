@@ -144,6 +144,29 @@ export function buildReworkMessage(cfg, task, { findings = [], notes = '', faile
   ].filter(Boolean).join('\n');
 }
 
+/**
+ * Tin nhan bac KE HOACH. Khac han buildReworkMessage: o day agent van CHUA duoc sua code,
+ * chi viet lai plan.md. Dung nham hai cai nay la day agent di code khi ke hoach chua duyet.
+ */
+export function buildPlanReworkMessage(cfg, task, { findings = [], notes = '' }) {
+  const paths = contractPaths(cfg, task);
+  return [
+    `# ${task.id} — PM CHUA DUYET KE HOACH. Viet lai plan.md.`,
+    '',
+    '## PM khong dong y cho nao',
+    ...(findings.length ? findings.map((f, i) => `${i + 1}. ${f}`) : ['(xem ghi chu)']),
+    '',
+    notes ? `## Ghi chu\n${notes}\n` : '',
+    '## Yeu cau',
+    `- Viet lai ${paths.plan} cho dung, KHONG mo rong pham vi.`,
+    '- VAN DANG O GIAI DOAN LAP KE HOACH: **KHONG duoc sua bat ky file source nao**.',
+    '- Neu ban cho rang mot y kien cua PM la sai: ghi phan bien kem dan chung file:dong vao plan.md, dung im lang lam theo.',
+    `- Ghi lai ${paths.result} voi phase = "PLAN" roi DUNG LAI cho PM duyet.`,
+    '',
+    guardrails(cfg),
+  ].filter(Boolean).join('\n');
+}
+
 /** Prompt cho 1 hoi thoai AUDIT doc lap (con mat thu hai, chi doc, khong sua). */
 export function buildAuditPrompt(cfg, task, scope = '') {
   const paths = contractPaths(cfg, task);

@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig, DEFAULT_CONFIG, resolveProjectRoot } from '../src/config.js';
 import { createTask, contractPaths } from '../src/tasks.js';
-import { buildPlanPrompt, buildImplementMessage, buildReworkMessage, buildAuditPrompt } from '../src/prompt.js';
-import { tmpProject, cleanup, writeFile, sampleTaskArgs } from './helpers.js';
+import {
+  buildPlanPrompt, buildImplementMessage, buildReworkMessage, buildPlanReworkMessage, buildAuditPrompt,
+} from '../src/prompt.js';
+import { tmpProject, tmpGlobalConfig, cleanup, writeFile, sampleTaskArgs } from './helpers.js';
 
 test('cau hinh project ghi de mac dinh, khoa la thi canh bao chu khong no', () => {
   const dir = tmpProject({ testCommand: './gradlew test', proof: { require: 3 }, khoaLa: 1 });
@@ -24,6 +26,64 @@ test('commitPolicy sai thi tu ve forbid (mac dinh an toan)', () => {
   assert.equal(cfg.commitPolicy, 'forbid');
   assert.ok(cfg.warnings.some((w) => w.includes('commitPolicy')));
   cleanup(dir);
+});
+
+test('cau hinh chung o HOME lam mac dinh cho project chua khai', () => {
+  const g = tmpGlobalConfig({ defaultModel: 'flash', commitPolicy: 'forbid', runTimeoutMs: 1234567 });
+  const dir = tmpProject({});
+  const cfg = loadConfig(dir);
+  assert.equal(cfg.defaultModel, 'flash');
+  assert.equal(cfg.runTimeoutMs, 1234567);
+  assert.equal(cfg.globalConfigFile, g.file, 'phai noi ro dang dung cau hinh chung nao');
+  cleanup(dir);
+  g.restore();
+});
+
+test('cau hinh project ghi de cau hinh chung', () => {
+  const g = tmpGlobalConfig({ testCommand: 'make test', proof: { require: 5 } });
+  const dir = tmpProject({ testCommand: './gradlew test' });
+  const cfg = loadConfig(dir);
+  assert.equal(cfg.testCommand, './gradlew test', 'project phai thang cau hinh chung');
+  assert.equal(cfg.proof.require, 5, 'khoa project khong khai thi lay tu cau hinh chung');
+  cleanup(dir);
+  g.restore();
+});
+
+test('gop cau hinh: object gop theo khoa, mang thi thay the han', () => {
+  const g = tmpGlobalConfig({
+    rulesFiles: ['CHUNG.md'],
+    auditCommands: ['npm run lint'],
+    proof: { providers: { man: { type: 'macos' } } },
+  });
+  const dir = tmpProject({
+    rulesFiles: ['AGENTS.md'],
+    proof: { providers: { may: { type: 'adb', serial: 'emulator-5554' } } },
+  });
+  const cfg = loadConfig(dir);
+  assert.deepEqual(cfg.rulesFiles, ['AGENTS.md'], 'mang phai bi thay the, khong noi duoi');
+  assert.deepEqual(cfg.auditCommands, ['npm run lint'], 'mang project khong khai thi giu cua cau hinh chung');
+  assert.deepEqual(Object.keys(cfg.proof.providers).sort(), ['man', 'may'], 'providers phai gop theo khoa');
+  cleanup(dir);
+  g.restore();
+});
+
+test('khoa la trong cau hinh chung cung canh bao va noi ro no nam o file nao', () => {
+  const g = tmpGlobalConfig({ khoaLaChung: 1 });
+  const dir = tmpProject({});
+  const cfg = loadConfig(dir);
+  assert.ok(cfg.warnings.some((w) => w.includes('khoaLaChung') && w.includes(g.file)));
+  cleanup(dir);
+  g.restore();
+});
+
+test('goc project khong bi keo ve HOME chi vi HOME co file cau hinh chung', () => {
+  const g = tmpGlobalConfig({ testCommand: 'make test' });
+  const proj = path.join(g.dir, 'repo-con');
+  fs.mkdirSync(path.join(proj, '.git'), { recursive: true });
+  const deep = path.join(proj, 'src', 'main');
+  fs.mkdirSync(deep, { recursive: true });
+  assert.equal(fs.realpathSync(resolveProjectRoot(deep)), fs.realpathSync(proj));
+  g.restore();
 });
 
 test('tim goc project tu thu muc con', () => {
@@ -105,5 +165,20 @@ test('prompt AUDIT cam sua file va chi dinh file bao cao rieng', () => {
   assert.ok(prompt.includes('audit-agent.json'));
   assert.ok(prompt.includes('KHONG duoc sua bat ky file nao'));
   assert.ok(prompt.includes('soi ky phan dong PTT'));
+  cleanup(dir);
+});
+
+test('tin nhan BAC KE HOACH van cam sua code va doi bao cao phase PLAN', () => {
+  const dir = tmpProject({});
+  const cfg = loadConfig(dir);
+  const task = createTask(cfg, sampleTaskArgs());
+  const msg = buildPlanReworkMessage(cfg, task, {
+    findings: ['Ke hoach chua noi ro se sua ham nao', 'Thieu cach chung minh bang test'],
+  });
+  assert.ok(msg.includes('Ke hoach chua noi ro se sua ham nao'));
+  assert.ok(msg.includes('KHONG duoc sua bat ky file source nao'), 'bac ke hoach thi van cam sua code');
+  assert.ok(msg.includes('phase = "PLAN"'));
+  assert.ok(!msg.includes('phase = "IMPLEMENT"'), 'khong duoc day agent di code khi ke hoach chua duyet');
+  assert.ok(msg.includes('phan bien'), 'agent duoc quyen phan bien');
   cleanup(dir);
 });

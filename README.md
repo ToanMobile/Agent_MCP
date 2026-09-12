@@ -3,7 +3,7 @@
 [![Node 20+](https://img.shields.io/badge/node-20%2B-green.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-1.30-blue.svg)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-43%20passing-brightgreen.svg)](#-phát-triển)
+[![Tests](https://img.shields.io/badge/tests-51%20passing-brightgreen.svg)](#-phát-triển)
 
 MCP server để **Claude Code đứng vai Leader/PM giao việc cho Google Antigravity** rồi tự audit, code review, chạy test và **đòi ảnh nghiệm thu** trước khi cho task đi qua. Antigravity viết code, Claude Code kiểm tra và chịu trách nhiệm nghiệm thu.
 
@@ -63,7 +63,10 @@ Hoặc khai tay trong `~/.claude.json` / `.mcp.json`:
 }
 ```
 
-### Cấu hình project
+### Cấu hình
+
+Hai tầng, project đè lên chung: `~/.antigravity-pm.json` (mọi project) → `<project>/.antigravity-pm.json`.
+Object gộp theo khoá, mảng thì thay thế hẳn. Chi tiết: [docs/configuration.md](docs/configuration.md).
 
 Đặt `.antigravity-pm.json` ở gốc project cần giao việc:
 
@@ -190,7 +193,7 @@ Chi tiết: [.github/SECURITY.md](.github/SECURITY.md).
 ## 🧪 Phát triển
 
 ```bash
-npm test                  # 43 test, không cần Antigravity, không cần mạng
+npm test                  # 51 test, không cần Antigravity, không cần mạng
 npm run test:coverage
 npm run lint              # kiểm tra cú pháp mọi file
 npm run doctor -- <proj>  # tự kiểm tra đường dây thật

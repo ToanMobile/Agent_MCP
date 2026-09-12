@@ -12,7 +12,8 @@ import {
 import { discover, agentapiPath } from './discover.js';
 import { requireProjectId, resolveProject } from './projects.js';
 import {
-  buildPlanPrompt, buildImplementMessage, buildReworkMessage, buildAuditPrompt, buildProofRequestMessage,
+  buildPlanPrompt, buildImplementMessage, buildReworkMessage, buildPlanReworkMessage, buildAuditPrompt,
+  buildProofRequestMessage,
 } from './prompt.js';
 import { captureProof, describeProviders } from './proof.js';
 import { renderReport } from './report.js';
@@ -113,7 +114,9 @@ export const TOOLS = [
       const cfg = ctx(args);
       const L = [];
       L.push(`Project: ${cfg.projectRoot}`);
-      L.push(`Cau hinh: ${cfg.configFile || `(chua co ${CONFIG_NAME} — dang dung mac dinh)`}`);
+      L.push(`Cau hinh chung: ${cfg.globalConfigFile || '(chua co ~/.antigravity-pm.json)'}`);
+      L.push(`Cau hinh project: ${cfg.configFile
+        || `(chua co ${CONFIG_NAME} — dang dung ${cfg.globalConfigFile ? 'cau hinh chung' : 'mac dinh'})`}`);
       for (const w of cfg.warnings) L.push(`  ! ${w}`);
       L.push(`Thu muc trang thai: ${cfg.stateRoot}`);
       L.push(`Model mac dinh: ${cfg.defaultModel}`);
@@ -316,7 +319,7 @@ export const TOOLS = [
           L.push(`Workspace khop: ${check.got}${check.md.branch ? ` (nhanh ${check.md.branch})` : ''}`);
         }
         L.push(`Prompt da luu: ${promptFile}`);
-        L.push('Buoc tiep: doi vai phut roi pm_task_status. Khi co plan.md thi PM DOC PLAN, sau do pm_verdict kind=plan.');
+        L.push('Buoc tiep: doi vai phut roi pm_status. Khi co plan.md thi PM DOC PLAN, sau do pm_verdict kind=plan.');
         return L.join('\n');
       }
 
@@ -350,6 +353,7 @@ export const TOOLS = [
           prompt, projectId: pidA.id, model: args.model || task.model, title: `[PM] ${task.id} · AUDIT doc lap`,
         });
         task.auditConversationId = conversationId;
+        if (task.phase === 'IMPLEMENT') setPhase(cfg, task, 'AUDIT', 'pm', 'da giao audit doc lap');
         recordDispatch(cfg, task, { kind: 'audit', conversationId, promptFile });
         return [
           `Da mo hoi thoai AUDIT doc lap: ${conversationId}`,
@@ -426,6 +430,18 @@ export const TOOLS = [
           if (next === 'TEST') L.push('Buoc tiep: pm_run kind=test.');
           if (next === 'REVIEW') L.push('Buoc tiep: doc pm_diff roi pm_verdict kind=review.');
         }
+      } else if (args.kind === 'plan') {
+        // Bac ke hoach KHONG phai tra viec code: agent van chua duoc sua file nao.
+        if (task.conversationId) {
+          const msg = buildPlanReworkMessage(cfg, task, { findings: args.findings || [], notes: args.notes || '' });
+          const promptFile = saveOutgoing(cfg, task, `prompt-plan-rework-${Date.now()}`, msg);
+          await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
+          recordDispatch(cfg, task, { kind: 'plan_rework', promptFile });
+          L.push(`Da yeu cau agent viet lai ke hoach (van cam sua code). Noi dung: ${promptFile}`);
+        } else {
+          L.push('Task chua co hoi thoai — chua gui duoc yeu cau viet lai ke hoach.');
+        }
+        L.push('Buoc tiep: doi plan.md moi roi pm_verdict kind=plan lai. DUNG pm_rework o giai doan nay.');
       } else {
         L.push('Buoc tiep: pm_rework de tra viec cho agent (kem findings).');
       }
@@ -597,6 +613,11 @@ export const TOOLS = [
       validate(this.inputSchema, args);
       const findings = (args.findings || []).map(String).filter(Boolean);
       if (findings.length === 0) fail('findings rong — tra viec phai noi ro sai cho nao.');
+      // pm_rework la tra viec CODE. Ke hoach chua duyet ma goi no la day agent di code som.
+      if (task.phase === 'PLAN' || task.verdicts?.plan?.verdict !== 'pass') {
+        fail('Ke hoach chua duoc duyet nen chua co gi de tra viec. Dung pm_verdict kind=plan verdict=fail '
+          + '(kem findings) — no tu gui yeu cau viet lai ke hoach va van cam agent sua code.');
+      }
       const failedRuns = (task.runs || []).filter((r) => r.round === task.round && r.exitCode !== 0);
       markRework(cfg, task, `${findings.length} phat hien: ${findings[0]}`);
       const msg = buildReworkMessage(cfg, task, { findings, notes: args.notes || '', failedRuns });

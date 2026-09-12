@@ -9,7 +9,29 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Cấu hình chung `~/.antigravity-pm.json`** cho mọi project: mặc định → cấu hình chung → cấu hình project.
+  Object gộp theo khoá (`proof.providers`), mảng thay thế hẳn (`rulesFiles`, `auditCommands`). `pm_doctor` in
+  riêng hai dòng để biết giá trị đến từ đâu; `ANTIGRAVITY_PM_GLOBAL_CONFIG` trỏ sang file khác. File cấu hình
+  chung **không** bị tính là gốc project, nên repo nằm dưới `$HOME` không bị kéo gốc về `$HOME`. 5 test mới.
+
+### Added
+
+- **Cấu hình 2 tầng** (do một phiên song song thêm vào cùng cây làm việc): `~/.antigravity-pm.json` làm mặc định
+  chung cho mọi project, `<project>/.antigravity-pm.json` ghi đè. Object gộp theo khoá (ví dụ `proof.providers`),
+  mảng thì thay thế hẳn để project bỏ được một mục mà cấu hình chung khai. Cảnh báo khoá lạ nói rõ nằm ở file nào.
+  *Chưa có tài liệu trong `docs/configuration.md`.*
+
 ### Fixed
+
+- **Đường bác kế hoạch dẫn agent đi code sớm**: `pm_verdict kind=plan verdict=fail` chỉ nhắc dùng `pm_rework`,
+  mà `pm_rework` lại đặt giai đoạn thành `IMPLEMENT` và gửi tin nhắn đòi `result.json` phase `IMPLEMENT` —
+  tức bảo Gemini bắt đầu viết code khi kế hoạch **chưa** được duyệt. Nay `pm_rework` bị **chặn** nếu kế hoạch
+  chưa duyệt, và `verdict=fail` ở `kind=plan` tự gửi `buildPlanReworkMessage`: viết lại `plan.md`, **vẫn cấm sửa
+  code**, báo cáo `phase: "PLAN"`, không tăng vòng.
+- `pm_dispatch kind=audit` nay đặt giai đoạn `AUDIT` (trước đó task vẫn hiện `IMPLEMENT` suốt lúc đang audit).
+- Gợi ý "Buoc tiep" còn gọi tên tool cũ `pm_task_status` sau khi gộp thành `pm_status`.
 
 - **Lỗ hổng cổng nghiệm thu**: `result.json` của giai đoạn PLAN từng được tính là bằng chứng đã triển khai.
   Chuỗi lọt: agent ghi `result.json {phase:"PLAN"}` → PM duyệt plan → giao triển khai → **agent không làm gì**
@@ -56,7 +78,7 @@ Bản đầu tiên. Claude Code đứng vai Leader/PM giao việc cho Google Ant
   nhờ đó PM không cần giải mã protobuf trong CSDL hội thoại của Antigravity.
 - **Cấu hình theo project** `.antigravity-pm.json`: `testCommand`, `auditCommands`, `rulesFiles`,
   `commitPolicy`, `proof.providers`, `stallMinutes`; khoá lạ chỉ cảnh báo, không nổ.
-- **43 test** chạy offline, không cần Antigravity và không cần thiết bị.
+- **51 test** chạy offline, không cần Antigravity và không cần thiết bị.
 
 ### Security
 

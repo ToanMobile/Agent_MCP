@@ -175,3 +175,33 @@ test('pm_rework khong co findings thi bi chan', async () => {
   await assert.rejects(() => call('pm_rework', { project: dir, taskId, findings: [] }), /findings/);
   cleanup(dir);
 });
+
+test('pm_rework khi ke hoach chua duyet thi bi chan (khong day agent di code som)', async () => {
+  const dir = gitRepo({});
+  const created = await call('pm_task_create', { project: dir, title: 'T', brief: 'b', definitionOfDone: ['d'] });
+  const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
+  await assert.rejects(
+    () => call('pm_rework', { project: dir, taskId, findings: ['ke hoach so sai'] }),
+    /Ke hoach chua duoc duyet/,
+  );
+  // Va task van nam o giai doan PLAN, khong bi nhay sang IMPLEMENT.
+  const task = loadTask(loadConfig(dir), taskId);
+  assert.equal(task.phase, 'PLAN');
+  assert.equal(task.round, 0);
+  cleanup(dir);
+});
+
+test('bac plan (verdict fail) khong lam tang vong va khong doi giai doan', async () => {
+  const dir = gitRepo({});
+  const created = await call('pm_task_create', { project: dir, title: 'T', brief: 'b', definitionOfDone: ['d'] });
+  const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
+  const out = await call('pm_verdict', {
+    project: dir, taskId, kind: 'plan', verdict: 'fail', findings: ['thieu buoc kiem chung'],
+  });
+  assert.ok(out.text.includes('DUNG pm_rework'), out.text);
+  const task = loadTask(loadConfig(dir), taskId);
+  assert.equal(task.phase, 'PLAN');
+  assert.equal(task.round, 0);
+  assert.equal(task.verdicts.plan.verdict, 'fail');
+  cleanup(dir);
+});

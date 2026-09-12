@@ -1,6 +1,23 @@
 # Cấu hình
 
-Repo này là công cụ dùng chung. Mỗi project đích khai riêng một file `.antigravity-pm.json` ở gốc.
+Repo này là công cụ dùng chung. Cấu hình đọc theo **hai tầng**:
+
+| Tầng | File | Dùng khi |
+| --- | --- | --- |
+| Chung (mọi project) | `~/.antigravity-pm.json` | Những thứ giống nhau ở mọi project: `commitPolicy`, `defaultModel`, cách chụp màn hình máy, `runTimeoutMs`… |
+| Riêng từng project | `<project>/.antigravity-pm.json` | Những thứ chỉ project đó có: `testCommand`, `auditCommands`, `rulesFiles`, thiết bị chụp ảnh… |
+
+Thứ tự đè lên nhau: **mặc định → cấu hình chung → cấu hình project** (project luôn thắng).
+
+- **Object gộp theo khoá.** `proof.providers` khai `man` ở tầng chung và `may` ở tầng project ⇒ dùng được cả hai.
+- **Mảng bị thay thế hẳn, không nối đuôi.** `rulesFiles`, `auditCommands` khai lại ở project ⇒ danh sách chung bị bỏ
+  hoàn toàn. Cố ý như vậy: nối đuôi thì project không có cách nào **bỏ** một mục mà tầng chung đã khai.
+- Đường dẫn tương đối trong cấu hình chung (`rulesFiles`, `stateDir`) tính theo gốc **của từng project**, không phải
+  theo `$HOME`.
+- Không có tầng chung thì mọi thứ chạy y như cũ. `pm_doctor` in ra cả hai dòng để biết giá trị đến từ đâu.
+
+> `~/.antigravity-pm.json` **không** bị tính là gốc project: một repo nằm dưới `$HOME` mà chưa khai cấu hình riêng
+> vẫn lấy gốc theo `.git` của chính nó.
 
 ## Toàn bộ khoá
 
@@ -74,12 +91,13 @@ pm_capture_proof { taskId, label: "...", sourceFile: "/duong/dan/anh.png" }
 | `ANTIGRAVITY_PM_PROJECT` | Project mặc định khi tool không truyền `project` |
 | `ANTIGRAVITY_PM_AGENTAPI` | Trỏ tới binary `agentapi` khác (khi Antigravity cài chỗ lạ) |
 | `ANTIGRAVITY_PM_QUIET` | `1` ⇒ tắt log stderr |
+| `ANTIGRAVITY_PM_GLOBAL_CONFIG` | Trỏ cấu hình chung sang file khác thay cho `~/.antigravity-pm.json` |
 
 Server tự dò địa chỉ language server của IDE đang chạy; nếu MCP được khởi động **từ trong terminal của Antigravity** thì nó dùng luôn biến môi trường mà IDE đã bơm vào.
 
 ## Gốc project được tìm thế nào
 
-1. Đi lên từ đường dẫn truyền vào, tìm thư mục có `.antigravity-pm.json`
+1. Đi lên từ đường dẫn truyền vào, tìm thư mục có `.antigravity-pm.json` (bỏ qua chính file cấu hình chung)
 2. Không có thì tìm thư mục có `.git`
 3. Không có nữa thì dùng chính đường dẫn đó
 

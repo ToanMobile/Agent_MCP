@@ -39,7 +39,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 | `src/prompt.js` | Soạn prompt. Mọi ràng buộc gửi cho agent nằm ở đây, không rải rác trong tools. |
 | `src/proof.js` | Chụp/nhận ảnh, kiểm magic byte, thu nhỏ. |
 | `src/tools.js` | Ghép tool MCP. Không chứa logic nghiệm thu — chỉ gọi `tasks.js`. |
-| `src/config.js` | Cấu hình theo project. Khoá lạ ⇒ cảnh báo, không nổ. |
+| `src/config.js` | Cấu hình hai tầng (chung ở `$HOME` → project). Khoá lạ ⇒ cảnh báo, không nổ. |
 
 ## 3. Quy tắc khi sửa
 
@@ -47,7 +47,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
   không phụ thuộc zod để không vỡ khi SDK đổi version.
 - **Sửa `gate()`**: phải kèm test trong [`tests/gate.test.js`](tests/gate.test.js) chứng minh trường hợp mới **bị chặn**,
   không chỉ test trường hợp qua được.
-- **Test không được cần Antigravity, không được cần mạng, không được cần thiết bị.** Cả 43 test hiện tại chạy offline.
+- **Test không được cần Antigravity, không được cần mạng, không được cần thiết bị.** Cả 51 test hiện tại chạy offline.
   Đường đi có gọi `agentapi` thì kiểm chứng bằng `pm_doctor ping=true` trên máy thật, không mock giả rồi tự tin.
 - **Tiếng Việt không dấu trong code/prompt** (chuỗi gửi cho agent và log), **tiếng Việt có dấu trong tài liệu**.
   Lý do: prompt đi qua nhiều tầng CLI/gRPC, tránh rủi ro mã hoá; tài liệu thì người đọc.
@@ -57,7 +57,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 ## 4. Kiểm tra trước khi giao
 
 ```bash
-npm test          # 43 test, phải xanh hết
+npm test          # 51 test, phải xanh hết
 npm run lint      # cú pháp mọi file
 npm run doctor -- <project>   # đường dây thật (cần Antigravity đang mở)
 ```

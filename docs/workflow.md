@@ -54,7 +54,7 @@ pm_verdict { taskId, kind: "plan", verdict: "pass", notes: "..." }
 pm_dispatch { taskId, kind: "implement", notes: "Giữ nguyên API công khai" }
 ```
 
-Plan sai thì `verdict: "fail"` + `pm_rework` kèm findings — đừng tự sửa plan hộ agent.
+Plan sai thì `verdict: "fail"` kèm findings — tool **tự gửi yêu cầu viết lại `plan.md`** và vẫn cấm agent sửa code; đừng tự sửa plan hộ agent, và **đừng dùng `pm_rework`** ở giai đoạn này (nó là trả việc *code*, nên bị chặn nếu kế hoạch chưa duyệt).
 
 Agent sửa code, tự chạy test, ghi `result.json` với `files_changed`, `commands_run`, `tests`, `screenshots`.
 

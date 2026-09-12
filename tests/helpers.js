@@ -8,6 +8,27 @@ export const PNG_1PX = Buffer.from(
   'base64',
 );
 
+// Test khong duoc dinh cau hinh chung that cua may dang chay: tro ANTIGRAVITY_PM_GLOBAL_CONFIG
+// vao mot duong dan khong ton tai ngay khi nap helpers.
+const NO_GLOBAL_CONFIG = path.join(os.tmpdir(), 'agpm-test-khong-co-cau-hinh-chung', '.antigravity-pm.json');
+process.env.ANTIGRAVITY_PM_GLOBAL_CONFIG = NO_GLOBAL_CONFIG;
+
+/** Tao cau hinh chung gia (dong vai ~/.antigravity-pm.json) cho mot test. */
+export function tmpGlobalConfig(config = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agpm-home-'));
+  const file = path.join(dir, '.antigravity-pm.json');
+  fs.writeFileSync(file, JSON.stringify(config, null, 2));
+  process.env.ANTIGRAVITY_PM_GLOBAL_CONFIG = file;
+  return {
+    dir,
+    file,
+    restore() {
+      process.env.ANTIGRAVITY_PM_GLOBAL_CONFIG = NO_GLOBAL_CONFIG;
+      cleanup(dir);
+    },
+  };
+}
+
 export function tmpProject(config = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agpm-test-'));
   fs.writeFileSync(path.join(dir, '.antigravity-pm.json'), JSON.stringify(config, null, 2));
