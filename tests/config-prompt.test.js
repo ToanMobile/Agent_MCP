@@ -5,7 +5,7 @@ import path from 'node:path';
 import { loadConfig, DEFAULT_CONFIG, resolveProjectRoot } from '../src/config.js';
 import { createTask, contractPaths } from '../src/tasks.js';
 import {
-  buildPlanPrompt, buildImplementMessage, buildReworkMessage, buildPlanReworkMessage, buildAuditPrompt,
+  buildPlanCritiquePrompt, buildImplementMessage, buildReworkMessage, buildAuditPrompt,
 } from '../src/prompt.js';
 import { tmpProject, tmpGlobalConfig, cleanup, writeFile, sampleTaskArgs } from './helpers.js';
 
@@ -127,28 +127,28 @@ test('tim goc project tu thu muc con', () => {
   cleanup(dir);
 });
 
-test('prompt PLAN: cam sua code, bat ghi plan.md + result.json, cam git commit', () => {
+test('prompt PHAN BIEN KE HOACH: cam sua code, mang du luat + dinh nghia hoan thanh', () => {
   const dir = tmpProject({ testCommand: './gradlew test' });
   writeFile(path.join(dir, 'AGENTS.md'), '# luat');
   const cfg = loadConfig(dir);
   const task = createTask(cfg, sampleTaskArgs());
   const p = contractPaths(cfg, task);
-  const prompt = buildPlanPrompt(cfg, task);
+  writeFile(p.plan, '# Ke hoach cua PM\n- Buoc 1: doi nguong');
+  const prompt = buildPlanCritiquePrompt(cfg, task);
 
-  assert.ok(prompt.includes(p.plan), 'phai noi duong dan tuyet doi cua plan.md');
-  assert.ok(prompt.includes(p.result), 'phai noi duong dan result.json');
-  assert.ok(prompt.includes('KHONG sua bat ky file source'), 'phai cam sua code o giai doan plan');
-  assert.ok(prompt.includes('git commit'), 'phai cam commit');
+  assert.ok(prompt.includes(path.join(p.dir, 'plan-review.json')), 'phai noi duong dan tuyet doi cua plan-review.json');
+  assert.ok(prompt.includes('KHONG sua bat ky file source'), 'phai cam sua code o giai doan phan bien');
   assert.ok(prompt.includes(path.join(dir, 'AGENTS.md')), 'phai nhet file luat cua project vao prompt');
   for (const d of task.definitionOfDone) assert.ok(prompt.includes(d), 'phai co dinh nghia hoan thanh');
   cleanup(dir);
 });
 
-test('prompt PLAN khong nhac file luat khong ton tai', () => {
+test('prompt PHAN BIEN khong nhac file luat khong ton tai', () => {
   const dir = tmpProject({ rulesFiles: ['KHONG-CO.md'] });
   const cfg = loadConfig(dir);
   const task = createTask(cfg, sampleTaskArgs());
-  assert.ok(!buildPlanPrompt(cfg, task).includes('KHONG-CO.md'));
+  writeFile(contractPaths(cfg, task).plan, '# Ke hoach');
+  assert.ok(!buildPlanCritiquePrompt(cfg, task).includes('KHONG-CO.md'));
   cleanup(dir);
 });
 
@@ -201,17 +201,14 @@ test('prompt AUDIT cam sua file va chi dinh file bao cao rieng', () => {
   cleanup(dir);
 });
 
-test('tin nhan BAC KE HOACH van cam sua code va doi bao cao phase PLAN', () => {
+test('prompt PHAN BIEN doi agent BAC BO va cho phep noi "khong tim ra"', () => {
   const dir = tmpProject({});
   const cfg = loadConfig(dir);
   const task = createTask(cfg, sampleTaskArgs());
-  const msg = buildPlanReworkMessage(cfg, task, {
-    findings: ['Ke hoach chua noi ro se sua ham nao', 'Thieu cach chung minh bang test'],
-  });
-  assert.ok(msg.includes('Ke hoach chua noi ro se sua ham nao'));
-  assert.ok(msg.includes('KHONG duoc sua bat ky file source nao'), 'bac ke hoach thi van cam sua code');
-  assert.ok(msg.includes('phase = "PLAN"'));
-  assert.ok(!msg.includes('phase = "IMPLEMENT"'), 'khong duoc day agent di code khi ke hoach chua duyet');
-  assert.ok(msg.includes('phan bien'), 'agent duoc quyen phan bien');
+  writeFile(contractPaths(cfg, task).plan, '# Ke hoach cua PM\n- Buoc 1: doi nguong');
+  const p = buildPlanCritiquePrompt(cfg, task);
+  assert.ok(p.includes('BAC BO'), 'phai yeu cau bac bo, khong phai gat dau');
+  assert.ok(p.includes('khong tim ra'), 'phai cho phep noi khong tim ra cho sai, de agent khoi bia loi');
+  assert.ok(!p.includes('phase = "IMPLEMENT"'), 'giai doan nay tuyet doi khong duoc day agent di code');
   cleanup(dir);
 });

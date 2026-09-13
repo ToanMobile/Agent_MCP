@@ -14,9 +14,12 @@ export const SERVER_VERSION = '0.1.0';
 
 // Khoi nay nam trong context cua ben dung MCP ca phien => ngan gon, chi giu cai khong the suy ra
 // tu ten tool. Giai thich dai de trong docs/workflow.md.
-const INSTRUCTIONS = `Ban la Leader/PM; Antigravity la ky su. Dung tu viet code phan da giao cho no.
-Thu tu: pm_task_create -> dispatch plan -> doc plan.md -> verdict plan -> dispatch implement
+const INSTRUCTIONS = `Ban la Leader/PM: BAN lap ke hoach. Antigravity la ky su: no phan bien ke hoach roi thuc thi.
+Dung tu viet code phan da giao cho no.
+Thu tu: pm_task_create -> pm_plan (BAN viet ke hoach) -> dispatch plan_review (agent phan bien, chi doc)
+-> doc plan-review.json -> sua ke hoach (pm_plan lai) hoac verdict plan=pass -> dispatch implement
 -> pm_diff (+ dispatch audit) -> verdict audit -> verdict review -> pm_run test -> pm_capture_proof -> pm_accept.
+Chua nghe phan bien thi khong chot duoc ke hoach cua chinh minh; ghi lai ke hoach thi phan bien cu bi huy.
 Sai thi pm_rework kem findings (file:dong + sai gi). Antigravity phai dang mo dung project can lam.
 result.json cua agent la LOI KHAI, khong phai bang chung; pm_run va anh moi la bang chung.`;
 

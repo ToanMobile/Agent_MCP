@@ -31,12 +31,15 @@ pm_task_create {
   brief: "Hiện trạng ... Cần ... Được sửa ... CẤM sửa ...",
   definitionOfDone: ["Có unit test cho bước xác nhận", "Không đổi hành vi lệnh khác"]
 }
-pm_dispatch { taskId: "T0001-...", kind: "plan" }
+pm_plan { taskId: "T0001-...", content: "# Kế hoạch\n1. ...\n2. ..." }
+pm_dispatch { taskId: "T0001-...", kind: "plan_review" }
 ```
 
 `brief` càng nói rõ **phạm vi được sửa và cái gì cấm sửa** thì càng ít phải trả việc. `definitionOfDone` phải **kiểm chứng được** — "chạy ổn" không phải DoD, "test X xanh và ảnh cho thấy Y" mới là DoD.
 
-Agent nhận prompt có: yêu cầu, DoD, đường dẫn tuyệt đối các file luật của project, lệnh **cấm sửa code** ở giai đoạn này, và hợp đồng ghi `plan.md` + `result.json`.
+**Kế hoạch là của PM.** Antigravity không lập kế hoạch — nó *phản biện* kế hoạch của bạn. Lý do: PM không ngồi trong repo bằng agent nên kế hoạch có thể sai fact, còn phạm vi công việc thì không nên để model yếu hơn quyết định.
+
+Prompt phản biện mang theo: yêu cầu, **toàn văn kế hoạch của PM**, DoD, đường dẫn tuyệt đối các file luật, lệnh **cấm sửa code**, và hợp đồng ghi `plan-review.json`. Agent được yêu cầu **bác bỏ**, và được phép nói thẳng "không tìm ra chỗ sai" thay vì bịa lỗi cho có.
 
 Theo dõi:
 
@@ -44,7 +47,7 @@ Theo dõi:
 pm_status { taskId: "T0001-..." }
 ```
 
-- `plan.md: co` ⇒ đọc `plan.md`, đánh giá thật (bằng `Read`, không tin `summary`)
+- có `plan-review.json` ⇒ đọc nó, đánh giá thật (bằng `Read`, không tin `summary`)
 - `im 15 phut` ⇒ có thể đang chờ bấm Accept trong Antigravity, mở IDE xem
 
 ## Giai đoạn 2 — IMPLEMENT
@@ -54,7 +57,9 @@ pm_verdict { taskId, kind: "plan", verdict: "pass", notes: "..." }
 pm_dispatch { taskId, kind: "implement", notes: "Giữ nguyên API công khai" }
 ```
 
-Plan sai thì `verdict: "fail"` kèm findings — tool **tự gửi yêu cầu viết lại `plan.md`** và vẫn cấm agent sửa code; đừng tự sửa plan hộ agent, và **đừng dùng `pm_rework`** ở giai đoạn này (nó là trả việc *code*, nên bị chặn nếu kế hoạch chưa duyệt).
+Phản biện chỉ ra kế hoạch sai thì **PM tự sửa kế hoạch** rồi `pm_plan` lại — ghi lại kế hoạch sẽ **huỷ bản phản biện cũ**, nên phải cho phản biện chạy lại. Chưa có `plan-review.json` mới hơn `plan.md` thì `pm_verdict kind=plan verdict=pass` **bị chặn**: không ai được tự duyệt kế hoạch của chính mình khi chưa nghe phản biện. `pm_rework` là trả việc *code*, không dùng ở giai đoạn này.
+
+`pm_dispatch kind=implement` là bước **mở hội thoại làm việc** (hội thoại phản biện là hội thoại riêng, chỉ đọc), và tin nhắn triển khai mang theo toàn văn kế hoạch.
 
 Agent sửa code, tự chạy test, ghi `result.json` với `files_changed`, `commands_run`, `tests`, `screenshots`.
 

@@ -9,6 +9,7 @@
 // chung. Cong chan nam trong code, khong nam trong loi hua cua ai ca.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { ensureDir, writeJsonAtomic, readJsonIfExists, nowIso, slug, exists } from './util.js';
 import { checkTestChange, checkProofProvider } from './policy.js';
 
@@ -66,6 +67,10 @@ export function createTask(cfg, { title, brief, definitionOfDone = [], model, ta
     proofs: [],
     dispatches: [],
     history: [],
+    // Commit goc luc giao viec: thay doi cua task = cay lam viec + moi commit SAU moc nay.
+    // Vi sao (13/09/2026): code + test cua T0008 da vao commit truoc khi accept => `git status`
+    // sach => cong "phai kem file test" bao 0 file dù test co that. Do theo commit goc thi khong lot.
+    baseCommit: headCommitOf(cfg.projectRoot),
     createdAt: nowIso(),
     updatedAt: nowIso(),
     acceptedAt: null,
@@ -259,8 +264,8 @@ export function gate(cfg, task, ctx = {}) {
   const missing = [];
 
   const planVerdict = task.verdicts?.plan;
-  if (!fresh.planExists) missing.push('Thieu plan.md do agent viet (chua qua buoc PLAN)');
-  if (!planVerdict || planVerdict.verdict !== 'pass') missing.push('PM chua duyet plan (pm_verdict kind=plan verdict=pass)');
+  if (!fresh.planExists) missing.push('Thieu plan.md — PM chua viet ke hoach (pm_plan)');
+  if (!planVerdict || planVerdict.verdict !== 'pass') missing.push('PM chua chot ke hoach — nghe phan bien roi pm_verdict kind=plan verdict=pass');
 
   if (!fresh.resultExists) {
     missing.push('Thieu result.json — agent chua bao cao ket qua theo hop dong');
@@ -345,4 +350,30 @@ export function accept(cfg, task, ctx = {}) {
   task.acceptedAt = nowIso();
   addHistory(task, 'pm', 'accepted', `vong ${task.round}`);
   return save(cfg, task);
+}
+
+/** SHA HEAD cua repo (null neu khong phai git repo) — dong bo, chi goi luc tao task. */
+export function headCommitOf(projectRoot) {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hop nhat danh sach file thay doi: cay lam viec + da commit ke tu commit goc. Thuan, de test.
+ * `wt` = undefined nghia la chua do duoc git => tra undefined (cong chan bao CHUA XAC MINH).
+ */
+export function hopNhatFileThayDoi(wt, committed) {
+  if (!Array.isArray(wt)) return undefined;
+  const out = [];
+  const seen = new Set();
+  for (const f of [...wt, ...(Array.isArray(committed) ? committed : [])]) {
+    const k = String(f).trim();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(k);
+  }
+  return out;
 }

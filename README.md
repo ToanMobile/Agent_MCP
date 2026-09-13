@@ -98,10 +98,12 @@ Xem thêm trong [`examples/`](examples/) và [docs/configuration.md](docs/config
 PM (Claude Code)                          Engineer (Antigravity)
 ────────────────                          ──────────────────────
 pm_task_create   ── định nghĩa DoD
-pm_dispatch plan ─────────────────────▶   đọc luật, viết plan.md
+pm_plan          ── PM TỰ viết plan.md
+pm_dispatch plan_review ──────────────▶   phản biện kế hoạch, tìm chỗ sai
                                           (CẤM sửa code)
-đọc plan.md
-pm_verdict plan=pass
+đọc plan-review.json
+   ├── kế hoạch sai ⇒ pm_plan lại (phản biện cũ bị huỷ)
+   └── ổn ⇒ pm_verdict plan=pass
 pm_dispatch implement ────────────────▶   sửa code, tự chạy test,
                                           ghi result.json (+ ảnh)
 pm_diff            ── xem code THẬT
@@ -124,8 +126,9 @@ Chi tiết từng bước và lý do: [docs/workflow.md](docs/workflow.md).
 | --- | --- |
 | `pm_doctor` | Kiểm tra Antigravity đang chạy, `agentapi` gọi được, project đã cấu hình chưa. `ping=true` mở 1 hội thoại thử vô hại để chứng minh đường dây thông 2 chiều |
 | `pm_task_create` | Mở task mới, **bắt buộc** có `definitionOfDone` kiểm chứng được |
+| `pm_plan` | **PM tự ghi `plan.md`.** Antigravity không lập kế hoạch. Ghi lại kế hoạch ⇒ huỷ bản phản biện cũ |
 | `pm_status` | Không `taskId`: liệt kê task. Có `taskId`: agent báo cáo chưa, hội thoại còn động tĩnh hay đã treo, còn thiếu bằng chứng gì |
-| `pm_dispatch` | Giao việc: `plan` · `implement` · `audit` · `proof` · `custom` |
+| `pm_dispatch` | Giao việc: `plan_review` · `implement` · `audit` · `proof` · `custom` |
 | `pm_message` | Gửi tin nhắn tự do vào hội thoại của task |
 
 ### Kiểm tra & nghiệm thu

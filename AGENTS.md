@@ -39,7 +39,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 | `src/projects.js` | Giải đường dẫn project → project id của Antigravity. Chỗ duy nhất đọc `~/.gemini/config/projects/`. |
 | `src/agentapi.js` | Chỗ duy nhất gọi CLI `agentapi`. Đổi giao diện CLI ⇒ chỉ sửa ở đây. |
 | `src/tasks.js` | Máy trạng thái + `gate()`. Không I/O mạng, không gọi agent. |
-| `src/prompt.js` | Soạn prompt. Mọi ràng buộc gửi cho agent nằm ở đây, không rải rác trong tools. Sáu luật bắt buộc (cấm bịa, oracle đỏ→xanh, cấm sửa test cho xanh, đếm test thật, liệt kê nơi dùng, churn guard) là phần cứng của hợp đồng — sửa phải kèm test trong `tests/prompt-rules.test.js`. |
+| `src/prompt.js` | Soạn prompt. **Kế hoạch do PM viết** — agent chỉ phản biện (`buildPlanCritiquePrompt`) rồi thực thi. Mọi ràng buộc gửi cho agent nằm ở đây, không rải rác trong tools. Sáu luật bắt buộc (cấm bịa, oracle đỏ→xanh, cấm sửa test cho xanh, đếm test thật, liệt kê nơi dùng, churn guard) là phần cứng của hợp đồng — sửa phải kèm test trong `tests/prompt-rules.test.js`. |
 | `src/policy.js` | Luật bắt buộc (`mustHave`): nhận diện file test, provider ảnh hợp lệ, câu nhắc cho agent. |
 | `src/proof.js` | Chụp/nhận ảnh, kiểm magic byte, thu nhỏ. |
 | `src/tools.js` | Ghép tool MCP. Không chứa logic nghiệm thu — chỉ gọi `tasks.js`. |
@@ -51,7 +51,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
   không phụ thuộc zod để không vỡ khi SDK đổi version.
 - **Sửa `gate()`**: phải kèm test trong [`tests/gate.test.js`](tests/gate.test.js) chứng minh trường hợp mới **bị chặn**,
   không chỉ test trường hợp qua được.
-- **Test không được cần Antigravity, không được cần mạng, không được cần thiết bị.** Cả 71 test hiện tại chạy offline.
+- **Test không được cần Antigravity, không được cần mạng, không được cần thiết bị.** Cả 82 test hiện tại chạy offline.
   Đường đi có gọi `agentapi` thì kiểm chứng bằng `pm_doctor ping=true` trên máy thật, không mock giả rồi tự tin.
 - **Tiếng Việt không dấu trong code/prompt** (chuỗi gửi cho agent và log), **tiếng Việt có dấu trong tài liệu**.
   Lý do: prompt đi qua nhiều tầng CLI/gRPC, tránh rủi ro mã hoá; tài liệu thì người đọc.
@@ -61,7 +61,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 ## 4. Kiểm tra trước khi giao
 
 ```bash
-npm test          # 71 test, phải xanh hết
+npm test          # 82 test, phải xanh hết
 npm run lint      # cú pháp mọi file
 npm run doctor -- <project>   # đường dây thật (cần Antigravity đang mở)
 ```

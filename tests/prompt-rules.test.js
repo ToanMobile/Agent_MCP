@@ -3,30 +3,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../src/config.js';
-import { createTask } from '../src/tasks.js';
+import { createTask, contractPaths } from '../src/tasks.js';
 import {
-  buildPlanPrompt,
+  buildPlanCritiquePrompt,
   buildImplementMessage,
   buildReworkMessage,
-  buildPlanReworkMessage,
   buildAuditPrompt,
 } from '../src/prompt.js';
-import { tmpProject, cleanup, sampleTaskArgs } from './helpers.js';
+import { tmpProject, cleanup, writeFile, sampleTaskArgs } from './helpers.js';
 
 function setup(config = {}) {
   const dir = tmpProject(config);
   const cfg = loadConfig(dir);
   const task = createTask(cfg, sampleTaskArgs());
+  // Ke hoach do PM viet — moi prompt gui cho agent deu mang no theo.
+  writeFile(contractPaths(cfg, task).plan, '# Ke hoach cua PM\n- Buoc 1: doi signature ham X, liet ke noi dang dung truoc');
   return { dir, cfg, task };
 }
 
 test('rule 1 — moi prompt deu mang khoi CAM BIA', () => {
   const { dir, cfg, task } = setup({ testCommand: 'make test' });
   const prompts = [
-    buildPlanPrompt(cfg, task),
+    buildPlanCritiquePrompt(cfg, task),
     buildImplementMessage(cfg, task),
     buildReworkMessage(cfg, task, { findings: ['x'] }),
-    buildPlanReworkMessage(cfg, task, { findings: ['x'] }),
     buildAuditPrompt(cfg, task),
   ];
   for (const p of prompts) {
@@ -69,10 +69,10 @@ test('rule 4 — khong chay test nao thi khong phai xanh, phai ghi so pass/fail/
 
 test('rule 5 — doi signature/API dung chung thi phai liet ke noi dang dung TRUOC', () => {
   const { dir, cfg, task } = setup({});
-  const prompt = buildPlanPrompt(cfg, task);
-  assert.match(prompt, /signature/i);
-  assert.match(prompt, /liet ke/i);
-  assert.match(prompt, /thu muc test|src\/test/i, 'phai nhac tim ca trong test, cho hay bi bo sot');
+  const msg = buildImplementMessage(cfg, task);
+  assert.match(msg, /signature/i);
+  assert.match(msg, /liet ke/i);
+  assert.match(msg, /thu muc test|src\/test/i, 'phai nhac tim ca trong test, cho hay bi bo sot');
   cleanup(dir);
 });
 

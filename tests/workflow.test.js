@@ -25,6 +25,15 @@ function gitRepo(config) {
   return dir;
 }
 
+
+/** PM viet ke hoach, agent phan bien, PM chot — ba buoc bat buoc truoc khi giao trien khai. */
+async function planDaChot(dir, taskId, cfg, task, noiDung = '# Ke hoach cua PM\n1. Them ham xacNhan()\n2. Them test') {
+  await call('pm_plan', { project: dir, taskId, content: noiDung });
+  writeFile(path.join(contractPaths(cfg, task).dir, 'plan-review.json'),
+    JSON.stringify({ phase: 'PLAN_REVIEW', verdict: 'ok', findings: [] }));
+  await call('pm_verdict', { project: dir, taskId, kind: 'plan', verdict: 'pass', notes: 'da nghe phan bien' });
+}
+
 test('ca luong: tao task -> duyet plan -> audit/review -> test -> anh -> nghiem thu', async () => {
   const dir = gitRepo({ testCommand: 'echo "3 tests passed"', auditCommands: ['echo "docs gate ok"'] });
 
@@ -45,14 +54,11 @@ test('ca luong: tao task -> duyet plan -> audit/review -> test -> anh -> nghiem 
   assert.ok(early.text.includes('TU CHOI NGHIEM THU'));
   assert.ok(early.text.includes('plan.md'));
 
-  // Gia lap agent viet plan.
-  writeFile(p.plan, '# Ke hoach\n1. Them ham xacNhan()\n2. Them test');
-  writeFile(p.result, JSON.stringify({ phase: 'PLAN', summary: 'se them buoc xac nhan', files_to_change: ['src/Kinh.kt'] }));
+  // PM tu viet ke hoach (Antigravity khong lap ke hoach nua), nghe phan bien roi chot.
+  await planDaChot(dir, taskId, cfg, task);
   const st1 = await call('pm_status', { project: dir, taskId });
   assert.ok(st1.text.includes('plan.md: co'));
   assert.ok(st1.text.includes('CHUA DAT'));
-
-  await call('pm_verdict', { project: dir, taskId, kind: 'plan', verdict: 'pass', notes: 'ke hoach hop ly' });
 
   // Gia lap agent sua code + bao cao.
   writeFile(path.join(dir, 'src', 'Kinh.kt'), 'fun haKinh() {\n  xacNhan()\n}\n');
@@ -120,9 +126,8 @@ test('test do that su chan nghiem thu o tang tool (khong nuot exit code)', async
   const cfg = loadConfig(dir);
   const task = loadTask(cfg, taskId);
   const p = contractPaths(cfg, task);
-  writeFile(p.plan, '#plan');
   writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'x' }));
-  await call('pm_verdict', { project: dir, taskId, kind: 'plan', verdict: 'pass' });
+  await planDaChot(dir, taskId, cfg, task, '#plan');
   await call('pm_verdict', { project: dir, taskId, kind: 'audit', verdict: 'pass' });
   await call('pm_verdict', { project: dir, taskId, kind: 'review', verdict: 'pass' });
   const r = await call('pm_run', { project: dir, taskId, kind: 'test' });
@@ -154,18 +159,25 @@ test('pm_task_create thieu definitionOfDone thi bi chan ngay', async () => {
   cleanup(dir);
 });
 
-test('pm_dispatch kind=implement khi chua duyet plan thi bi chan', async () => {
+test('pm_dispatch kind=implement khi PM chua viet plan.md thi bi chan', async () => {
   const dir = gitRepo({});
   const created = await call('pm_task_create', { project: dir, title: 'T', brief: 'b', definitionOfDone: ['d'] });
   const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
-  // Gan hoi thoai gia de vuot qua buoc kiem tra "chua co hoi thoai".
-  const cfg = loadConfig(dir);
-  const task = loadTask(cfg, taskId);
-  task.conversationId = '11111111-2222-3333-4444-555555555555';
-  fs.writeFileSync(path.join(cfg.tasksRoot, taskId, 'task.json'), JSON.stringify(task, null, 2));
   await assert.rejects(
     () => call('pm_dispatch', { project: dir, taskId, kind: 'implement' }),
-    /Chua duyet plan/,
+    /Chua co plan\.md/,
+  );
+  cleanup(dir);
+});
+
+test('pm_dispatch kind=implement khi co plan.md nhung CHUA chot thi van bi chan', async () => {
+  const dir = gitRepo({});
+  const created = await call('pm_task_create', { project: dir, title: 'T', brief: 'b', definitionOfDone: ['d'] });
+  const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
+  await call('pm_plan', { project: dir, taskId, content: '# Ke hoach chua nghe phan bien' });
+  await assert.rejects(
+    () => call('pm_dispatch', { project: dir, taskId, kind: 'implement' }),
+    /chua duoc chot/i,
   );
   cleanup(dir);
 });
@@ -178,13 +190,13 @@ test('pm_rework khong co findings thi bi chan', async () => {
   cleanup(dir);
 });
 
-test('pm_rework khi ke hoach chua duyet thi bi chan (khong day agent di code som)', async () => {
+test('pm_rework khi ke hoach chua chot thi bi chan (khong day agent di code som)', async () => {
   const dir = gitRepo({});
   const created = await call('pm_task_create', { project: dir, title: 'T', brief: 'b', definitionOfDone: ['d'] });
   const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
   await assert.rejects(
     () => call('pm_rework', { project: dir, taskId, findings: ['ke hoach so sai'] }),
-    /Ke hoach chua duoc duyet/,
+    /Ke hoach chua duoc chot/,
   );
   // Va task van nam o giai doan PLAN, khong bi nhay sang IMPLEMENT.
   const task = loadTask(loadConfig(dir), taskId);
@@ -193,14 +205,14 @@ test('pm_rework khi ke hoach chua duyet thi bi chan (khong day agent di code som
   cleanup(dir);
 });
 
-test('bac plan (verdict fail) khong lam tang vong va khong doi giai doan', async () => {
+test('PM tu bac ke hoach cua minh: khong tang vong, khong doi giai doan, khong day agent di code', async () => {
   const dir = gitRepo({});
   const created = await call('pm_task_create', { project: dir, title: 'T', brief: 'b', definitionOfDone: ['d'] });
   const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
   const out = await call('pm_verdict', {
     project: dir, taskId, kind: 'plan', verdict: 'fail', findings: ['thieu buoc kiem chung'],
   });
-  assert.ok(out.text.includes('DUNG pm_rework'), out.text);
+  assert.ok(out.text.includes('pm_plan'), out.text);
   const task = loadTask(loadConfig(dir), taskId);
   assert.equal(task.phase, 'PLAN');
   assert.equal(task.round, 0);

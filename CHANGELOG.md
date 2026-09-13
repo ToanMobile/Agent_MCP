@@ -9,6 +9,29 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Cổng "thay đổi phải kèm file test" đo theo COMMIT GỐC của task, không chỉ `git status`**
+  (13/09/2026). `createTask` ghi `baseCommit = HEAD` lúc giao việc; file thay đổi = cây làm việc ∪
+  `git diff --name-only baseCommit..HEAD`; task cũ chưa có `baseCommit` thì lấy commit cuối trước
+  `createdAt`. `pm_diff` in thêm phần đã commit kể từ commit gốc. Lý do đo được: T0008 (Geely EX2)
+  code + test đã vào commit cùng bản phát hành trước khi `pm_accept` ⇒ cây sạch ⇒ cổng báo
+  "0 file thay đổi" dù test có thật. Test: `tests/base-commit.test.js`.
+- **Đổi vai: PM lập kế hoạch, Antigravity phản biện rồi thực thi** (chủ dự án chốt 12/09/2026).
+  Lý do: phạm vi công việc không nên để model yếu hơn quyết định — đo được trong một vòng thật, kế hoạch
+  do agent viết trung thực nhưng chỉ phủ 3/7 cổng QA của project và đo bằng kết quả Gradle `UP-TO-DATE`.
+  - Tool mới `pm_plan`: PM ghi `plan.md` (`content` hoặc `file`). Ghi lại kế hoạch ⇒ **huỷ** `plan-review.json`
+    và kết luận plan cũ.
+  - `pm_dispatch kind=plan` **bỏ**, thay bằng `kind=plan_review`: mở hội thoại riêng chỉ đọc, mang toàn văn
+    kế hoạch, yêu cầu agent **bác bỏ** và cho phép nói "không tìm ra chỗ sai", ghi `plan-review.json`.
+  - `pm_verdict kind=plan verdict=pass` **bị chặn** khi chưa có `plan-review.json` mới hơn `plan.md`:
+    không ai tự duyệt kế hoạch của chính mình khi chưa nghe phản biện.
+  - `pm_dispatch kind=implement` nay **tự mở hội thoại làm việc** nếu chưa có, và tin nhắn mang toàn văn
+    kế hoạch của PM (agent chưa từng thấy nó).
+  - Bỏ `buildPlanPrompt` và `buildPlanReworkMessage` — agent không còn viết hay viết lại kế hoạch.
+  - Luật "liệt kê nơi đang dùng trước khi đổi API chung" chuyển từ prompt lập kế hoạch sang ràng buộc
+    lúc thực thi. 10 test mới cho luồng này.
+
 ### Added
 
 - **Sáu luật lấy từ `AGENTS.md` của project thật nay nằm thẳng trong hợp đồng prompt** (`src/prompt.js`),

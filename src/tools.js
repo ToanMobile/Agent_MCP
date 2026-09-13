@@ -4,15 +4,14 @@ import path from 'node:path';
 import { loadConfig, existingRulesFiles, CONFIG_NAME } from './config.js';
 import {
   createTask, loadTask, listTasks, save, setPhase, recordVerdict, recordRun, recordProof,
-  recordDispatch, markRework, accept, gate, freshness, contractPaths, addHistory, PHASES,
-} from './tasks.js';
+  recordDispatch, markRework, accept, gate, freshness, contractPaths, addHistory, PHASES, hopNhatFileThayDoi } from './tasks.js';
 import {
   newConversation, sendMessage, getConversationMetadata, conversationProgress, MODELS,
 } from './agentapi.js';
 import { discover, agentapiPath } from './discover.js';
 import { requireProjectId, resolveProject } from './projects.js';
 import {
-  buildPlanPrompt, buildImplementMessage, buildReworkMessage, buildPlanReworkMessage, buildAuditPrompt,
+  buildPlanCritiquePrompt, buildImplementMessage, buildReworkMessage, buildAuditPrompt,
   buildProofRequestMessage,
 } from './prompt.js';
 import { captureProof, describeProviders } from './proof.js';
@@ -68,22 +67,38 @@ function withTask(args) {
 }
 
 /**
- * Danh sach file dang thay doi trong cay lam viec (da track + chua track).
+ * Danh sach file thay doi cua TASK: cay lam viec (da track + chua track) HOP voi moi file trong
+ * cac commit ke tu commit goc cua task (task.baseCommit; task cu chua co thi lay commit cuoi
+ * TRUOC luc tao task theo createdAt). Khong co task => chi cay lam viec nhu cu.
  * Tra ve undefined khi khong doc duoc git => cong chan se bao CHUA XAC MINH thay vi coi la dat.
  */
-async function changedFilesOf(cfg) {
+async function changedFilesOf(cfg, task) {
   const r = await runShell('git status --porcelain=v1', { cwd: cfg.projectRoot, timeoutMs: 60000 });
   if (r.code !== 0) return undefined;
-  return r.stdout.split('\n')
+  const wt = r.stdout.split('\n')
     .map((l) => l.slice(3).trim())
     .filter(Boolean)
     .map((l) => (l.includes(' -> ') ? l.split(' -> ')[1] : l))
     .map((l) => l.replace(/^"|"$/g, ''));
+  const base = await baseCommitOf(cfg, task);
+  if (!base) return hopNhatFileThayDoi(wt, []);
+  const d = await runShell(`git --no-pager diff --name-only ${base}..HEAD`, { cwd: cfg.projectRoot, timeoutMs: 60000 });
+  const committed = d.code === 0 ? d.stdout.split('\n').map((l) => l.trim()).filter(Boolean) : [];
+  return hopNhatFileThayDoi(wt, committed);
+}
+
+/** Commit goc cua task: task.baseCommit, hoac (task cu) commit cuoi cung truoc createdAt. */
+async function baseCommitOf(cfg, task) {
+  if (!task) return null;
+  if (task.baseCommit) return task.baseCommit;
+  if (!task.createdAt) return null;
+  const r = await runShell(`git rev-list -1 --before="${task.createdAt}" HEAD`, { cwd: cfg.projectRoot, timeoutMs: 60000 });
+  return r.code === 0 ? (r.stdout.trim() || null) : null;
 }
 
 /** Cong chan kem bang chung do duoc tu git ngay luc goi. */
 async function gateNow(cfg, task) {
-  return gate(cfg, task, { changedFiles: await changedFilesOf(cfg) });
+  return gate(cfg, task, { changedFiles: await changedFilesOf(cfg, task) });
 }
 
 function gateLines(g) {
@@ -233,8 +248,58 @@ export const TOOLS = [
         `Ho so: ${p.dir}`,
         `Trang thai: ${task.phase} / ${task.state}`,
         '',
-        'Buoc tiep: pm_dispatch kind=plan de Antigravity lap ke hoach (chua duoc sua code).',
+        'Buoc tiep: PM tu viet ke hoach roi ghi bang pm_plan. Antigravity chi phan bien va thuc thi, khong lap ke hoach.',
       ].join('\n');
+    },
+  },
+
+  {
+    name: 'pm_plan',
+    description: 'PM ghi ke hoach cua chinh minh vao plan.md. Antigravity KHONG lap ke hoach. '
+      + 'Ghi lai plan thi ban phan bien cu va ket luan plan cu bi huy.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...PROJECT_PROP,
+        ...TASK_PROP,
+        content: { type: 'string', description: 'Noi dung plan.md (markdown)' },
+        file: { type: 'string', description: 'Hoac duong dan file PM da soan san' },
+        notes: { type: 'string', description: 'Ghi chu cho lich su task' },
+      },
+      required: ['taskId'],
+    },
+    async handler(args) {
+      const { cfg, task } = withTask(args);
+      validate(this.inputSchema, args);
+      if (!args.content && !args.file) fail('pm_plan can "content" (noi dung plan) hoac "file" (duong dan file da soan).');
+      if (args.content && args.file) fail('pm_plan chi nhan MOT trong hai: "content" hoac "file".');
+      let body = args.content;
+      if (args.file) {
+        const src = path.resolve(cfg.projectRoot, args.file);
+        if (!fs.existsSync(src)) fail(`Khong thay file ke hoach: ${src}`);
+        body = fs.readFileSync(src, 'utf8');
+      }
+      if (!String(body).trim()) fail('Ke hoach rong — khong ghi.');
+
+      const p = contractPaths(cfg, task);
+      const critique = path.join(p.dir, 'plan-review.json');
+      const lai = fs.existsSync(p.plan);
+      writeFileAtomic(p.plan, String(body).endsWith('\n') ? String(body) : `${body}\n`);
+      // Plan doi => moi thu gan voi plan cu het hieu luc.
+      if (fs.existsSync(critique)) fs.rmSync(critique);
+      if (task.verdicts?.plan) delete task.verdicts.plan;
+      task.planAuthor = 'pm';
+      task.planWrittenAt = nowIso();
+      task.state = 'plan_written';
+      addHistory(task, 'pm', lai ? 'plan_rewritten' : 'plan_written', args.notes || '');
+      save(cfg, task);
+
+      return [
+        `${lai ? 'Da ghi de' : 'Da ghi'} ke hoach cua PM: ${p.plan}`,
+        lai ? 'Ban phan bien cu va ket luan plan cu da bi huy (ke hoach da doi).' : '',
+        'Buoc tiep: pm_dispatch kind=plan_review de Antigravity phan bien ke hoach (chi doc, cam sua code).',
+        'Nghe phan bien xong moi duoc pm_verdict kind=plan verdict=pass.',
+      ].filter(Boolean).join('\n');
     },
   },
 
@@ -300,7 +365,7 @@ export const TOOLS = [
       properties: {
         ...PROJECT_PROP,
         ...TASK_PROP,
-        kind: { type: 'string', enum: ['plan', 'implement', 'audit', 'proof', 'custom'] },
+        kind: { type: 'string', enum: ['plan_review', 'implement', 'audit', 'proof', 'custom'] },
         notes: { type: 'string', description: 'Ghi chu PM (implement)' },
         message: { type: 'string', description: 'custom: noi dung · proof: can chung minh gi · audit: trong tam' },
         model: { type: 'string', enum: MODELS },
@@ -309,25 +374,29 @@ export const TOOLS = [
       required: ['taskId', 'kind'],
     },
     async handler(args) {
+      if (args?.kind === 'plan') {
+        fail('Antigravity khong con lap ke hoach nua. PM tu viet ke hoach roi ghi bang pm_plan, '
+          + 'sau do pm_dispatch kind=plan_review de Antigravity phan bien.');
+      }
       const { cfg, task } = withTask(args);
       validate(this.inputSchema, args);
       const kind = args.kind;
       const L = [];
 
-      if (kind === 'plan') {
-        if (task.conversationId && !args.force) {
-          fail(`Task nay da co hoi thoai ${task.conversationId}. Dung pm_dispatch kind=implement/custom, hoac force=true de mo hoi thoai moi.`);
+      if (kind === 'plan_review') {
+        if (!freshness(cfg, task).planExists) {
+          fail('Chua co plan.md. PM phai viet ke hoach truoc bang pm_plan, roi moi giao phan bien.');
         }
-        const prompt = buildPlanPrompt(cfg, task);
-        const promptFile = saveOutgoing(cfg, task, `prompt-plan-r${task.round}`, prompt);
+        const prompt = buildPlanCritiquePrompt(cfg, task);
+        const promptFile = saveOutgoing(cfg, task, `prompt-plan-review-r${task.round}`, prompt);
         const pid = requireProjectId(cfg);
         const { conversationId } = await newConversation({
-          prompt, projectId: pid.id, model: args.model || task.model, title: `[PM] ${task.id} · PLAN · ${task.title}`,
+          prompt, projectId: pid.id, model: args.model || task.model, title: `[PM] ${task.id} · PHAN BIEN KE HOACH · ${task.title}`,
         });
-        task.conversationId = conversationId;
+        task.planReviewConversationId = conversationId;
         task.state = 'awaiting_agent';
-        recordDispatch(cfg, task, { kind: 'plan', conversationId, model: args.model || task.model, promptFile });
-        L.push(`Da giao PLAN cho Antigravity. conversationId=${conversationId}`);
+        recordDispatch(cfg, task, { kind: 'plan_review', conversationId, model: args.model || task.model, promptFile });
+        L.push(`Da giao PHAN BIEN KE HOACH cho Antigravity. conversationId=${conversationId}`);
         const check = await ensureWorkspaceMatches(cfg, conversationId);
         if (!check.ok) {
           const msg = `Hoi thoai duoc mo trong workspace "${check.got || '(khong ro)'}" chu KHONG phai "${check.want}".`;
@@ -335,33 +404,54 @@ export const TOOLS = [
             task.state = 'blocked';
             addHistory(task, 'system', 'workspace_mismatch', msg);
             save(cfg, task);
-            fail(`${msg}\nAntigravity mo hoi thoai trong project dang mo tren IDE. Hay mo "${check.want}" trong Antigravity roi chay lai pm_dispatch kind=plan force=true.\n(Hoi thoai vua tao: ${conversationId} — nen bo/dong trong IDE.)`);
+            fail(`${msg}\nAntigravity mo hoi thoai trong project dang mo tren IDE. Hay mo "${check.want}" trong Antigravity roi chay lai pm_dispatch kind=plan_review.\n(Hoi thoai vua tao: ${conversationId} — nen bo/dong trong IDE.)`);
           }
           L.push(`CANH BAO: ${msg}`);
         } else {
           L.push(`Workspace khop: ${check.got}${check.md.branch ? ` (nhanh ${check.md.branch})` : ''}`);
         }
         L.push(`Prompt da luu: ${promptFile}`);
-        L.push('Buoc tiep: doi vai phut roi pm_status. Khi co plan.md thi PM DOC PLAN, sau do pm_verdict kind=plan.');
+        L.push(`Ket qua se nam o: ${path.join(contractPaths(cfg, task).dir, 'plan-review.json')}`);
+        L.push('Buoc tiep: doi vai phut roi pm_status. Doc plan-review.json roi hoac sua ke hoach (pm_plan) hoac chot (pm_verdict kind=plan verdict=pass).');
         return L.join('\n');
       }
 
-      if (!task.conversationId && kind !== 'audit') fail('Task chua co hoi thoai. Chay pm_dispatch kind=plan truoc.');
+      if (!task.conversationId && !['audit', 'implement'].includes(kind)) {
+        fail('Task chua co hoi thoai lam viec. Chay pm_dispatch kind=implement truoc (buoc do se mo hoi thoai).');
+      }
 
       if (kind === 'implement') {
-        if (task.verdicts?.plan?.verdict !== 'pass' && !args.force) {
-          fail('Chua duyet plan. PM phai doc plan.md roi pm_verdict kind=plan verdict=pass (hoac force=true).');
-        }
         const fresh = freshness(cfg, task);
-        if (!fresh.planExists && !args.force) fail('Chua thay plan.md — agent chua lap ke hoach xong.');
+        if (!fresh.planExists && !args.force) fail('Chua co plan.md. PM viet ke hoach truoc bang pm_plan.');
+        if (task.verdicts?.plan?.verdict !== 'pass' && !args.force) {
+          fail('Ke hoach chua duoc chot. Nghe phan bien (pm_dispatch kind=plan_review) roi pm_verdict kind=plan verdict=pass (hoac force=true).');
+        }
         const msg = buildImplementMessage(cfg, task, args.notes || '');
         const promptFile = saveOutgoing(cfg, task, `prompt-implement-r${task.round}`, msg);
-        await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
-        setPhase(cfg, task, 'IMPLEMENT', 'pm', 'plan da duyet');
+        const moiMo = !task.conversationId;
+        if (moiMo) {
+          // Ke hoach do PM viet nen khong con hoi thoai lap ke hoach de nhan tin — mo hoi thoai lam viec o day.
+          const pidI = requireProjectId(cfg);
+          const { conversationId } = await newConversation({
+            prompt: msg, projectId: pidI.id, model: args.model || task.model, title: `[PM] ${task.id} · TRIEN KHAI · ${task.title}`,
+          });
+          task.conversationId = conversationId;
+          const checkI = await ensureWorkspaceMatches(cfg, conversationId);
+          if (!checkI.ok && cfg.antigravity.workspaceCheck === 'strict') {
+            task.state = 'blocked';
+            addHistory(task, 'system', 'workspace_mismatch', `${checkI.got || '(khong ro)'} != ${checkI.want}`);
+            save(cfg, task);
+            fail(`Hoi thoai mo trong workspace "${checkI.got || '(khong ro)'}" chu khong phai "${checkI.want}". `
+              + `Mo dung project trong Antigravity roi chay lai.\n(Hoi thoai vua tao: ${conversationId} — nen bo/dong trong IDE.)`);
+          }
+        } else {
+          await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
+        }
+        setPhase(cfg, task, 'IMPLEMENT', 'pm', 'plan da chot');
         task.state = 'awaiting_agent';
-        recordDispatch(cfg, task, { kind: 'implement', promptFile });
+        recordDispatch(cfg, task, { kind: 'implement', conversationId: task.conversationId, promptFile });
         return [
-          `Da duyet plan va yeu cau trien khai (${task.id}).`,
+          `Da giao TRIEN KHAI (${task.id})${moiMo ? ` — mo hoi thoai moi ${task.conversationId}` : ''}.`,
           `Noi dung da gui: ${promptFile}`,
           'Do tren may that 12/09/2026: send-message danh thuc duoc hoi thoai da im 11 phut (dong tinh sau ~1,6 giay).',
           'Neu 5-10 phut khong thay dong tinh thi moi la bat thuong — xem pm_status.',
@@ -440,13 +530,25 @@ export const TOOLS = [
     async handler(args) {
       const { cfg, task } = withTask(args);
       validate(this.inputSchema, args);
+      if (args.kind === 'plan' && args.verdict === 'pass') {
+        const pp = contractPaths(cfg, task);
+        if (!fs.existsSync(pp.plan)) fail('Chua co plan.md — PM viet ke hoach bang pm_plan truoc.');
+        const critique = path.join(pp.dir, 'plan-review.json');
+        if (!fs.existsSync(critique)) {
+          fail('Chua nghe phan bien nen chua duoc chot ke hoach cua chinh minh. '
+            + 'Chay pm_dispatch kind=plan_review, doc plan-review.json, roi chot lai.');
+        }
+        if (fs.statSync(critique).mtimeMs < fs.statSync(pp.plan).mtimeMs) {
+          fail('Ban phan bien cu hon plan.md — no phan bien mot ke hoach khac. Chay lai pm_dispatch kind=plan_review.');
+        }
+      }
       recordVerdict(cfg, task, {
         kind: args.kind, verdict: args.verdict, findings: args.findings || [], notes: args.notes || '',
       });
       const L = [`Da ghi ket luan ${args.kind} = ${args.verdict} cho ${task.id} (vong ${task.round}).`];
       if (args.verdict === 'pass') {
         const next = { plan: 'IMPLEMENT', audit: 'REVIEW', review: 'TEST' }[args.kind];
-        if (args.kind === 'plan') L.push('Buoc tiep: pm_dispatch kind=implement.');
+        if (args.kind === 'plan') L.push('Buoc tiep: pm_dispatch kind=implement (buoc nay se mo hoi thoai lam viec neu chua co).');
         else {
           setPhase(cfg, task, next, 'pm', `${args.kind} dat`);
           L.push(`Giai doan -> ${next}.`);
@@ -454,17 +556,9 @@ export const TOOLS = [
           if (next === 'REVIEW') L.push('Buoc tiep: doc pm_diff roi pm_verdict kind=review.');
         }
       } else if (args.kind === 'plan') {
-        // Bac ke hoach KHONG phai tra viec code: agent van chua duoc sua file nao.
-        if (task.conversationId) {
-          const msg = buildPlanReworkMessage(cfg, task, { findings: args.findings || [], notes: args.notes || '' });
-          const promptFile = saveOutgoing(cfg, task, `prompt-plan-rework-${Date.now()}`, msg);
-          await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
-          recordDispatch(cfg, task, { kind: 'plan_rework', promptFile });
-          L.push(`Da yeu cau agent viet lai ke hoach (van cam sua code). Noi dung: ${promptFile}`);
-        } else {
-          L.push('Task chua co hoi thoai — chua gui duoc yeu cau viet lai ke hoach.');
-        }
-        L.push('Buoc tiep: doi plan.md moi roi pm_verdict kind=plan lai. DUNG pm_rework o giai doan nay.');
+        // Ke hoach la cua PM: PM tu sua, khong day viec nay sang agent.
+        L.push('Ke hoach nay do chinh PM viet — tu sua roi ghi lai bang pm_plan (ghi lai se huy ban phan bien cu).');
+        L.push('Buoc tiep: pm_plan -> pm_dispatch kind=plan_review -> pm_verdict kind=plan verdict=pass.');
       } else {
         L.push('Buoc tiep: pm_rework de tra viec cho agent (kem findings).');
       }
@@ -559,6 +653,15 @@ export const TOOLS = [
         L.push('(chua doc patch — goi lai voi mode="patch" va pathspec cua file can review)');
       }
       if (args?.taskId) {
+        const tk0 = loadTask(cfg, args.taskId);
+        const base0 = tk0 ? await baseCommitOf(cfg, tk0) : null;
+        if (base0) {
+          const cm = await runShell(`git --no-pager diff --stat ${base0}..HEAD${ps}`, { cwd: cfg.projectRoot, timeoutMs: 120000 });
+          L.push(`--- da commit ke tu commit goc cua task (${base0.slice(0, 8)}..HEAD) ---`);
+          L.push(truncate(cm.stdout || '(chua co commit nao sau commit goc)', 6000));
+        }
+      }
+      if (args?.taskId) {
         const task = loadTask(cfg, args.taskId);
         const fresh = freshness(cfg, task);
         if (fresh.result?.files_changed?.length) {
@@ -638,8 +741,8 @@ export const TOOLS = [
       if (findings.length === 0) fail('findings rong — tra viec phai noi ro sai cho nao.');
       // pm_rework la tra viec CODE. Ke hoach chua duyet ma goi no la day agent di code som.
       if (task.phase === 'PLAN' || task.verdicts?.plan?.verdict !== 'pass') {
-        fail('Ke hoach chua duoc duyet nen chua co gi de tra viec. Dung pm_verdict kind=plan verdict=fail '
-          + '(kem findings) — no tu gui yeu cau viet lai ke hoach va van cam agent sua code.');
+        fail('Ke hoach chua duoc chot nen chua co gi de tra viec. Sua ke hoach bang pm_plan, '
+          + 'cho phan bien (pm_dispatch kind=plan_review), roi chot bang pm_verdict kind=plan verdict=pass.');
       }
       const failedRuns = (task.runs || []).filter((r) => r.round === task.round && r.exitCode !== 0);
       markRework(cfg, task, `${findings.length} phat hien: ${findings[0]}`);
@@ -681,7 +784,7 @@ export const TOOLS = [
           isError: true,
         };
       }
-      accept(cfg, task, { changedFiles: await changedFilesOf(cfg) });
+      accept(cfg, task, { changedFiles: await changedFilesOf(cfg, task) });
       const rep = renderReport(cfg, task, { summary: args.summary || '' });
       const proofs = (task.proofs || []).filter((p) => p.round === task.round);
       return [

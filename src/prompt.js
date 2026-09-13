@@ -4,6 +4,7 @@
 // dung thu muc task. Nho hop dong nay ma PM khong can giai ma protobuf trong CSDL
 // hoi thoai cua Antigravity — chi can doc file.
 import path from 'node:path';
+import fs from 'node:fs';
 import { existingRulesFiles } from './config.js';
 import { contractPaths } from './tasks.js';
 import { mustHaveLines } from './policy.js';
@@ -31,6 +32,30 @@ function noFabricationBlock() {
   ].join('\n');
 }
 
+const PLAN_MAX = 24000;
+
+/** Toan van plan.md do PM viet — agent chua tung thay no, phai nhet vao prompt. */
+function planText(cfg, task) {
+  const f = contractPaths(cfg, task).plan;
+  if (!fs.existsSync(f)) return '';
+  const t = fs.readFileSync(f, 'utf8');
+  return t.length <= PLAN_MAX ? t : `${t.slice(0, PLAN_MAX)}\n… [plan dai, cat bot — doc ban day du tai ${f}]`;
+}
+
+function planBlock(cfg, task) {
+  const t = planText(cfg, task);
+  if (!t) return '';
+  return [
+    '## KE HOACH CUA PM — lam dung theo day, khong tu doi huong',
+    `(ban day du: ${contractPaths(cfg, task).plan})`,
+    '',
+    t,
+    '',
+    '- Thay ke hoach sai fact so voi code that: GHI RA trong result.json -> "notes" kem file:dong roi bao PM, DUNG im lang lam theo va cung dung tu doi huong.',
+    '',
+  ].join('\n');
+}
+
 function dodBlock(task, cfg) {
   const must = cfg ? mustHaveLines(cfg) : [];
   return [
@@ -51,6 +76,9 @@ function guardrails(cfg) {
   if (cfg.commitPolicy === 'forbid') {
     lines.push('- TUYET DOI KHONG chay `git commit`, `git push`, `git reset --hard`, `git checkout -- .` hay bat ky lenh lam mat thay doi dang co trong cay lam viec. PM se tu commit.');
   }
+  lines.push('- Truoc khi doi signature cua ham/lop, thanh vien cua lop cha / interface, API cong khai hay object dung chung: '
+    + 'liet ke HET noi dang dung no (grep ca thu muc test — src/test, tests/ hay bi bo sot) va ghi vao result.json -> "notes". '
+    + 'Khong liet ke duoc thi dung sua, bao PM.');
   lines.push('- Test dang do SAU KHI ban sua: mac dinh coi la BAN vua lam hong. CAM sua test / assertion / mock cho no xanh tro lai. '
     + 'Chi duoc doi test khi chung minh duoc ky vong cu la sai (dan spec, bug report, hoac yeu cau cua PM) — va phai ghi ly do vao result.json.');
   lines.push('- Sua di sua lai CUNG MOT FILE den lan thu 3 ma khong co bang chung moi xen giua: DUNG LAI. Do la dau hieu dang doan chu chua nam co che gay loi. '
@@ -102,36 +130,48 @@ function resultContract(paths, phase, cfg) {
   ].join('\n');
 }
 
-/** Prompt mo hoi thoai: giai doan LAP KE HOACH, chua duoc sua code. */
-export function buildPlanPrompt(cfg, task) {
+/**
+ * Prompt mo hoi thoai PHAN BIEN KE HOACH: agent doc plan cua PM va tim cho sai.
+ * Chua duoc sua bat ky file nao o giai doan nay.
+ */
+export function buildPlanCritiquePrompt(cfg, task) {
   const paths = contractPaths(cfg, task);
   return [
-    `# Task ${task.id}: ${task.title}`,
+    `# Phan bien KE HOACH cua PM — task ${task.id}: ${task.title}`,
     '',
-    'Ban la Senior Engineer trong doi. Toi la Leader/PM (chay tren Claude Code) va se AUDIT + CODE REVIEW + nghiem thu ket qua cua ban.',
+    'Ban la Senior Engineer trong doi. Ke hoach duoi day do PM (Leader) viet. PM KHONG ngoi trong repo nay',
+    'bang ban, nen ke hoach co the sai fact. Viec cua ban bay gio la TIM CHO SAI, khong phai gat dau.',
     `Project: ${cfg.projectRoot}`,
-    `Thu muc task (moi file bao cao ghi vao day): ${paths.dir}`,
+    `Ho so task: ${paths.dir}`,
     '',
-    '## Yeu cau',
+    '## Yeu cau goc',
     task.brief,
     '',
+    planBlock(cfg, task),
     dodBlock(task, cfg),
     rulesBlock(cfg),
-    '## GIAI DOAN 1 — CHI LAP KE HOACH, CHUA SUA CODE',
-    `1. Doc cac file luat o tren + doc code lien quan trong ${cfg.projectRoot}.`,
-    `2. Viet ke hoach vao: ${paths.plan}`,
-    '   Ke hoach phai co: hien trang (dan chung file:dong that), cach sua theo tung buoc,',
-    '   danh sach file se sua, rui ro/hoi quy, va cach CHUNG MINH la dung (test nao, anh nao).',
-    '3. Neu ke hoach cham vao signature cua ham/lop, thanh vien cua lop cha / interface, API cong khai hay object dung chung:',
-    '   liet ke HET noi dang dung no vao plan.md TRUOC khi de xuat cach sua (grep ca thu muc test — src/test, tests/ hay bi bo sot).',
-    '   Khong liet ke duoc thi ghi ro la chua liet ke duoc, dung im lang sua.',
-    '4. TUYET DOI KHONG sua bat ky file source nao trong giai doan nay.',
-    `5. Ghi ${paths.result} theo hop dong ben duoi roi DUNG LAI cho PM duyet.`,
+    '## Viec can lam',
+    '1. Doc THAT SU code lien quan trong project, doi chieu voi tung buoc trong ke hoach.',
+    '2. Nhiem vu cua ban la BAC BO: file/ham ke hoach nhac den co ton tai khong, signature co dung khong,',
+    '   buoc nao khong lam duoc, buoc nao thieu, cho nao se lam vo phan dang chay dung, test de xuat co bat duoc loi khong.',
+    '3. Khong tim ra cho sai nao thi noi thang la khong tim ra — dung bia loi cho co, va cung dung khen.',
+    '4. TUYET DOI KHONG sua bat ky file source nao o giai doan nay.',
     '',
     noFabricationBlock(),
-    guardrails(cfg),
-    resultContract(paths, 'PLAN', cfg),
-    'Bat dau lam ngay, khong hoi lai — neu co diem can chot thi ghi vao "open_questions".',
+    '## HOP DONG BAO CAO',
+    `Ghi ${path.join(paths.dir, 'plan-review.json')}:`,
+    '```json',
+    `{
+  "phase": "PLAN_REVIEW",
+  "verdict": "ok" | "co_van_de",
+  "findings": [
+    { "severity": "blocker|major|minor", "buoc": "<buoc nao trong ke hoach>", "file": "<file:dong>", "problem": "<ke hoach sai cho nao>", "why": "<hong the nao neu lam theo>", "fix": "<nen sua ke hoach ra sao>" }
+  ],
+  "facts_checked": [ { "claim": "<dieu ke hoach khang dinh>", "ket qua": "dung|sai|khong kiem duoc", "evidence": "<file:dong hoac lenh da chay>" } ],
+  "notes": ""
+}`,
+    '```',
+    '- Ghi xong file thi DUNG LAI. PM se doc roi quyet dinh sua ke hoach hay giao trien khai.',
   ].filter(Boolean).join('\n');
 }
 
@@ -144,8 +184,9 @@ export function buildImplementMessage(cfg, task, pmNotes = '') {
   return [
     `# ${task.id} — PM DA DUYET KE HOACH. Sang GIAI DOAN 2: TRIEN KHAI.`,
     pmNotes ? `\n## Ghi chu cua PM (bat buoc tuan thu)\n${pmNotes}\n` : '',
+    planBlock(cfg, task),
     '## Viec can lam',
-    '- Trien khai dung theo plan.md da duyet.',
+    '- Trien khai dung theo ke hoach cua PM o tren.',
     testLine,
     `- Neu thay doi co the nhin thay (UI, man hinh, log chay that): luu anh chung minh vao ${paths.proofDir}/ va liet ke trong result.json -> "screenshots".`,
     `- Cap nhat ${paths.result} voi phase = "IMPLEMENT" theo dung schema da gui.`,
@@ -180,30 +221,6 @@ export function buildReworkMessage(cfg, task, { findings = [], notes = '', faile
     '- Sua dung nhung diem tren, KHONG mo rong pham vi.',
     '- Neu ban cho rang mot phat hien la SAI: ghi phan bien vao result.json -> "notes" kem dan chung file:dong, dung im lang bo qua.',
     `- Ghi lai ${paths.result} (phase = "IMPLEMENT") sau khi sua xong.`,
-    '',
-    noFabricationBlock(),
-    guardrails(cfg),
-  ].filter(Boolean).join('\n');
-}
-
-/**
- * Tin nhan bac KE HOACH. Khac han buildReworkMessage: o day agent van CHUA duoc sua code,
- * chi viet lai plan.md. Dung nham hai cai nay la day agent di code khi ke hoach chua duyet.
- */
-export function buildPlanReworkMessage(cfg, task, { findings = [], notes = '' }) {
-  const paths = contractPaths(cfg, task);
-  return [
-    `# ${task.id} — PM CHUA DUYET KE HOACH. Viet lai plan.md.`,
-    '',
-    '## PM khong dong y cho nao',
-    ...(findings.length ? findings.map((f, i) => `${i + 1}. ${f}`) : ['(xem ghi chu)']),
-    '',
-    notes ? `## Ghi chu\n${notes}\n` : '',
-    '## Yeu cau',
-    `- Viet lai ${paths.plan} cho dung, KHONG mo rong pham vi.`,
-    '- VAN DANG O GIAI DOAN LAP KE HOACH: **KHONG duoc sua bat ky file source nao**.',
-    '- Neu ban cho rang mot y kien cua PM la sai: ghi phan bien kem dan chung file:dong vao plan.md, dung im lang lam theo.',
-    `- Ghi lai ${paths.result} voi phase = "PLAN" roi DUNG LAI cho PM duyet.`,
     '',
     noFabricationBlock(),
     guardrails(cfg),

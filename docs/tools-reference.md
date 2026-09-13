@@ -28,6 +28,19 @@ Tạo `<project>/.antigravity-pm/tasks/T####-<slug>/` với `task.json` + `brief
 
 `definitionOfDone` rỗng ⇒ **bị chặn ngay**: không có định nghĩa hoàn thành thì không thể nghiệm thu.
 
+## pm_plan
+
+| Tham số | Bắt buộc | Việc |
+| --- | --- | --- |
+| `taskId` | **có** | Task cần ghi kế hoạch |
+| `content` | một trong hai | Nội dung `plan.md` (markdown) |
+| `file` | một trong hai | Hoặc đường dẫn file PM đã soạn sẵn |
+| `notes` | không | Ghi chú vào lịch sử task |
+
+**Kế hoạch là của PM, không phải của Antigravity.** Tool ghi `plan.md` vào hồ sơ task, đánh dấu `planAuthor: "pm"`.
+
+Ghi lại kế hoạch (gọi `pm_plan` lần nữa) sẽ **xoá `plan-review.json` và xoá kết luận plan cũ** — bản phản biện cũ nói về một kế hoạch khác nên không còn giá trị. Thiếu cả `content` lẫn `file`, hoặc nội dung rỗng ⇒ bị chặn, không để lại `plan.md` rỗng.
+
 ## pm_status
 
 | Tham số | Bắt buộc | Việc |
@@ -41,14 +54,14 @@ Có `taskId` thì in: giai đoạn, vòng làm, id hội thoại, **thời đi�
 | Tham số | Bắt buộc | Việc |
 | --- | --- | --- |
 | `taskId` | **có** | |
-| `kind` | **có** | `plan` \| `implement` \| `audit` \| `proof` \| `custom` |
+| `kind` | **có** | `plan_review` \| `implement` \| `audit` \| `proof` \| `custom` |
 | `notes` | không | Ghi chú PM kèm khi `kind=implement` |
 | `message` | không | Nội dung (`custom`), cần chứng minh gì (`proof`), trọng tâm audit (`audit`) |
 | `model` | không | Ghi đè model |
 | `force` | không | Bỏ qua kiểm tra giai đoạn |
 
-- `plan` — **mở hội thoại mới** bằng project id lấy từ sổ đăng ký `~/.gemini/config/projects/` (hoặc `antigravity.projectId`). Prompt: yêu cầu + DoD + đường dẫn tuyệt đối file luật + **cấm sửa code** + hợp đồng ghi `plan.md`/`result.json`. Sau khi tạo, kiểm lại workspace thật: lệch ⇒ thất bại (khi `workspaceCheck: "strict"`) và đánh dấu task `blocked`.
-- `implement` — đòi `verdict.plan = pass` và `plan.md` tồn tại (trừ khi `force`). Gửi tin nhắn duyệt plan + lệnh triển khai, chuyển giai đoạn sang `IMPLEMENT`.
+- `plan_review` — **mở hội thoại phản biện riêng** (chỉ đọc) bằng project id lấy từ sổ đăng ký `~/.gemini/config/projects/` (hoặc `antigravity.projectId`). Đòi `plan.md` do PM viết đã tồn tại. Prompt: yêu cầu + **toàn văn kế hoạch của PM** + DoD + đường dẫn tuyệt đối file luật + **cấm sửa code** + hợp đồng ghi `plan-review.json`. Sau khi tạo, kiểm lại workspace thật: lệch ⇒ thất bại (khi `workspaceCheck: "strict"`) và đánh dấu task `blocked`. `kind: "plan"` cũ đã bỏ — gọi vào sẽ báo lỗi chỉ sang `pm_plan`.
+- `implement` — đòi `plan.md` tồn tại **và** `verdict.plan = pass` (trừ khi `force`). Chưa có hội thoại làm việc thì bước này **mở hội thoại mới** (kèm kiểm workspace); đã có thì gửi tin nhắn. Tin nhắn mang toàn văn kế hoạch, chuyển giai đoạn sang `IMPLEMENT`.
 - `audit` — mở **hội thoại thứ hai**, chỉ đọc, cấm sửa file, ghi `audit-agent.json`.
 - `proof` — yêu cầu agent tự chụp ảnh vào `proof/`.
 - `custom` — gửi nội dung tự do.

@@ -39,7 +39,7 @@ test('task moi thi cong chan chan het, va liet ke du thu con thieu', () => {
   const g = gate(cfg, task, CO_FILE_TEST);
   assert.equal(g.ok, false);
   const joined = g.missing.join('\n');
-  for (const phrase of ['plan.md', 'duyet plan', 'result.json', 'AUDIT', 'CODE REVIEW', 'test', 'anh nghiem thu']) {
+  for (const phrase of ['plan.md', 'chot ke hoach', 'result.json', 'AUDIT', 'CODE REVIEW', 'test', 'anh nghiem thu']) {
     assert.ok(joined.includes(phrase), `thieu canh bao ve "${phrase}" trong:\n${joined}`);
   }
   assert.throws(() => accept(cfg, task, CO_FILE_TEST), /CHUA DU BANG CHUNG/);

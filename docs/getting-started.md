@@ -66,7 +66,8 @@ pm_task_create {
   ]
 }
 
-pm_dispatch { taskId: "T0001-them-xac-nhan-khi-ha-kinh", kind: "plan" }
+pm_plan { taskId: "T0001-them-xac-nhan-khi-ha-kinh", content: "# Kế hoạch\n1. Thêm hộp xác nhận vào WindowController.kt\n2. Thêm test cho nhánh xác nhận và nhánh huỷ" }
+pm_dispatch { taskId: "T0001-them-xac-nhan-khi-ha-kinh", kind: "plan_review" }
 ```
 
 Rồi đi theo [quy trình 7 giai đoạn](workflow.md).
