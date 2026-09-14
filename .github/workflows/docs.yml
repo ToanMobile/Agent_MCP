@@ -26,6 +26,8 @@ defaults:
 
 jobs:
   build:
+    # Site tai lieu (GitHub Pages) chi cua upstream (lusky3); fork nay doc docs/ trong repo, khong bat Pages.
+    if: github.repository == 'lusky3/play-store-mcp'
     name: Build Docs
     runs-on: ubuntu-latest
     steps:
