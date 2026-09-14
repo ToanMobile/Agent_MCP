@@ -212,3 +212,34 @@ test('U5 tang gate: guard bi xoa trong repo that => warnings (PM soi tan mat), k
   assert.ok(g.warnings.some((w) => /guard bi xoa/.test(w)));
   cleanup(dir);
 });
+
+test('ACK: canh bao heuristic co khoa; pm_ack (note bat buoc) an no o vong hien tai, vong sau hien lai', async () => {
+  const { locCanhBaoDaXem, markRework } = await import('../src/tasks.js');
+  const dir = gitRepo({ testCommand: 'echo ok' }, { 'src/Shelf.kt': 'fun f(n: Int) {\n    if (n < 0) throw IllegalArgumentException()\n    go()\n}\n' });
+  const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+  writeFile(path.join(dir, 'src', 'Shelf.kt'), 'fun f(n: Int) {\n    go()\n}\n');
+  const soi = soiThayDoi(dir, ['src/Shelf.kt'], base);
+  assert.equal(soi.warnings[0].key, 'guard-xoa:src/Shelf.kt');
+  const created = await call('pm_task_create', { project: dir, title: 'x', brief: 'y', definitionOfDone: ['z'] });
+  const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
+  const cfg = loadConfig(dir);
+  // pm_diff hien canh bao kem khoa.
+  let d = await call('pm_diff', { project: dir, taskId });
+  assert.ok(d.text.includes('[guard-xoa:src/Shelf.kt]'), d.text);
+  // note rong => chan.
+  await assert.rejects(call('pm_ack', { project: dir, taskId, keys: ['guard-xoa:src/Shelf.kt'], note: '  ' }), /note rong/);
+  const a = await call('pm_ack', { project: dir, taskId, keys: ['guard-xoa:src/Shelf.kt'], note: 'guard chuyen sang lop tren, da doc' });
+  assert.ok(a.text.includes('Da danh dau 1'), a.text);
+  d = await call('pm_diff', { project: dir, taskId });
+  assert.ok(!d.text.includes('NGHI VA BANG SCRIPT') && d.text.includes('1 canh bao da xem'), d.text);
+  let task = loadTask(cfg, taskId);
+  let g = gate(cfg, task, { changedFiles: ['src/Shelf.kt'], lintWarnings: soi.warnings });
+  assert.ok(!g.warnings.some((w) => /guard bi xoa/.test(w)) && g.warnings.some((w) => /1 canh bao da xem/.test(w)), g.warnings.join(' | '));
+  assert.equal(locCanhBaoDaXem(task, soi.warnings).daXem.length, 1);
+  // Vong moi => code da doi, canh bao hien lai.
+  markRework(cfg, task, 'x', ['x']);
+  g = gate(cfg, task, { changedFiles: ['src/Shelf.kt'], lintWarnings: soi.warnings });
+  assert.ok(g.warnings.some((w) => /guard bi xoa/.test(w)), g.warnings.join(' | '));
+  assert.ok(task.history.some((h) => h.event === 'ack_warning'));
+  cleanup(dir);
+});

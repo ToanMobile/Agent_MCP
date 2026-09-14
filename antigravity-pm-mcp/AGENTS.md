@@ -49,6 +49,9 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 | `src/evidence.js` | Bằng chứng test phía PM: XML JUnit mới hơn mốc chạy, Gradle không `executed`, lỗi bị nuốt exit code. Chỉ đọc đĩa. |
 | `src/oracle.js` | PM tự replay oracle đỏ→xanh: worktree ở `baseCommit` + file test của agent → RED, cây thật → GREEN; `finally` gỡ worktree. |
 | `src/lint-diff.js` | Soi thay đổi: nhân đôi nội dung (vá bằng script), `create table` trùng, guard bị xoá / code bọc cờ test / assert bị xoá trong test. Chỉ đọc đĩa + `git show`/`git diff`. |
+| `src/worktree.js` | Cây làm việc: `git status` (untracked=all, bỏ thư mục trạng thái), file thay đổi của task, ctx cho `gate()`, worktree đóng băng (HEAD + diff + file mới). |
+| `src/plan-review.js` | Hash `plan.md`, diff v(n−1)→v(n), tình trạng `plan-review.json` (treo / sai khuôn — tự nhắc 1 lần / hash lệch). Chỗ duy nhất trong đường đọc có tác dụng phụ, không được nổ khi Antigravity đóng. |
+| `src/dispatch-guard.js` | Cổng trước khi giao triển khai: chồng lấn task song song, cây chưa commit, file rác. |
 | `src/cite-check.js` | Tự kiểm trích dẫn `file:dòng` (+ `snippet`) trong báo cáo agent: `verified` / `line-off` / `not-found`… Chỉ đọc file. |
 | `src/proof.js` | Chụp/nhận ảnh, kiểm magic byte, thu nhỏ. |
 | `src/tools.js` | Ghép tool MCP. Không chứa logic nghiệm thu — chỉ gọi `tasks.js`. |

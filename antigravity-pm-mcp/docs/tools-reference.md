@@ -190,6 +190,16 @@ Cổng chặn — tất cả phải đủ, **cùng một vòng làm**:
 
 Thiếu ⇒ trả về `isError` kèm danh sách cụ thể, và vẫn xuất báo cáo hiện trạng. Ngoài `missing`, `gate()` còn trả `warnings` (file rác ở gốc repo) — in ra nhưng không chặn.
 
+## pm_ack
+
+| Tham số | Bắt buộc | Việc |
+| --- | --- | --- |
+| `taskId` | **có** | |
+| `keys` | **có** | Khoá cảnh báo, in kèm mỗi cảnh báo heuristic dạng `[loại:file]` (vd `guard-xoa:src/Shelf.kt`) |
+| `note` | **có** | Vì sao chấp nhận — người sau đọc; rỗng ⇒ bị chặn |
+
+Đánh dấu **đã xem** cảnh báo heuristic (chỉ cảnh báo, không phải cổng chặn). Ẩn ở `pm_status`/`pm_diff`/`pm_accept` **trong vòng hiện tại** (chỉ còn dòng đếm "N cảnh báo đã xem"); sang vòng mới sau `pm_rework` hiện lại vì code đã đổi. Ghi vào `history` (`ack_warning`).
+
 ## pm_report
 
 | Tham số | Bắt buộc | Việc |

@@ -5,7 +5,7 @@ import { loadConfig, existingRulesFiles, CONFIG_NAME } from './config.js';
 import {
   createTask, loadTask, listTasks, save, setPhase, recordVerdict, recordRun, recordProof,
   recordDispatch, markRework, accept, gate, freshness, contractPaths, addHistory, PHASES, TASK_TYPES,
-  discardProofs, anhTrung, hashFile } from './tasks.js';
+  discardProofs, anhTrung, hashFile, ackWarning, locCanhBaoDaXem } from './tasks.js';
 import {
   newConversation, sendMessage, getConversationMetadata, conversationProgress, transcriptErrors, MODELS,
 } from './agentapi.js';
@@ -832,7 +832,10 @@ export const TOOLS = [
         const tk = args?.taskId ? loadTask(cfg, args.taskId) : null;
         const soi = soiThayDoi(cfg.projectRoot, snap.wt, tk ? await baseCommitOf(cfg, tk) : null);
         for (const b of soi.blockers) L.push(`CHAN — ${b}`);
-        for (const w of soi.warnings) L.push(`NGHI VA BANG SCRIPT / LAM MEM — ${w}`);
+        const { hien, daXem } = locCanhBaoDaXem(tk, soi.warnings);
+        for (const w of hien) L.push(`NGHI VA BANG SCRIPT / LAM MEM — ${w.text} [${w.key}]`);
+        if (daXem.length) L.push(`(${daXem.length} canh bao da xem qua pm_ack: ${daXem.map((w) => w.key).join(', ')})`);
+        if (hien.length) L.push('  -> xem xong ma chap nhan duoc: pm_ack keys=[...] note="vi sao" (an o vong nay, vong sau hien lai).');
         if (tk?.scopeFiles?.length) {
           const ngoai = snap.untracked.filter((f) => !tk.scopeFiles.some((s) => cungFile(f, s) || f.startsWith(`${s.replace(/\/+$/, '')}/`)));
           if (ngoai.length) L.push(`CHU Y — file MOI ngoai pham vi plan (${ngoai.length}): ${ngoai.slice(0, 20).join(', ')}`);
@@ -1013,6 +1016,34 @@ export const TOOLS = [
         `Bao cao: ${rep.file}`,
         `Anh nghiem thu (${proofs.length}):`,
         ...proofs.map((p) => `- ${p.label}: ${p.file}`),
+      ].join('\n');
+    },
+  },
+
+  {
+    name: 'pm_ack',
+    description: 'PM danh dau DA XEM canh bao heuristic (khoa [loai:file] in kem canh bao); note bat buoc; chi an trong vong hien tai.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...PROJECT_PROP,
+        ...TASK_PROP,
+        keys: { type: 'array', items: { type: 'string' }, description: 'Khoa canh bao, vi du "assert-xoa:src/test/ATest.kt"' },
+        note: { type: 'string', description: 'Vi sao chap nhan (nguoi sau doc)' },
+      },
+      required: ['taskId', 'keys', 'note'],
+    },
+    async handler(args) {
+      const { cfg, task } = withTask(args);
+      validate(this.inputSchema, args);
+      const truoc = Object.keys(task.ackWarnings || {}).length;
+      ackWarning(cfg, task, args.keys, args.note);
+      return [
+        `Da danh dau ${Object.keys(task.ackWarnings).length - truoc} canh bao moi (tong ${Object.keys(task.ackWarnings).length}) o vong ${task.round}: ${args.keys.join(', ')}`,
+        `Ghi chu: ${args.note}`,
+        'Canh bao nay an o pm_status/pm_diff/pm_accept cua vong nay; sang vong moi (pm_rework) se hien lai vi code da doi.',
+        '',
+        gateLines(await gateNow(cfg, task)),
       ].join('\n');
     },
   },

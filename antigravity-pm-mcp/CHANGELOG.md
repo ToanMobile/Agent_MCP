@@ -60,6 +60,18 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `git status` dùng `--untracked-files=all` (thư mục mới từng bị gộp thành `src/test/` nên không khớp file khai).
   Test trong `tests/bai-hoc-14-09.test.js` + `tests/evidence.test.js`; mỗi cổng mới đã thử đột biến để chắc test đỏ đúng chỗ.
 
+- **Ba việc chốt chất lượng 14/09/2026 (chiều):**
+  - **Tách `tools.js`** (1.255 → ~1.060 dòng): `src/worktree.js` (git snapshot, file thay đổi của task, ctx cho gate, worktree
+    đóng băng), `src/plan-review.js` (hash plan, delta, tình trạng phản biện — chỗ duy nhất trong đường đọc có tác dụng phụ),
+    `src/dispatch-guard.js` (cổng trước khi giao). `tools.js` chỉ còn định nghĩa tool.
+  - **`pm_run worktree=true` chạy thật trên GeelyEx2**: đóng băng 3 s (5 file vá + 368 file mới), Gradle 1 lớp test 12 s,
+    evidence XML đúng, dọn sạch. Lộ lỗi gốc ở `util.run()`: ghép stdout bằng `chunk.toString()` từng khúc làm **ký tự UTF-8
+    nhiều byte bị cắt ở ranh giới chunk** ⇒ patch `git diff` 1,4 MB có tiếng Việt hỏng, `git apply` từ chối. Nay gom Buffer,
+    giải mã một lần (ảnh hưởng mọi log tiếng Việt qua `runShell`). Test 1,5 MB tiếng Việt khoá lại.
+  - **`pm_ack`** — cảnh báo heuristic (guard bị xoá, assert bị xoá, khối lặp, tăng dòng, bọc cờ test, hằng vô hạn, SQL function
+    trùng) nay mang **khoá ổn định `[loại:file]`** in kèm; PM xem xong gọi `pm_ack keys=[...] note="vì sao"` (note bắt buộc)
+    ⇒ ẩn ở `pm_status`/`pm_diff`/`pm_accept` **trong vòng hiện tại**, chỉ đếm; sang vòng mới (code đổi) hiện lại. Ghi `history`.
+
 - **5 đề xuất từ phiên PM Geely EX2 (T0009–T0025) + 5 đề xuất từ phiên PM project Unity (T0001–T0014)** (14/09/2026,
   `tests/de-xuat-pm-geely.test.js`, `tests/de-xuat-pm-unity.test.js`, mỗi cổng đã thử đột biến):
   - **Agent vá bằng script** (`src/lint-diff.js`): file có sẵn ở commit gốc tăng > 40 % dòng hoặc khối ≥ 50 dòng lặp y hệt ⇒
