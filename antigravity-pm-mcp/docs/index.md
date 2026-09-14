@@ -27,8 +27,8 @@ Antigravity viết code. Claude Code kiểm tra và chịu trách nhiệm nghi�
 ## Bắt đầu nhanh
 
 ```bash
-git clone https://github.com/ToanMobile/antigravity-pm-mcp.git
-cd antigravity-pm-mcp && npm install
+git clone https://github.com/ToanMobile/Agent_MCP.git   # monorepo Agent_MCP, cong cu nay o thu muc antigravity-pm-mcp/
+cd Agent_MCP/antigravity-pm-mcp && npm install
 claude mcp add antigravity-pm --scope user -- node "$PWD/bin/antigravity-pm-mcp.js"
 ```
 

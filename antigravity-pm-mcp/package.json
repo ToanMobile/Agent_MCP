@@ -26,7 +26,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/ToanMobile/antigravity-pm-mcp"
+    "url": "https://github.com/ToanMobile/Agent_MCP", "directory": "antigravity-pm-mcp"
   },
   "keywords": [
     "mcp",
