@@ -3,11 +3,19 @@ name: Qlty Coverage
 on:
   push:
     branches: [main]
+    paths:
+      - "play-store-mcp/**"
   pull_request:
     branches: [main]
+    paths:
+      - "play-store-mcp/**"
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: play-store-mcp
 
 jobs:
   coverage:
@@ -41,4 +49,4 @@ jobs:
         uses: qltysh/qlty-action/coverage@08a0a862c159eae9b9003081da6663d96efef637 # v2.3.0
         with:
           token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
-          files: coverage.lcov
+          files: play-store-mcp/coverage.lcov

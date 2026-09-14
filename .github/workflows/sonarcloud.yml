@@ -3,11 +3,19 @@ name: SonarCloud
 on:
   push:
     branches: [main]
+    paths:
+      - "play-store-mcp/**"
   pull_request:
     branches: [main]
+    paths:
+      - "play-store-mcp/**"
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: play-store-mcp
 
 jobs:
   sonarcloud:
@@ -47,7 +55,7 @@ jobs:
           args: >
             -Dsonar.organization=lusk
             -Dsonar.projectKey=lusky3_play-store-mcp
-            -Dsonar.sources=src/
-            -Dsonar.tests=tests/
-            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.sources=play-store-mcp/src/
+            -Dsonar.tests=play-store-mcp/tests/
+            -Dsonar.python.coverage.reportPaths=play-store-mcp/coverage.xml
             -Dsonar.python.version=3.11,3.12,3.13,3.14

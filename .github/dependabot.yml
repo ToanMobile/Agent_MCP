@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
-    directory: "/"
+    directory: "/play-store-mcp"
     schedule:
       interval: "weekly"
     commit-message:
@@ -21,6 +21,16 @@ updates:
     open-pull-requests-limit: 5
 
   - package-ecosystem: docker
-    directory: /
+    directory: /play-store-mcp
     schedule:
       interval: weekly
+
+  - package-ecosystem: "npm"
+    directory: "/antigravity-pm-mcp"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 5

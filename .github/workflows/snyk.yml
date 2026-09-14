@@ -3,12 +3,20 @@ name: Snyk Security
 on:
   push:
     branches: [main]
+    paths:
+      - "play-store-mcp/**"
   pull_request:
     branches: [main]
+    paths:
+      - "play-store-mcp/**"
   schedule:
     - cron: "0 5 * * 1"
 
 permissions: {}
+
+defaults:
+  run:
+    working-directory: play-store-mcp
 
 jobs:
   snyk:
@@ -47,7 +55,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --file=requirements.txt --sarif-file-output=snyk-open-source.sarif
+          args: --severity-threshold=high --file=play-store-mcp/requirements.txt --sarif-file-output=snyk-open-source.sarif
 
       - name: Upload Snyk Open Source SARIF
         if: always() && hashFiles('snyk-open-source.sarif') != ''

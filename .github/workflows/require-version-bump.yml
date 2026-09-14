@@ -3,9 +3,15 @@ name: Require Version Bump
 on:
   pull_request:
     branches: [stable]
+    paths:
+      - "play-store-mcp/**"
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: play-store-mcp
 
 jobs:
   check:
@@ -31,7 +37,7 @@ jobs:
 
       - name: Require a version bump and matching changelog entry
         run: |
-          git show "origin/${{ github.base_ref }}:pyproject.toml" > /tmp/base_pyproject.toml
+          git show "origin/${{ github.base_ref }}:play-store-mcp/pyproject.toml" > /tmp/base_pyproject.toml
 
           python3 - <<'EOF'
           import re

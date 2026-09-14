@@ -3,13 +3,21 @@ name: Safety Dependency Check
 on:
   push:
     branches: [main]
+    paths:
+      - "play-store-mcp/**"
   pull_request:
     branches: [main]
+    paths:
+      - "play-store-mcp/**"
   schedule:
     - cron: "0 5 * * 3"
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: play-store-mcp
 
 jobs:
   safety:
@@ -37,7 +45,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Export requirements
-        run: uv export --no-hashes --format requirements-txt > requirements.txt
+        run: uv export --no-hashes --format requirements-txt > "${{ github.workspace }}/requirements.txt"
 
       - name: Run Safety check
         uses: pyupio/safety-action@2591cf2f3e67ba68b923f4c92f0d36e281c65023 # v1.0.1
