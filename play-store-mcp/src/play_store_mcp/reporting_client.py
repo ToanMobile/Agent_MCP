@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import threading
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import structlog
 from googleapiclient.discovery import build
@@ -53,7 +53,9 @@ def _parse_reporting_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 except (TypeError, ValueError):
                     val = None
             metrics[name] = val
-        parsed.append({"date": row.get("startTime", {}), "versionCode": dims.get("versionCode"), **metrics})
+        parsed.append(
+            {"date": row.get("startTime", {}), "versionCode": dims.get("versionCode"), **metrics}
+        )
     return parsed
 
 
@@ -65,7 +67,9 @@ class ReportingClient:
         credentials_path: str | None = None,
         credentials_json: str | dict[str, Any] | None = None,
     ) -> None:
-        self._credentials_path = credentials_path or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        self._credentials_path = credentials_path or os.environ.get(
+            "GOOGLE_APPLICATION_CREDENTIALS"
+        )
         self._credentials_json = credentials_json or os.environ.get("GOOGLE_PLAY_STORE_CREDENTIALS")
         self._service: PlayDeveloperReportingResource | None = None
         self._http_lock = threading.Lock()
@@ -98,7 +102,7 @@ class ReportingClient:
             self._logger.exception("Failed to initialize Reporting API client", error=str(e))
             raise PlayStoreClientError(f"Failed to initialize Reporting API client: {e}") from e
 
-    def _execute(self, request: Any) -> Any:
+    def _execute(self, request: Any) -> dict[str, Any]:
         method = (getattr(request, "method", "") or "").upper()
         retry_server_errors = method in ("GET", "HEAD", "OPTIONS", "PUT", "DELETE")
 
@@ -106,10 +110,15 @@ class ReportingClient:
             with self._http_lock:
                 return request.execute()
 
-        return _run_with_backoff(_locked_execute, retry_server_errors=retry_server_errors)
+        # googleapiclient's execute() returns the decoded JSON body (a dict);
+        # the retry helper is untyped, so pin the type here once for every caller.
+        return cast(
+            "dict[str, Any]",
+            _run_with_backoff(_locked_execute, retry_server_errors=retry_server_errors),
+        )
 
     # (Python attribute name on `vitals()`, camelCase MetricSet resource id)
-    _METRIC_SETS = {
+    _METRIC_SETS: ClassVar[dict[str, str]] = {
         "crashrate": "crashRateMetricSet",
         "anrrate": "anrRateMetricSet",
         "stuckbackgroundwakelockrate": "stuckBackgroundWakelockRateMetricSet",
@@ -144,29 +153,55 @@ class ReportingClient:
         resource = getattr(service.vitals(), metric_set)()
         resource_id = self._METRIC_SETS[metric_set]
         try:
-            return self._execute(resource.query(name=f"apps/{package_name}/{resource_id}", body=body))
+            return self._execute(
+                resource.query(name=f"apps/{package_name}/{resource_id}", body=body)
+            )
         except HttpError as e:
             self._logger.exception("Vitals query failed", metric_set=metric_set, error=str(e))
             raise PlayStoreClientError(f"Failed to query {metric_set}: {e.reason}") from e
 
-    def query_crash_rate(self, package_name: str, days: int = 7, version_code: str | None = None) -> dict[str, Any]:
+    def query_crash_rate(
+        self, package_name: str, days: int = 7, version_code: str | None = None
+    ) -> dict[str, Any]:
         return self._query_metric_set(
-            package_name, "crashrate", ["crashRate", "userPerceivedCrashRate", "distinctUsers"], days, version_code
+            package_name,
+            "crashrate",
+            ["crashRate", "userPerceivedCrashRate", "distinctUsers"],
+            days,
+            version_code,
         )
 
-    def query_anr_rate(self, package_name: str, days: int = 7, version_code: str | None = None) -> dict[str, Any]:
+    def query_anr_rate(
+        self, package_name: str, days: int = 7, version_code: str | None = None
+    ) -> dict[str, Any]:
         return self._query_metric_set(
-            package_name, "anrrate", ["anrRate", "userPerceivedAnrRate", "distinctUsers"], days, version_code
+            package_name,
+            "anrrate",
+            ["anrRate", "userPerceivedAnrRate", "distinctUsers"],
+            days,
+            version_code,
         )
 
-    def query_wakelock_rate(self, package_name: str, days: int = 7, version_code: str | None = None) -> dict[str, Any]:
+    def query_wakelock_rate(
+        self, package_name: str, days: int = 7, version_code: str | None = None
+    ) -> dict[str, Any]:
         return self._query_metric_set(
-            package_name, "stuckbackgroundwakelockrate", ["stuckBackgroundWakelockRate", "distinctUsers"], days, version_code
+            package_name,
+            "stuckbackgroundwakelockrate",
+            ["stuckBackgroundWakelockRate", "distinctUsers"],
+            days,
+            version_code,
         )
 
-    def query_wakeup_rate(self, package_name: str, days: int = 7, version_code: str | None = None) -> dict[str, Any]:
+    def query_wakeup_rate(
+        self, package_name: str, days: int = 7, version_code: str | None = None
+    ) -> dict[str, Any]:
         return self._query_metric_set(
-            package_name, "excessivewakeuprate", ["excessiveWakeupRate", "distinctUsers"], days, version_code
+            package_name,
+            "excessivewakeuprate",
+            ["excessiveWakeupRate", "distinctUsers"],
+            days,
+            version_code,
         )
 
     def search_error_issues(

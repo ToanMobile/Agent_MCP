@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from googleapiclient.discovery import build
@@ -72,7 +72,7 @@ class AnalyticsDataClient:
                 f"Failed to initialize Analytics Data API client: {e}"
             ) from e
 
-    def _execute(self, request: Any) -> Any:
+    def _execute(self, request: Any) -> dict[str, Any]:
         method = (getattr(request, "method", "") or "").upper()
         retry_server_errors = method in ("GET", "HEAD", "OPTIONS", "PUT", "DELETE")
 
@@ -80,7 +80,12 @@ class AnalyticsDataClient:
             with self._http_lock:
                 return request.execute()
 
-        return _run_with_backoff(_locked_execute, retry_server_errors=retry_server_errors)
+        # googleapiclient's execute() returns the decoded JSON body (a dict);
+        # the retry helper is untyped, so pin the type here once for every caller.
+        return cast(
+            "dict[str, Any]",
+            _run_with_backoff(_locked_execute, retry_server_errors=retry_server_errors),
+        )
 
     def run_report(
         self,

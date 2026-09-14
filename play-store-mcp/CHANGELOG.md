@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+> **Breaking — code-mode is now enabled by default.** Clients that expect the
+> full 117-tool list (e.g. anything enumerating tools by name) will instead
+> see three meta-tools (`search`/`get_schema`/`execute`) unless `CODE_MODE=0`
+> is set. See Changed below.
+
+### Changed (fork)
+- Synced 42 commits from upstream `lusky3/play-store-mcp` (through #161) on
+  2026-09-14. Merge notes: the fork's shared credential loader
+  (`play_store_mcp.credentials`, used by all five API clients) is kept and now
+  funnels every branch — dict, JSON string, file path — through
+  `from_service_account_info` with upstream's `token_uri` SSRF guard (#147),
+  so the guard covers Reporting/BigQuery/Analytics/Crashlytics too, not just
+  the Publisher client. Upstream's duplicate `_resolve_credentials*` helpers in
+  `client.py` were dropped in favour of that loader; the fork's long-timeout
+  upload transport and `_service_lock` double-checked init (#150) coexist.
+
 ### Fixed
 - Artifact uploads no longer hide the server's answer behind a client-side
   timeout. The API transport used googleapiclient's default 60s socket
@@ -43,29 +59,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file, environment, per-request header, and `/credentials` service-account
   credentials and is blocked by read-only mode.
 
+### Changed
+- **Breaking:** `CODE_MODE` now defaults to **enabled** (was opt-in/default-off).
+  Set `CODE_MODE=0` (or `false`/`no`/`off`, case-insensitive) to opt out and
+  get the classic 117-tool list back. The `execute` meta-tool's sandbox
+  (Monty) is now a base dependency — not an optional extra — so every
+  install path (`pip install play-store-mcp`, `uvx play-store-mcp`, Docker)
+  works out of the box with no separate install step. Read-only enforcement
+  still applies inside the sandbox.
+
 ### Planned
 - Consolidate and reduce the MCP tool surface by grouping
   related operations, to lower per-request tool-list overhead — with no planned
   loss of functionality.
 
-### Changed
-- **Breaking:** APK/AAB downloads are now **always confined to a directory** —
-  there is no "write anywhere" mode. The base directory is
-  `PLAY_STORE_MCP_DOWNLOAD_DIR` when set, otherwise the server's current working
-  directory; a `destination_path` that resolves outside it is rejected. Set
-  `PLAY_STORE_MCP_DOWNLOAD_DIR` to download somewhere other than the working
-  directory. Network transports (`--transport sse` / `streamable-http`)
-  additionally **require** `PLAY_STORE_MCP_DOWNLOAD_DIR` to be set explicitly and
-  refuse to start without it.
+### Dependencies
+- Bumped `fastmcp` from the `4.0.0b3`/`b5` betas to the stable GA release
+  (`>=4.0.0,<5.0`, currently resolving to `4.0.2`), which migrates to MCP
+  Python SDK v2 and the new MCP 2026-07-28 spec (stateless protocol core; no
+  more mandatory `initialize`/`Mcp-Session-Id`). FastMCP 4 negotiates the
+  best mutual protocol era per client by default, so existing clients still
+  on the older handshake keep working unchanged — verified locally: full
+  unit suite (728 tests), lint, mypy, both transports (`stdio` and
+  `streamable-http`) boot and complete a legacy `initialize` →
+  `notifications/initialized` → `tools/list` round trip, the live read-only
+  integration suite against a real Play Console app, and the Docker build
+  all pass unmodified. Now that FastMCP 4 is GA, the `uvx --from git+URL`
+  prerelease limitation noted in earlier releases no longer applies —
+  regular installs work without `--prerelease=allow`. `stable` will follow
+  in its own release once this has soaked.
 
-### Security
-- Download-destination confinement lives in `PlayStoreClient` and applies to both
-  the temporary `.part` file and the final file: the destination is canonicalized
-  and verified to stay within the (always-present) base directory before anything
-  is written — closing the path-traversal / arbitrary-file-overwrite vector
-  (SonarCloud `S2083`) for both local and network use.
-
-## [0.5.0] - 2026-07-06
+## [0.5.0] - 2026-08-14
 
 Adds opt-in **code-mode**, migrates the server onto the standalone **`fastmcp`**
 package, hardens shared-client concurrency, and removes the non-functional Vitals
@@ -91,6 +115,16 @@ tools.
   DNS-rebinding protection (`PLAY_STORE_MCP_DISABLE_DNS_REBINDING`) are
   preserved. This unblocks the upcoming code-mode capability, which lives only
   in `fastmcp`.
+- **Breaking:** APK/AAB downloads are now **always confined to a directory** —
+  there is no "write anywhere" mode. The base directory is
+  `PLAY_STORE_MCP_DOWNLOAD_DIR` when set, otherwise the server's current working
+  directory; a `destination_path` that resolves outside it is rejected. On
+  network transports (`--transport sse` / `streamable-http`), setting
+  `PLAY_STORE_MCP_DOWNLOAD_DIR` is **recommended** but not required — the server
+  logs a warning (rather than refusing to start) when it is unset and falls back
+  to the working directory. Point it at a writable directory on cloud/hosted
+  deployments (e.g. `/tmp/play-store-downloads` on Render), where the working
+  directory may be read-only.
 
 ### Removed
 - **Breaking:** removed the non-functional `get_vitals_overview` and
@@ -126,10 +160,12 @@ tools.
   now write to a temporary file and atomically rename on success, so a failed
   or unauthorized download can no longer truncate an existing file or leave a
   partial one at the destination.
-- Optional `PLAY_STORE_MCP_DOWNLOAD_DIR` confines download destinations to an
-  allowlisted directory — recommended for network-exposed deployments so a caller
-  cannot write outside it (path traversal / arbitrary-file overwrite). Unset (the
-  default, single-user local case) allows any path, preserving existing behavior.
+- Download-destination confinement lives in `PlayStoreClient` and applies to both
+  the temporary `.part` file and the final file: every destination is canonicalized
+  and verified to stay within the (always-present) base directory before anything
+  is written, closing the path-traversal / arbitrary-file-overwrite vector
+  (SonarCloud `S2083`). Downloads are always confined — `PLAY_STORE_MCP_DOWNLOAD_DIR`
+  when set, otherwise the working directory.
 - Documented that the server-side credential fallback
   (`GOOGLE_PLAY_STORE_CREDENTIALS` / `/credentials`) is a process-global client
   shared by every request that omits a credential header; multi-tenant
@@ -139,6 +175,11 @@ tools.
   unless writes are needed: one `execute` can invoke up to 50 tool calls
   (including mutations) behind a single approval. Read-only enforcement still
   applies inside the sandbox.
+
+### Dependencies
+- Bumped `pyasn1` 0.6.3 → 0.6.4 (CVE-2026-59885, CVE-2026-59886) and
+  `cryptography` 49.0.0 → 50.0.0 (PYSEC-2026-3552) — HIGH-severity advisories in
+  transitive dependencies (via `google-auth` / `pyjwt[crypto]`). `pip-audit` clean.
 
 ## [0.4.0] - 2026-07-02
 

@@ -26,10 +26,43 @@ from play_store_mcp.errors import PlayStoreClientError
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+# The only token endpoint a Google service-account key may name. A key file
+# is normally trusted, but on the HTTP transport a per-request header can carry
+# credentials from a caller, who could otherwise point ``token_uri`` at an
+# arbitrary URL and have this server POST the signed JWT there (SSRF / token
+# theft). Merged from upstream lusky3/play-store-mcp #147 on 2026-09-14.
+GOOGLE_OAUTH_TOKEN_URI = "https://oauth2.googleapis.com/token"  # noqa: S105 # nosec B105 — endpoint URL, not a credential
+
 CREDENTIAL_ENV_HINT = (
     "Set GOOGLE_APPLICATION_CREDENTIALS (path to the service account JSON key) "
     "or GOOGLE_PLAY_STORE_CREDENTIALS (the JSON content itself, or a path to it)."
 )
+
+
+def _from_info(
+    info: dict[str, Any], scopes: list[str], api_label: str
+) -> service_account.Credentials:
+    """Build credentials from parsed key JSON, rejecting a spoofed ``token_uri``.
+
+    Every branch (dict, JSON string, file path) funnels through here so the
+    ``token_uri`` check is one universal choke point.
+    """
+    token_uri = info.get("token_uri")
+    if token_uri is not None and token_uri != GOOGLE_OAUTH_TOKEN_URI:
+        raise PlayStoreClientError(
+            f"Invalid token_uri in service account credentials for {api_label}: {token_uri!r} "
+            f"(expected {GOOGLE_OAUTH_TOKEN_URI!r})"
+        )
+    return cast(
+        "service_account.Credentials",
+        service_account.Credentials.from_service_account_info(info, scopes=scopes),
+    )
+
+
+def _from_file(path: str, scopes: list[str], api_label: str) -> service_account.Credentials:
+    with Path(path).open(encoding="utf-8") as f:
+        info = json.load(f)
+    return _from_info(info, scopes, api_label)
 
 
 def load_service_account_credentials(
@@ -51,10 +84,7 @@ def load_service_account_credentials(
     scopes = list(scopes)
 
     if isinstance(credentials_json, dict):
-        return cast(
-            "service_account.Credentials",
-            service_account.Credentials.from_service_account_info(credentials_json, scopes=scopes),
-        )
+        return _from_info(credentials_json, scopes, api_label)
 
     if isinstance(credentials_json, str) and credentials_json.strip():
         value = credentials_json.strip()
@@ -68,20 +98,11 @@ def load_service_account_credentials(
                     f"Credentials for {api_label} look like JSON but failed to parse "
                     f"({e.msg} at line {e.lineno} column {e.colno})."
                 ) from e
-            return cast(
-                "service_account.Credentials",
-                service_account.Credentials.from_service_account_info(info, scopes=scopes),
-            )
+            return _from_info(info, scopes, api_label)
         if Path(value).exists():
-            return cast(
-                "service_account.Credentials",
-                service_account.Credentials.from_service_account_file(value, scopes=scopes),
-            )
+            return _from_file(value, scopes, api_label)
 
     if credentials_path and Path(credentials_path).exists():
-        return cast(
-            "service_account.Credentials",
-            service_account.Credentials.from_service_account_file(credentials_path, scopes=scopes),
-        )
+        return _from_file(credentials_path, scopes, api_label)
 
     raise PlayStoreClientError(f"No valid credentials found for {api_label}. {CREDENTIAL_ENV_HINT}")

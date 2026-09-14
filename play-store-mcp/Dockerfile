@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.14-alpine@sha256:26730869004e2b9c4b9ad09cab8625e81d256d1ce97e72df5520e806b1709f92 AS builder
+FROM python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc AS builder
 
 WORKDIR /build
 
@@ -9,14 +9,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26@sha256:3d868e555f8f1dbc324afa005066cd11
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ src/
 
-# Build wheel, then install into venv at the final runtime path
-# so shebangs point to /app/.venv/bin/python
-RUN uv build --wheel --out-dir /build/dist && \
-    uv venv /app/.venv && \
-    uv pip install --no-cache /build/dist/*.whl --python /app/.venv/bin/python
+# Sync straight from the lockfile into the final runtime venv path (so
+# shebangs point to /app/.venv/bin/python), instead of building a wheel and
+# letting `uv pip install` re-resolve deps fresh — that re-resolution doesn't
+# see uv.lock's already-decided prerelease pins and can fail to reproduce it.
+RUN UV_PROJECT_ENVIRONMENT=/app/.venv uv sync --frozen --no-editable
 
 # Runtime stage
-FROM python:3.14-alpine@sha256:26730869004e2b9c4b9ad09cab8625e81d256d1ce97e72df5520e806b1709f92
+FROM python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
 
 LABEL org.opencontainers.image.source="https://github.com/lusky3/play-store-mcp"
 LABEL org.opencontainers.image.url="https://github.com/lusky3/play-store-mcp"
@@ -24,6 +24,11 @@ LABEL org.opencontainers.image.documentation="https://lusky3.github.io/play-stor
 LABEL org.opencontainers.image.description="MCP server for Google Play Developer API — deploy apps, manage releases, reviews, and more"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.title="play-store-mcp"
+
+# Pick up any Alpine security patches released since this base image digest
+# was built (e.g. libuuid), without waiting on a new upstream base-image
+# build to bump the pin.
+RUN apk upgrade --no-cache
 
 # Security hardening: non-root user, no shell
 RUN addgroup -S mcp && \

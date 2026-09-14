@@ -217,12 +217,15 @@ def test_every_client_accepts_a_path_in_the_shared_env_var(
     monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
 
     with patch(
-        "play_store_mcp.credentials.service_account.Credentials.from_service_account_file"
+        "play_store_mcp.credentials.service_account.Credentials.from_service_account_info"
     ) as from_file:
         from_file.return_value = MagicMock()
         client_cls()._get_service()
 
-    assert from_file.call_args.args[0] == str(key_file)
+    # Every branch now funnels through from_service_account_info (single
+    # token_uri choke point), so the path is read and its parsed content is
+    # what reaches google-auth.
+    assert from_file.call_args.args[0] == CREDENTIALS
 
 
 @pytest.mark.parametrize("client_cls", CLIENTS)
