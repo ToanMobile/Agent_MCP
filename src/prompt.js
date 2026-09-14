@@ -244,6 +244,8 @@ export function buildImplementMessage(cfg, task, pmNotes = '') {
     '- TRUOC khi sua dong code dau tien: chay mot test/lenh that su tai hien duoc loi va THAY NO DO. Ghi lai lenh + ket qua vao result.json -> "oracle.before".',
     '- SAU khi sua: chay LAI DUNG lenh do, cung kich ban, cung cach chay, thay no XANH. Ghi vao "oracle.after".',
     '- Doc log cu, doc bao cao loi, doc source roi suy luan "chac la do cho nay": KHONG tinh la oracle. Phai la lenh chay that, co the do lai duoc.',
+    '- PM se TU REPLAY oracle: chep CHI file test cua ban sang code goc (truoc khi sua) va chay. Vi vay test oracle phai tai hien LOI HANH VI bang API DA CO — '
+    + 'test tham chieu class/ham MOI do ban them se khong bien dich duoc o code goc va KHONG duoc tinh la oracle (do that 14/09/2026: SttDecodeStep, VoiceLanePolicy).',
     '- Khong chay duoc oracle truoc khi sua (thieu thiet bi, khong tai hien duoc) thi ghi vao result.json -> "blocked" roi dung, DUNG sua mo.',
     '- Task khong phai sua loi (them tinh nang, refactor, tai lieu) thi de "oracle": null va noi ro ban chung minh dung bang cach nao.',
     '',

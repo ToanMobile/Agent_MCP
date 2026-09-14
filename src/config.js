@@ -76,7 +76,8 @@ export const DEFAULT_CONFIG = {
   },
   // Oracle do -> xanh do PM tu replay (pm_run kind=oracle, src/oracle.js).
   oracle: {
-    // File phu can chep vao worktree code goc de test chay duoc (vi du local.properties).
+    // File HOAC THU MUC phu can chep vao worktree de build duoc: local.properties, lib nhi phan bi gitignore
+    // (vi du "CarConnect/app/libs"), keystore. Thu muc chep de quy (bo build/, .gradle/, .DS_Store).
     copyToWorktree: [],
   },
   antigravity: {

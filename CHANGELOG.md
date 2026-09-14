@@ -29,7 +29,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
      "không răng"); chạy lại trên cây thật → GREEN theo `isGreenRun`. `finally` gỡ worktree + `prune`. Cổng đòi
      khi task `type=bugfix` HOẶC agent tự khai `oracle.command`; lời khai `before/after` của agent **không** phải
      bằng chứng. Task cũ (không có trường `type`) được miễn — không chặn hồi tố task đang chạy.
-     `pm_task_create` nhận `type` (`bugfix` mặc định | `feature` | `refactor` | `docs`).
+     `pm_task_create` nhận `type` (`bugfix` mặc định | `feature` | `refactor` | `docs`). Dry-run thật trên GeelyEx2 T0023
+    (14/09/2026): worktree thiếu lib gitignore ⇒ `copyToWorktree` nay chép được **thư mục**; test cho API mới không biên
+    dịch ở code gốc ⇒ RED liệt kê ký hiệu thiếu (`red.symbols`) và nói rõ "oracle chỉ có nghĩa với test hồi quy trên API có sẵn".
   5. **`exit 0` không phải xanh — một predicate `isGreenRun` duy nhất** (`src/tasks.js`, `src/report.js`):
      `pm_run kind=test` thu **bằng chứng** (`src/evidence.js`, từ phiên OfficeReader): XML JUnit **mới hơn mốc bắt
      đầu chạy** khi project khai `testEvidence.resultsGlob`, hoặc ít nhất stdout không nói "không chạy". Bắt: Gradle

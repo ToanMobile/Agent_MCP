@@ -18,10 +18,32 @@ import { runShell, run } from './util.js';
 import { collectTestEvidence } from './evidence.js';
 import { mustHaveOf, matchesAny, chuanHoaDuongDan } from './policy.js';
 
+/**
+ * Ky hieu chua ton tai o code goc ma test tham chieu (Kotlin/Java/C#/TS). Do 14/09/2026 tren GeelyEx2 T0023:
+ * 4 test moi dung SttDecodeStep / VoiceLanePolicy — la test cho API MOI, khong the replay o baseCommit.
+ * Oracle chi co nghia cho test HOI QUY tren API co san; PM can biet ngay de khong do loi cho moi truong.
+ */
+export function kyHieuChuaCo(output) {
+  const s = String(output || '');
+  const out = new Set();
+  for (const m of s.matchAll(/Unresolved reference[:]? '([^']+)'/g)) out.add(m[1]);
+  for (const m of s.matchAll(/cannot find symbol[\s\S]{0,80}?symbol:\s+\w+\s+(\w+)/g)) out.add(m[1]);
+  for (const m of s.matchAll(/error CS\d+: The (?:name|type or namespace name) '([^']+)'/g)) out.add(m[1]);
+  for (const m of s.matchAll(/Cannot find (?:name|module) '([^']+)'/g)) out.add(m[1]);
+  return [...out].slice(0, 12);
+}
+
 /** RED hop le = test da chay va co it nhat mot test do. Tra ve { valid, reason, weak }. */
-export function danhGiaRed(r, ev) {
+export function danhGiaRed(r, ev, output = '') {
   if (r.timedOut) return { valid: false, weak: false, reason: 'lenh oracle qua han trong worktree' };
   if (ev.noop) return { valid: false, weak: false, reason: `khong test nao chay trong worktree (${ev.noopRule})` };
+  const thieu = kyHieuChuaCo(output);
+  if (r.code !== 0 && thieu.length) {
+    return {
+      valid: false, weak: false, symbols: thieu,
+      reason: `test tham chieu ky hieu CHUA CO o code goc (${thieu.join(', ')}) — day la test cho API moi, khong replay duoc; oracle chi co nghia voi test hoi quy tren API co san. Agent can mot test tai hien LOI HANH VI bang API cu, hoac PM ghi nhan gioi han nay`,
+    };
+  }
   if (ev.source === 'xml') {
     if (ev.files === 0) {
       return {
@@ -48,14 +70,21 @@ export function fileCanChep(cfg, changedFiles) {
   return { tests, extra: extra.filter((e) => !tests.includes(e)) };
 }
 
-function chepFile(root, dest, rel) {
+/**
+ * Chep file HOAC THU MUC (de quy) vao worktree. Thu muc: dung cho lib nhi phan bi gitignore
+ * (do 14/09/2026 tren GeelyEx2: worktree thieu CarConnect/app/libs/sherpa-onnx-*.aar => Gradle do truoc khi toi test).
+ */
+export function chepVaoWorktree(root, dest, rel) {
   const src = path.resolve(root, rel);
-  if (!fs.existsSync(src)) return false;
+  let st;
+  try { st = fs.statSync(src); } catch { return false; }
   const to = path.resolve(dest, rel);
   fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.copyFileSync(src, to);
+  if (st.isDirectory()) fs.cpSync(src, to, { recursive: true, force: true, filter: (p) => !/(^|\/)(\.DS_Store|build|\.gradle)$/.test(p) });
+  else fs.copyFileSync(src, to);
   return true;
 }
+const chepFile = chepVaoWorktree;
 
 /**
  * Replay oracle. Tra ve object ghi thang vao run record:
@@ -86,8 +115,8 @@ export async function replayOracle(cfg, { baseCommit, command, changedFiles, tim
     const s1 = Date.now();
     const r1 = await runShell(command, { cwd: tmp, timeoutMs });
     const ev1 = collectTestEvidence(cfgWt, { startedMs: s1, stdout: r1.stdout, stderr: r1.stderr });
-    const red = danhGiaRed(r1, ev1);
-    out.red = { exitCode: r1.code, timedOut: r1.timedOut, valid: red.valid, weak: red.weak, reason: red.reason, evidence: ev1 };
+    const red = danhGiaRed(r1, ev1, `${r1.stdout}\n${r1.stderr}`);
+    out.red = { exitCode: r1.code, timedOut: r1.timedOut, valid: red.valid, weak: red.weak, reason: red.reason, symbols: red.symbols || [], evidence: ev1 };
     out.redLog = `$ ${command}\n(cwd ${tmp} @ ${baseCommit})\nexit=${r1.code} timedOut=${r1.timedOut}\n\n--- stdout ---\n${r1.stdout}\n--- stderr ---\n${r1.stderr}\n`;
     if (!red.valid) return out;
     // GREEN tren cay that.

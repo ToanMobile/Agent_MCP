@@ -40,7 +40,7 @@ Thứ tự đè lên nhau: **mặc định → cấu hình chung → cấu hình
 | `proof.providers` | `{}` | Khai cách chụp, xem dưới |
 | `proof.maxWidth` | `1280` | Thu nhỏ ảnh về chiều ngang này (dùng `sips`) |
 | `testEvidence.resultsGlob` | `[]` | Glob XML JUnit để `pm_run kind=test` **đếm test thật** (chỉ XML có mtime ≥ lúc bắt đầu chạy). Android/Gradle: `["**/build/test-results/**/TEST-*.xml"]`. Rỗng = chỉ có stdout (bằng chứng `weak`) |
-| `oracle.copyToWorktree` | `[]` | File phụ chép vào worktree khi `pm_run kind=oracle` hoặc `pm_run worktree=true` (vd `local.properties`, `keystore.properties`) |
+| `oracle.copyToWorktree` | `[]` | File **hoặc thư mục** (đệ quy, bỏ `build/`, `.gradle/`) chép vào worktree khi `pm_run kind=oracle` / `worktree=true`: `local.properties`, keystore, **lib nhị phân bị gitignore** (GeelyEx2: `CarConnect/app/libs` 47 MB — thiếu là Gradle đỏ trước khi tới test, đo 14/09/2026) |
 | `testStages` | `{}` | Lệnh test theo stage, vd `{"unit": "./scripts/test-all.sh --unit"}` — dùng với `pm_run kind=test stage=unit skipReason="..."` khi cổng ngoài đỏ vì lý do ngoài code |
 | `promptPlanMaxBytes` | `12000` | Trần số ký tự `plan.md` nhúng vào prompt; phần dư agent đọc theo đường dẫn. Plan 38 KB từng làm agent chết context |
 | `proof.providers.<tên>.type = "browser"` | — | Chrome/Chromium headless: `binary` (tự dò nếu bỏ trống), `windowSize` (`1280,800`), `url` mặc định, `args`. Dùng cho task `proofKind: browser` |

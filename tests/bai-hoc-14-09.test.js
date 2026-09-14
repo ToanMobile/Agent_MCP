@@ -439,7 +439,19 @@ test('cau hinh: cac khoa mustHave moi doc dung va co mac dinh an toan', () => {
 
 // ---------------------------------------------------------------- BG3: PM tu replay oracle trong git worktree
 
-import { replayOracle, danhGiaRed } from '../src/oracle.js';
+import { replayOracle, danhGiaRed, kyHieuChuaCo } from '../src/oracle.js';
+
+test('BG3 test tham chieu ky hieu CHUA CO o code goc (T0023 that: SttDecodeStep) => RED khong hop le, noi ro ky hieu', () => {
+  const log = "e: file:///x/SttEngineSeamTest.kt:13:18 Unresolved reference 'SttDecodeStep'.\ne: file:///x/A.kt:1:1 Unresolved reference 'VoiceLanePolicy'.\nBUILD FAILED in 20s";
+  assert.deepEqual(kyHieuChuaCo(log), ['SttDecodeStep', 'VoiceLanePolicy']);
+  assert.deepEqual(kyHieuChuaCo('Foo.java:3: error: cannot find symbol\n    symbol:   class Bar\n'), ['Bar']);
+  const r = danhGiaRed({ code: 1, timedOut: false }, { source: 'xml', files: 0, noop: false }, log);
+  assert.equal(r.valid, false);
+  assert.match(r.reason, /CHUA CO o code goc \(SttDecodeStep, VoiceLanePolicy\)/);
+  assert.match(r.reason, /API moi/);
+  // Khong co ky hieu thieu thi giu ly do cu.
+  assert.match(danhGiaRed({ code: 1, timedOut: false }, { source: 'xml', files: 0, noop: false }, 'BUILD FAILED').reason, /do vi ly do khac/);
+});
 
 /**
  * Repo gia: run-test.sh

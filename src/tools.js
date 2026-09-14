@@ -21,7 +21,7 @@ import {
   mustHaveOf, fileRacGocRepo, cungFile, phamViTask, dangChay, kiemChongLan, PROOF_KINDS, kiemKhuonPlanReview,
 } from './policy.js';
 import { collectTestEvidence, evidenceLine } from './evidence.js';
-import { replayOracle, oracleLine } from './oracle.js';
+import { replayOracle, oracleLine, chepVaoWorktree } from './oracle.js';
 import { soiThayDoi } from './lint-diff.js';
 import { kiemBaoCao, dongTomTat } from './cite-check.js';
 import { createHash } from 'node:crypto';
@@ -223,13 +223,7 @@ async function dongBangCay(cfg) {
     fs.copyFileSync(src, to);
     untracked += 1;
   }
-  for (const f of cfg.oracle?.copyToWorktree || []) {
-    const src = path.resolve(cfg.projectRoot, f);
-    if (!fs.existsSync(src)) continue;
-    const to = path.resolve(dir, f);
-    fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.copyFileSync(src, to);
-  }
+  for (const f of cfg.oracle?.copyToWorktree || []) chepVaoWorktree(cfg.projectRoot, dir, f);
   return { dir, applied, untracked };
 }
 
