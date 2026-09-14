@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+.antigravity-pm/
+test/.tmp/
+.idea/

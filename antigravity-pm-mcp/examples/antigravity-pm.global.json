@@ -1,0 +1,13 @@
+{
+  "defaultModel": "pro",
+  "commitPolicy": "forbid",
+  "runTimeoutMs": 1800000,
+  "stallMinutes": 15,
+  "proof": {
+    "require": 1,
+    "maxWidth": 1280,
+    "providers": {
+      "man": { "type": "macos" }
+    }
+  }
+}

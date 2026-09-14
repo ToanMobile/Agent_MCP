@@ -1,0 +1,50 @@
+{
+  "name": "antigravity-pm-mcp",
+  "version": "0.1.0",
+  "description": "MCP server: Claude Code lam Leader/PM giao task cho Google Antigravity, ep quy trinh plan -> audit -> review -> test -> anh nghiem thu truoc khi nghiem thu task.",
+  "type": "module",
+  "bin": {
+    "antigravity-pm-mcp": "bin/antigravity-pm-mcp.js"
+  },
+  "exports": {
+    ".": "./src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bin/antigravity-pm-mcp.js",
+    "test": "node --test tests/",
+    "doctor": "node bin/antigravity-pm-mcp.js --doctor",
+    "test:coverage": "node --test --experimental-test-coverage tests/",
+    "lint": "node --check bin/antigravity-pm-mcp.js && for f in src/*.js tests/*.js; do node --check $f || exit 1; done"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ToanMobile/antigravity-pm-mcp"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "antigravity",
+    "google-antigravity",
+    "code-review",
+    "audit",
+    "project-management",
+    "agent-orchestration"
+  ],
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ]
+}

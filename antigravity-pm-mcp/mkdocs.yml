@@ -1,0 +1,52 @@
+site_name: Antigravity PM MCP
+site_description: MCP server để Claude Code đứng vai Leader/PM giao việc cho Google Antigravity, ép quy trình plan → audit → review → test → ảnh nghiệm thu
+repo_url: https://github.com/ToanMobile/antigravity-pm-mcp
+repo_name: ToanMobile/antigravity-pm-mcp
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: vi
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Chuyển sang tối
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Chuyển sang sáng
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Giới thiệu: index.md
+  - Bắt đầu: getting-started.md
+  - Quy trình 7 giai đoạn: workflow.md
+  - Cấu hình: configuration.md
+  - Tham chiếu tool: tools-reference.md
+  - Xử lý sự cố: troubleshooting.md
+  - Changelog: changelog.md

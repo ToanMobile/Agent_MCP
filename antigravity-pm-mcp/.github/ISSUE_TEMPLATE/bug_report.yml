@@ -1,0 +1,34 @@
+name: Báo lỗi
+description: Có gì chạy sai
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Triệu chứng
+      description: Thấy gì, mong đợi gì. Dán nguyên văn thông báo lỗi nếu có.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Tái hiện thế nào
+      placeholder: |
+        1. pm_doctor { project: "..." }
+        2. pm_dispatch { taskId: "...", kind: "plan" }
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Kết quả pm_doctor
+      description: Dán output `npm run doctor -- <project>`. Xoá đường dẫn riêng tư nếu cần, nhưng ĐỪNG dán khoá phiên.
+      render: shell
+  - type: input
+    id: versions
+    attributes:
+      label: Phiên bản
+      placeholder: "macOS 15.6 · Node 24.1 · Antigravity 2.12.2 · antigravity-pm-mcp 0.1.0"
+    validations:
+      required: true

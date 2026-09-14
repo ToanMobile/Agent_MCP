@@ -1,0 +1,25 @@
+{
+  "projectName": "Geely EX2",
+  "defaultModel": "pro",
+  "testCommand": "./scripts/test.sh",
+  "auditCommands": [
+    "./scripts/verify-docs.sh",
+    "./scripts/verify-voice-intent.sh",
+    "./scripts/verify-release-hardening.sh"
+  ],
+  "rulesFiles": ["AGENTS.md", "CLAUDE.md", ".claude/VOICE-RULES.md", ".claude/BUG-DA-GAP-VA-CACH-FIX.md"],
+  "commitPolicy": "forbid",
+  "runTimeoutMs": 1800000,
+  "stallMinutes": 15,
+  "proof": {
+    "require": 1,
+    "defaultProvider": "xe",
+    "maxWidth": 1280,
+    "providers": {
+      "xe": { "type": "adb", "serial": "192.168.1.16:5555", "timeoutMs": 60000 },
+      "mayao": { "type": "adb", "serial": "emulator-5554" },
+      "dienthoai": { "type": "adb", "serial": "emulator-5556" },
+      "man": { "type": "macos" }
+    }
+  }
+}
