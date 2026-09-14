@@ -70,3 +70,14 @@ test('chua khai provider nao va khong co sourceFile => huong dan cach khai', asy
   );
   cleanup(dir);
 });
+
+test('provider qa-visual: can url hop le', async () => {
+  const dir = tmpProject({ proof: { providers: { web: { type: 'qa-visual' } } } });
+  const cfg = loadConfig(dir);
+  await assert.rejects(
+    () => captureProof(cfg, { proofDir: path.join(dir, 'proof'), label: 'webshot', providerName: 'web' }),
+    /provider qa-visual can "url"/,
+  );
+  cleanup(dir);
+});
+

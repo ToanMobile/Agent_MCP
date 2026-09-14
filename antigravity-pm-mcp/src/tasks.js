@@ -248,6 +248,30 @@ export function discardProofs(cfg, task, label) {
   return n;
 }
 
+/** Tach canh bao heuristic thanh {hien, daXem} theo task.ackWarnings (chi tinh ack cua VONG hien tai). */
+export function locCanhBaoDaXem(task, warnings) {
+  const ack = task?.ackWarnings || {};
+  const round = task?.round || 0;
+  const hien = [];
+  const daXem = [];
+  for (const w of warnings) {
+    const o = typeof w === 'string' ? { key: null, text: w } : w;
+    if (o.key && ack[o.key] && ack[o.key].round === round) daXem.push(o); else hien.push(o);
+  }
+  return { hien, daXem };
+}
+
+/** PM danh dau da xem mot canh bao (theo khoa, theo vong, bat buoc co ghi chu vi sao chap nhan). */
+export function ackWarning(cfg, task, keys, note) {
+  if (!String(note || '').trim()) throw new Error('note rong — ghi vi sao canh bao nay chap nhan duoc (de nguoi sau doc)');
+  task.ackWarnings = task.ackWarnings || {};
+  const ks = (Array.isArray(keys) ? keys : [keys]).map(String).map((k) => k.trim()).filter(Boolean);
+  if (!ks.length) throw new Error('keys rong');
+  for (const k of ks) task.ackWarnings[k] = { round: task.round || 0, at: nowIso(), note: String(note).slice(0, 1000) };
+  addHistory(task, 'pm', 'ack_warning', `${ks.join(', ')} — ${note}`);
+  return save(cfg, task);
+}
+
 /** SHA-256 cua file anh (null neu khong doc duoc) — de phat hien anh trung byte voi task/vong khac. */
 export function hashFile(file) {
   try { return createHash('sha256').update(fs.readFileSync(file)).digest('hex'); } catch { return null; }
@@ -447,7 +471,10 @@ export function gate(cfg, task, ctx = {}) {
 
   // DE XUAT 1c: dinh nghia SQL trung (create table x2) => CHAN; tang dong / khoi lap => canh bao.
   for (const b of ctx.lintBlockers || []) missing.push(`Nhan doi noi dung: ${b}`);
-  for (const w of ctx.lintWarnings || []) warnings.push(`PM soi tan mat — ${w}`);
+  // Canh bao heuristic co KHOA: PM da xem (pm_ack, cung vong) thi an, chi dem. Chuoi tran (khong khoa) giu nguyen.
+  const { hien, daXem } = locCanhBaoDaXem(task, ctx.lintWarnings || []);
+  for (const w of hien) warnings.push(`PM soi tan mat — ${w.text} [${w.key}]`);
+  if (daXem.length) warnings.push(`${daXem.length} canh bao da xem (pm_ack): ${daXem.map((w) => w.key).join(', ')}`);
 
   // File rac agent de lai o goc repo: mac dinh CHAN (mustHave.strayFiles='block'), 'warn' thi chi canh bao.
   const rac = fileRacGocRepo(ctx.untrackedFiles, cfg);

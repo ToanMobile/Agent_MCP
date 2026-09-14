@@ -587,3 +587,13 @@ test('BG2 lastChangeAt chi do tren FILE CUA TASK: phien khac sua file ngoai task
   assert.ok(st.text.includes('chay TRUOC khi agent bao cao'), st.text);
   cleanup(dir);
 });
+
+test('util.run: stdout tieng Viet lon (nhieu chunk) khong bi cat ky tu UTF-8 o ranh gioi chunk', async () => {
+  const { runShell } = await import('../src/util.js');
+  // ~1,5 MB toan ky tu 2-3 byte => chac chan cat qua nhieu chunk 64 KB o vi tri le byte.
+  const r = await runShell("node -e \"process.stdout.write('QUÀ CỦA NƯỚC BA — ký tự Việt ừ ợ ẫ\\\\n'.repeat(40000))\"", { timeoutMs: 60000, maxBytes: 50_000_000 });
+  assert.equal(r.code, 0);
+  assert.ok(r.stdout.length > 1_000_000, `stdout ${r.stdout.length}`);
+  assert.ok(!r.stdout.includes('�'), 'khong duoc co ky tu thay the U+FFFD');
+  assert.equal(r.stdout.split('\n').filter(Boolean).every((l) => l === 'QUÀ CỦA NƯỚC BA — ký tự Việt ừ ợ ẫ'), true);
+});

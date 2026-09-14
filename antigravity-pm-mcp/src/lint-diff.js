@@ -98,6 +98,14 @@ export function phanTichDiff(diffText) {
 }
 
 /** Canh bao lam mem guard / pha test tu diff da phan tich. */
+/** Canh bao co KHOA on dinh `loai:file` de PM danh dau "da xem" (pm_ack) — text co so dong nen doi theo lan chay. */
+function cb(kind, file, text) {
+  const s = new String(text);
+  s.key = `${kind}:${file}`;
+  s.text = text;
+  return s;
+}
+
 export function soiLamMem(files) {
   const warnings = [];
   for (const f of files) {
@@ -107,19 +115,19 @@ export function soiLamMem(files) {
     // Guard bi xoa ma khong duoc them lai (y het) o cho khac.
     const guardMat = f.removed.filter((r) => GUARD_XOA.test(r.text) && !DONG_IMPORT.test(r.text) && !addedNorm.has(r.text.trim()));
     if (!laTest && guardMat.length) {
-      warnings.push(`${f.file}: ${guardMat.length} dong guard bi xoa/doi (${guardMat.slice(0, 3).map((g) => `dong ${g.line}: \`${g.text.trim().slice(0, 60)}\``).join('; ')}) — PM soi tan mat: co lam mem dieu kien bao ve khong?`);
+      warnings.push(cb('guard-xoa', f.file, `${f.file}: ${guardMat.length} dong guard bi xoa/doi (${guardMat.slice(0, 3).map((g) => `dong ${g.line}: \`${g.text.trim().slice(0, 60)}\``).join('; ')}) — PM soi tan mat: co lam mem dieu kien bao ve khong?`));
     }
     const boc = f.added.filter((a) => BOC_CO_TEST.test(a.text));
     if (!laTest && boc.length) {
-      warnings.push(`${f.file}: production code bi boc bang co test/debug (${boc.slice(0, 2).map((b) => `dong ${b.line}: \`${b.text.trim().slice(0, 60)}\``).join('; ')}) — dau hieu sua code cho test xanh`);
+      warnings.push(cb('boc-co-test', f.file, `${f.file}: production code bi boc bang co test/debug (${boc.slice(0, 2).map((b) => `dong ${b.line}: \`${b.text.trim().slice(0, 60)}\``).join('; ')}) — dau hieu sua code cho test xanh`));
     }
     if (laTest) {
       const assertMat = f.removed.filter((r) => ASSERT_TEST.test(r.text) && !DONG_IMPORT.test(r.text) && !addedNorm.has(r.text.trim()));
       if (assertMat.length) {
-        warnings.push(`${f.file}: ${assertMat.length} dong assert/expect bi xoa trong file test (${assertMat.slice(0, 2).map((g) => `dong ${g.line}`).join(', ')}) — test bi lam mem? PM soi tan mat`);
+        warnings.push(cb('assert-xoa', f.file, `${f.file}: ${assertMat.length} dong assert/expect bi xoa trong file test (${assertMat.slice(0, 2).map((g) => `dong ${g.line}`).join(', ')}) — test bi lam mem? PM soi tan mat`));
       }
       const boom = f.added.filter((a) => /\b(?:9999|Int\.MAX_VALUE|Integer\.MAX_VALUE|Long\.MAX_VALUE|float\.MaxValue|int\.MaxValue|Thread\.sleep\(\d{4,})/.test(a.text));
-      if (boom.length) warnings.push(`${f.file}: hang so "vo han" them vao test (${boom.slice(0, 2).map((b) => `dong ${b.line}: \`${b.text.trim().slice(0, 60)}\``).join('; ')}) — PM soi`);
+      if (boom.length) warnings.push(cb('hang-vo-han', f.file, `${f.file}: hang so "vo han" them vao test (${boom.slice(0, 2).map((b) => `dong ${b.line}: \`${b.text.trim().slice(0, 60)}\``).join('; ')}) — PM soi`));
     }
   }
   return warnings;
@@ -156,16 +164,16 @@ export function soiThayDoi(projectRoot, changedFiles, base) {
     if (base) {
       const goc = soDongGoc(projectRoot, base, rel);
       if (goc && goc >= 40 && dong > goc * (1 + NGUONG_TANG)) {
-        warnings.push(`${rel}: ${goc} -> ${dong} dong (+${Math.round(((dong - goc) / goc) * 100)} %) — tang bat thuong, kiem xem co bi nhan doi noi dung khong`);
+        warnings.push(cb('tang-dong', rel, `${rel}: ${goc} -> ${dong} dong (+${Math.round(((dong - goc) / goc) * 100)} %) — tang bat thuong, kiem xem co bi nhan doi noi dung khong`));
       }
     }
     const lap = timKhoiLap(text);
-    if (lap) warnings.push(`${rel}: khoi ${lap.dong} dong lap lai y het (dong ${lap.lan1} va ${lap.lan2}) — dau hieu va bang script nhan doi`);
+    if (lap) warnings.push(cb('khoi-lap', rel, `${rel}: khoi ${lap.dong} dong lap lai y het (dong ${lap.lan1} va ${lap.lan2}) — dau hieu va bang script nhan doi`));
 
     if (/\.sql$/i.test(rel)) {
       const { tables, functions } = dinhNghiaSqlTrung(text);
       if (tables.length) blockers.push(`${rel}: create table trung ${tables.map((t) => `"${t}"`).join(', ')} — dinh nghia bang 2 lan trong cung file`);
-      if (functions.length) warnings.push(`${rel}: create function trung chu ky ${functions.join(', ')} — kiem xem co phai nhan doi`);
+      if (functions.length) warnings.push(cb('sql-function-trung', rel, `${rel}: create function trung chu ky ${functions.join(', ')} — kiem xem co phai nhan doi`));
     }
   }
   // Lam mem guard / pha test: so voi commit goc (hoac HEAD) — chi file tracked co diff.

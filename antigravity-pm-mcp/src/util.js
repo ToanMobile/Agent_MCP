@@ -14,26 +14,33 @@ export function run(cmd, args = [], opts = {}) {
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: Boolean(opts.shell),
     });
-    let out = '';
-    let err = '';
+    // Gom BUFFER roi giai ma MOT LAN o cuoi: `chunk.toString()` tung khuc cat ky tu UTF-8 nhieu byte
+    // (tieng Viet) o ranh gioi chunk thanh U+FFFD — do 14/09/2026: patch `git diff` 1,4 MB co tieng Viet
+    // bi hong => `git apply` tu choi trong worktree dong bang.
+    const outChunks = [];
+    const errChunks = [];
+    let outLen = 0;
+    let errLen = 0;
     let timedOut = false;
     const limit = opts.maxBytes ?? 4_000_000;
-    child.stdout.on('data', (d) => { if (out.length < limit) out += d.toString(); });
-    child.stderr.on('data', (d) => { if (err.length < limit) err += d.toString(); });
+    child.stdout.on('data', (d) => { if (outLen < limit) { outChunks.push(d); outLen += d.length; } });
+    child.stderr.on('data', (d) => { if (errLen < limit) { errChunks.push(d); errLen += d.length; } });
+    const out = () => Buffer.concat(outChunks).toString('utf8');
+    const err = () => Buffer.concat(errChunks).toString('utf8');
     const timer = opts.timeoutMs
       ? setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, opts.timeoutMs)
       : null;
     child.on('error', (e) => {
       if (timer) clearTimeout(timer);
-      resolve({ code: -1, stdout: out, stderr: `${err}\nspawn error: ${e.message}`, durationMs: Date.now() - started, timedOut, spawnFailed: true });
+      resolve({ code: -1, stdout: out(), stderr: `${err()}\nspawn error: ${e.message}`, durationMs: Date.now() - started, timedOut, spawnFailed: true });
     });
     child.on('close', (code, signal) => {
       if (timer) clearTimeout(timer);
       resolve({
         code: code === null ? -1 : code,
         signal: signal || null,
-        stdout: out,
-        stderr: err,
+        stdout: out(),
+        stderr: err(),
         durationMs: Date.now() - started,
         timedOut,
         spawnFailed: false,

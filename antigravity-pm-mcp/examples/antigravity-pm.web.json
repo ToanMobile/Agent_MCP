@@ -2,7 +2,7 @@
   "projectName": "Web app",
   "defaultModel": "pro",
   "testCommand": "npm test -- --run",
-  "auditCommands": ["npm run lint", "npx tsc --noEmit"],
+  "auditCommands": ["npm run lint", "npx tsc --noEmit", "node .claude/skills/qa-visual/scripts/audit-layout.mjs"],
   "rulesFiles": ["AGENTS.md", "CONTRIBUTING.md"],
   "commitPolicy": "forbid",
   "proof": {
@@ -10,8 +10,8 @@
     "defaultProvider": "trang",
     "providers": {
       "trang": {
-        "type": "shell",
-        "command": "npx --yes playwright screenshot --wait-for-timeout=2000 http://localhost:5173 {{out}}"
+        "type": "qa-visual",
+        "url": "http://localhost:5173"
       },
       "man": { "type": "macos", "region": "0,0,1440,900" }
     }

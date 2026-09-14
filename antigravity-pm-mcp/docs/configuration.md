@@ -44,6 +44,7 @@ Thứ tự đè lên nhau: **mặc định → cấu hình chung → cấu hình
 | `testStages` | `{}` | Lệnh test theo stage, vd `{"unit": "./scripts/test-all.sh --unit"}` — dùng với `pm_run kind=test stage=unit skipReason="..."` khi cổng ngoài đỏ vì lý do ngoài code |
 | `promptPlanMaxBytes` | `12000` | Trần số ký tự `plan.md` nhúng vào prompt; phần dư agent đọc theo đường dẫn. Plan 38 KB từng làm agent chết context |
 | `proof.providers.<tên>.type = "browser"` | — | Chrome/Chromium headless: `binary` (tự dò nếu bỏ trống), `windowSize` (`1280,800`), `url` mặc định, `args`. Dùng cho task `proofKind: browser` |
+| `proof.providers.<tên>.type = "qa-visual"` | — | Playwright / qa-visual chụp ảnh web: tự động đợi font/mạng ổn định, hỗ trợ form login và đo layout DOM: `url`, `width`, `height`, `fullPage` |
 | `antigravity.workspaceCheck` | `"strict"` | `strict` ⇒ `pm_dispatch` **thất bại** nếu hội thoại mở trong workspace khác; `warn` ⇒ chỉ cảnh báo |
 | `antigravity.projectId` | `null` | Thử nghiệm, chưa chắc Antigravity tôn trọng |
 

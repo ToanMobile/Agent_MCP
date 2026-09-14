@@ -4,6 +4,7 @@
 // trong .antigravity-pm.json de moi project tu chon cach chup (adb tu xe/may ao, man hinh
 // macOS, hay 1 lenh tuy y).
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { run, runShell, ensureDir, nowIso, slug, exists } from './util.js';
 
@@ -84,6 +85,39 @@ async function capture(cfg, provider, outFile, extra = {}) {
     const r = await run(bin, args, { timeoutMs: provider.timeoutMs || 60000, cwd: cfg.projectRoot });
     return { cmd: `${bin} ${args.join(' ')}`, r };
   }
+  if (type === 'qa-visual' || type === 'playwright') {
+    // Chup bang Playwright / qa-visual voi doi on dinh trang, form login, audit layout
+    const url = extra.url || provider.url;
+    if (!url) throw new Error('provider qa-visual can "url" (http(s)://... hoac file:///...)');
+    const width = provider.width || 1280;
+    const height = provider.height || 800;
+
+    const qaVisualScript = [
+      path.join(cfg.projectRoot, '.claude', 'skills', 'qa-visual', 'scripts', 'capture-screens.mjs'),
+      path.join(cfg.projectRoot, 'universal-agent-devkit', 'skills', 'qa-visual', 'scripts', 'capture-screens.mjs'),
+      path.join(os.homedir(), '.claude', 'skills', 'qa-visual', 'scripts', 'capture-screens.mjs'),
+      path.join(os.homedir(), '.gemini', 'config', 'skills', 'qa-visual', 'scripts', 'capture-screens.mjs'),
+    ].find((p) => exists(p));
+
+    let cmd, r;
+    if (qaVisualScript && exists(path.join(cfg.projectRoot, 'qa.config.json'))) {
+      cmd = `node ${JSON.stringify(qaVisualScript)} --url ${JSON.stringify(url)}`;
+      r = await runShell(cmd, { timeoutMs: provider.timeoutMs || 90000, cwd: cfg.projectRoot });
+    } else {
+      const script = `import { chromium } from 'playwright';
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext({ viewport: { width: ${width}, height: ${height} } });
+const page = await context.newPage();
+await page.goto(${JSON.stringify(url)}, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.waitForTimeout(500);
+await page.screenshot({ path: ${JSON.stringify(outFile)}, fullPage: ${provider.fullPage ? 'true' : 'false'} });
+await browser.close();`;
+      const nodeCmd = `node --input-type=module -e ${JSON.stringify(script)}`;
+      cmd = `playwright screenshot ${url}`;
+      r = await runShell(nodeCmd, { timeoutMs: provider.timeoutMs || 90000, cwd: cfg.projectRoot });
+    }
+    return { cmd, r };
+  }
   if (type === 'file') {
     const src = extra.sourceFile || provider.sourceFile;
     if (!src) throw new Error('provider file can "sourceFile"');
@@ -92,7 +126,7 @@ async function capture(cfg, provider, outFile, extra = {}) {
     fs.copyFileSync(abs, outFile);
     return { cmd: `cp ${abs}`, r: { code: 0, stdout: '', stderr: '', durationMs: 0 } };
   }
-  throw new Error(`Khong biet provider type "${type}" (chi ho tro adb | macos | shell | browser | file)`);
+  throw new Error(`Khong biet provider type "${type}" (chi ho tro adb | macos | shell | browser | qa-visual | playwright | file)`);
 }
 
 const CHROME_PATHS = [
