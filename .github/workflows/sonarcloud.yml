@@ -19,6 +19,8 @@ defaults:
 
 jobs:
   sonarcloud:
+    # Dich vu ben thu ba cua upstream (lusky3), can token rieng — fork nay khong dung; CodeQL/Snyk/Trivy/Grype/Scorecard da che.
+    if: github.repository == 'lusky3/play-store-mcp'
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     steps:

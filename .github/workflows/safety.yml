@@ -21,6 +21,8 @@ defaults:
 
 jobs:
   safety:
+    # Dich vu ben thu ba cua upstream (lusky3), can token rieng — fork nay khong dung; CodeQL/Snyk/Trivy/Grype/Scorecard da che.
+    if: github.repository == 'lusky3/play-store-mcp'
     name: Safety Check
     runs-on: ubuntu-latest
     steps:
