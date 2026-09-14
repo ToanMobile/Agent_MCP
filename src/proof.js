@@ -73,6 +73,17 @@ async function capture(cfg, provider, outFile, extra = {}) {
     const r = await runShell(cmd, { timeoutMs: provider.timeoutMs || 180000, cwd: cfg.projectRoot });
     return { cmd, r };
   }
+  if (type === 'browser') {
+    // Trinh duyet headless cho task web/SQL (khong co thiet bi de chup). URL/file do PM truyen (extra.url) hoac provider.url.
+    const url = extra.url || provider.url;
+    if (!url) throw new Error('provider browser can "url" (http(s)://... hoac file:///...)');
+    const bin = provider.binary || timChrome();
+    if (!bin) throw new Error('Khong tim thay Chrome/Chromium — khai provider.binary');
+    const size = provider.windowSize || '1280,800';
+    const args = ['--headless=new', '--disable-gpu', '--hide-scrollbars', `--window-size=${size}`, `--screenshot=${outFile}`, ...(provider.args || []), url];
+    const r = await run(bin, args, { timeoutMs: provider.timeoutMs || 60000, cwd: cfg.projectRoot });
+    return { cmd: `${bin} ${args.join(' ')}`, r };
+  }
   if (type === 'file') {
     const src = extra.sourceFile || provider.sourceFile;
     if (!src) throw new Error('provider file can "sourceFile"');
@@ -81,19 +92,32 @@ async function capture(cfg, provider, outFile, extra = {}) {
     fs.copyFileSync(abs, outFile);
     return { cmd: `cp ${abs}`, r: { code: 0, stdout: '', stderr: '', durationMs: 0 } };
   }
-  throw new Error(`Khong biet provider type "${type}" (chi ho tro adb | macos | shell | file)`);
+  throw new Error(`Khong biet provider type "${type}" (chi ho tro adb | macos | shell | browser | file)`);
+}
+
+const CHROME_PATHS = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+];
+
+/** Duong dan Chrome/Chromium dau tien ton tai; null neu khong co. */
+export function timChrome() {
+  return CHROME_PATHS.find((p) => exists(p)) || null;
 }
 
 /**
  * Lay 1 anh nghiem thu.
  * @returns {Promise<{file:string,bytes:number,width:number|null,mime:string,base64:string,warnings:string[],command:string}>}
  */
-export async function captureProof(cfg, { proofDir, label, providerName, sourceFile, serial, region, window: win }) {
+export async function captureProof(cfg, { proofDir, label, providerName, sourceFile, serial, region, window: win, url }) {
   const warnings = [];
   let provider;
-  let usedName = providerName || cfg.proof?.defaultProvider || null;
+  // sourceFile co mat => provider "file" thang defaultProvider (T0024, 14/09/2026: truyen sourceFile ma tool van
+  // chay `adb screencap` vao xe roi lo "device not found"). Chi provider TRUYEN RO moi de len duoc.
+  let usedName = providerName || (sourceFile ? 'file' : (cfg.proof?.defaultProvider || null));
 
-  if (sourceFile && !usedName) {
+  if (sourceFile && usedName === 'file') {
     usedName = 'file';
     provider = { type: 'file', sourceFile };
   } else {
@@ -114,7 +138,7 @@ export async function captureProof(cfg, { proofDir, label, providerName, sourceF
 
   const stamp = nowIso().replace(/[:.]/g, '-');
   const outFile = path.join(ensureDir(proofDir), `${stamp}__${slug(label || 'proof', 40)}.png`);
-  const { cmd, r } = await capture(cfg, provider, outFile, { sourceFile, serial, region, window: win });
+  const { cmd, r } = await capture(cfg, provider, outFile, { sourceFile, serial, region, window: win, url });
 
   if (r.timedOut) throw new Error(`Chup anh qua han: ${cmd}`);
   if (r.code !== 0) throw new Error(`Chup anh that bai (exit ${r.code}): ${cmd}\n${(r.stderr || r.stdout || '').slice(0, 800)}`);

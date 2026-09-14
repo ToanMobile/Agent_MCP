@@ -73,13 +73,13 @@ function taskSanSangNghiemThu(cfgOver = {}) {
   writeFile(p.plan, '# Ke hoach');
   recordVerdict(cfg, task, { kind: 'plan', verdict: 'pass' });
   recordDispatch(cfg, task, { kind: 'implement' });
-  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da sua' }));
+  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da sua', files_changed: ['src/Kinh.kt', 'src/test/java/KinhTest.kt'] }));
   // Agent that mat vai giay moi bao cao; test chay trong 1ms nen phai gia lap moc thoi gian.
   const later = new Date(Date.now() + 2000);
   fs.utimesSync(p.result, later, later);
   recordVerdict(cfg, task, { kind: 'audit', verdict: 'pass' });
   recordVerdict(cfg, task, { kind: 'review', verdict: 'pass' });
-  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 5 });
+  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 5, evidence: { ok: true, source: 'stdout', reason: 'test' } });
   return { dir, cfg, task, p };
 }
 
@@ -111,7 +111,7 @@ test('anh chup bang man hinh may trong khi du an doi anh tu xe => BI CHAN', () =
   const img = writeFile(path.join(p.proofDir, 'a.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'anh man hinh may', provider: 'man', file: img, bytes: PNG_1PX.length });
 
-  const g = gate(cfg, task, { changedFiles: ['src/Kinh.kt', 'src/test/KinhTest.kt'] });
+  const g = gate(cfg, task, { changedFiles: ['src/Kinh.kt', 'src/test/java/KinhTest.kt'] });
   assert.equal(g.ok, false);
   assert.ok(g.missing.some((m) => m.includes('thiet bi that') && m.includes('xe')), g.missing.join(' | '));
   cleanup(dir);
@@ -121,11 +121,11 @@ test('anh agent tu dua (provider file) cung KHONG duoc tinh khi du an doi anh tu
   const { dir, cfg, task, p } = taskSanSangNghiemThu({ mustHave: { proofFrom: ['xe'] } });
   const img = writeFile(path.join(p.proofDir, 'a.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'anh agent dua', provider: 'file', file: img, bytes: PNG_1PX.length });
-  assert.equal(gate(cfg, task, { changedFiles: ['src/Kinh.kt', 'src/test/KinhTest.kt'] }).ok, false);
+  assert.equal(gate(cfg, task, { changedFiles: ['src/Kinh.kt', 'src/test/java/KinhTest.kt'] }).ok, false);
 
   const img2 = writeFile(path.join(p.proofDir, 'b.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'anh tu xe', provider: 'xe', file: img2, bytes: PNG_1PX.length });
-  assert.equal(gate(cfg, task, { changedFiles: ['src/Kinh.kt', 'src/test/KinhTest.kt'] }).ok, true);
+  assert.equal(gate(cfg, task, { changedFiles: ['src/Kinh.kt', 'src/test/java/KinhTest.kt'] }).ok, true);
   cleanup(dir);
 });
 

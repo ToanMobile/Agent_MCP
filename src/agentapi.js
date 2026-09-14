@@ -148,6 +148,12 @@ export function conversationProgress(conversationId) {
       } catch { /* khong co thi thoi */ }
     }
   }
+  // Transcript cua brain la tin hieu that hon CSDL (de xuat Unity 14/09/2026): stat mtime.
+  const tr = transcriptPath(conversationId);
+  try {
+    const st = fs.statSync(tr);
+    if (st.mtimeMs > newest) { newest = st.mtimeMs; file = tr; }
+  } catch { /* khong co */ }
   if (!newest) return { found: false, lastActivityAt: null, idleMinutes: null, file: null };
   return {
     found: true,
@@ -155,6 +161,41 @@ export function conversationProgress(conversationId) {
     idleMinutes: Math.round((Date.now() - newest) / 60000),
     file,
   };
+}
+
+function transcriptPath(conversationId) {
+  return path.join(process.env.HOME || '', '.gemini/antigravity/brain', conversationId, '.system_generated/logs/transcript.jsonl');
+}
+
+/**
+ * Loi stream trong transcript: dem dong `"type":"ERROR_MESSAGE"` o DUOI file (64 KB cuoi) va xem buoc cuoi co phai loi khong.
+ * NGOAI LE co chu dich cua luat "khong mo noi dung hoi thoai": chi lay hai truong type + created_at, KHONG tra ve content.
+ * Vi sao (Unity T0007, 14/09/2026): 3/6 vong phan bien treo vi "The stream was interrupted" — stallMinutes chi dem im lang, khong thay.
+ */
+export function transcriptErrors(conversationId) {
+  const tr = transcriptPath(conversationId);
+  let fd;
+  try {
+    const st = fs.statSync(tr);
+    const len = Math.min(st.size, 65536);
+    const buf = Buffer.alloc(len);
+    fd = fs.openSync(tr, 'r');
+    fs.readSync(fd, buf, 0, len, st.size - len);
+    const lines = buf.toString('utf8').split('\n').filter((l) => l.trim());
+    const errs = lines.filter((l) => l.includes('"type":"ERROR_MESSAGE"'));
+    const last = lines[lines.length - 1] || '';
+    const at = (l) => /"created_at":"([^"]+)"/.exec(l)?.[1] || null;
+    return {
+      found: true,
+      errorCount: errs.length,
+      lastErrorAt: errs.length ? at(errs[errs.length - 1]) : null,
+      lastStepIsError: last.includes('"type":"ERROR_MESSAGE"'),
+    };
+  } catch {
+    return { found: false, errorCount: 0, lastErrorAt: null, lastStepIsError: false };
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
 }
 
 export { AntigravityUnavailable };

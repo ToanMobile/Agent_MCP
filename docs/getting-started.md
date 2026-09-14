@@ -6,7 +6,7 @@
 git clone https://github.com/ToanMobile/antigravity-pm-mcp.git
 cd antigravity-pm-mcp
 npm install
-npm test        # 51 test, phải xanh hết
+npm test        # phải xanh hết (offline)
 ```
 
 ## 2. Nối vào Claude Code

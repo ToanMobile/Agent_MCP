@@ -196,7 +196,7 @@ Chi tiết: [.github/SECURITY.md](.github/SECURITY.md).
 ## 🧪 Phát triển
 
 ```bash
-npm test                  # 51 test, không cần Antigravity, không cần mạng
+npm test                  # offline: không cần Antigravity, không cần mạng, không cần thiết bị
 npm run test:coverage
 npm run lint              # kiểm tra cú pháp mọi file
 npm run doctor -- <proj>  # tự kiểm tra đường dây thật

@@ -11,6 +11,10 @@ import { tmpProject, cleanup, writeFile, sampleTaskArgs, PNG_1PX } from './helpe
 
 // Luat bat buoc: thay doi phai kem file test. Moi test "phai dat" deu phai dua ctx nay vao.
 const CO_FILE_TEST = { changedFiles: ['src/Kinh.kt', 'src/test/java/KinhTest.kt'] };
+// ...va file test do phai nam trong files_changed agent khai.
+const KHAI_DU = ['src/Kinh.kt', 'src/test/java/KinhTest.kt'];
+// Bang chung test da chay that (src/evidence.js). Run khong co evidence = khong xanh.
+const EV_OK = { source: 'stdout', weak: true, noop: false, ok: true, reason: 'test' };
 
 function setupTask(cfgOver = {}) {
   const dir = tmpProject({ testCommand: 'echo ok', ...cfgOver });
@@ -24,10 +28,10 @@ function makeEverythingGreen(cfg, task) {
   const p = contractPaths(cfg, task);
   writeFile(p.plan, '# Ke hoach\n- Buoc 1');
   recordVerdict(cfg, task, { kind: 'plan', verdict: 'pass' });
-  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da lam', files_changed: ['a.kt'] }));
+  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da lam', files_changed: KHAI_DU }));
   recordVerdict(cfg, task, { kind: 'audit', verdict: 'pass' });
   recordVerdict(cfg, task, { kind: 'review', verdict: 'pass' });
-  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 10 });
+  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 10, evidence: EV_OK });
   const img = path.join(p.proofDir, 'shot.png');
   writeFile(img, PNG_1PX);
   recordProof(cfg, task, { label: 'man hinh xac nhan', provider: 'adb', file: img, bytes: PNG_1PX.length });
@@ -122,13 +126,13 @@ test('sau rework: result.json ghi lai + bang chung moi thi nghiem thu lai duoc',
   markRework(cfg, task, 'sua lai di');
 
   const p = contractPaths(cfg, task);
-  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da sua theo phat hien' }));
+  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da sua theo phat hien', files_changed: KHAI_DU }));
   // Agent that mat vai giay/phut moi bao cao lai; test chay trong 1ms nen phai gia lap moc thoi gian.
   const later = new Date(Date.now() + 2000);
   fs.utimesSync(p.result, later, later);
   recordVerdict(cfg, task, { kind: 'audit', verdict: 'pass' });
   recordVerdict(cfg, task, { kind: 'review', verdict: 'pass' });
-  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 5 });
+  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 5, evidence: EV_OK });
   const img = writeFile(path.join(p.proofDir, 'shot2.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'lan 2', provider: 'adb', file: img, bytes: PNG_1PX.length });
 
@@ -207,13 +211,13 @@ test('agent trien khai THAT sau khi duoc giao thi nghiem thu duoc', () => {
   recordDispatch(cfg, task, { kind: 'implement' });
 
   // Agent bao cao SAU khi duoc giao (test chay trong 1ms nen phai gia lap moc thoi gian).
-  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da sua', files_changed: ['a.kt'] }));
+  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da sua', files_changed: KHAI_DU }));
   const later = new Date(Date.now() + 2000);
   fs.utimesSync(p.result, later, later);
 
   recordVerdict(cfg, task, { kind: 'audit', verdict: 'pass' });
   recordVerdict(cfg, task, { kind: 'review', verdict: 'pass' });
-  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 5 });
+  recordRun(cfg, task, { kind: 'test', command: 'echo ok', exitCode: 0, durationMs: 5, evidence: EV_OK });
   const img = writeFile(path.join(p.proofDir, 'shot.png'), PNG_1PX);
   recordProof(cfg, task, { label: 'anh', provider: 'adb', file: img, bytes: PNG_1PX.length });
 

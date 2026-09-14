@@ -32,14 +32,17 @@ function noFabricationBlock() {
   ].join('\n');
 }
 
-const PLAN_MAX = 24000;
+// Prompt phinh => agent chet context (Unity T0007: prompt 32 KB nhung plan 38 KB, 3/6 vong "stream interrupted").
+// Mac dinh 12 KB, project doi bang promptPlanMaxBytes; phan con lai agent doc theo duong dan.
+export const PLAN_MAX_DEFAULT = 12000;
 
-/** Toan van plan.md do PM viet — agent chua tung thay no, phai nhet vao prompt. */
+/** Toan van plan.md do PM viet — agent chua tung thay no, phai nhet vao prompt (co tran). */
 function planText(cfg, task) {
   const f = contractPaths(cfg, task).plan;
   if (!fs.existsSync(f)) return '';
   const t = fs.readFileSync(f, 'utf8');
-  return t.length <= PLAN_MAX ? t : `${t.slice(0, PLAN_MAX)}\n… [plan dai, cat bot — doc ban day du tai ${f}]`;
+  const max = Number(cfg?.promptPlanMaxBytes) > 0 ? Number(cfg.promptPlanMaxBytes) : PLAN_MAX_DEFAULT;
+  return t.length <= max ? t : `${t.slice(0, max)}\n… [plan dai ${t.length} ky tu, cat o ${max} — DOC BAN DAY DU tai ${f} truoc khi lam]`;
 }
 
 function planBlock(cfg, task) {
@@ -73,9 +76,23 @@ function guardrails(cfg) {
     '- Khong xoa, khong lam mem cac dieu kien bao ve (guard) dang co san — neu thay can doi, GHI RA de PM quyet, dung tu y sua.',
     '- Khong them thu vien moi neu chua co trong plan da duoc PM duyet.',
   ];
+  // Mat viec chua commit (12/09 va 13/09/2026 tren Geely EX2: `git restore .`, `git checkout <file cua task khac>`)
+  // KHONG lien quan chinh sach commit => cam VO DIEU KIEN, khong nam trong if commitPolicy.
+  lines.push('- TUYET DOI KHONG chay lenh lam mat thay doi trong cay lam viec: `git checkout <file>`, `git checkout -- .`, `git checkout .`, '
+    + '`git restore`, `git stash`, `git clean`, `git reset --hard`, `git reset <file>`. Cay ma dang co viec CHUA COMMIT cua task khac va cua chu du an — '
+    + 'mat la mat han. Muon hoan tac thi SUA TAY dung doan cua minh.');
+  lines.push('- Loi bien dich / test do o file KHONG thuoc task nay (task khac dang sua do): ghi vao result.json -> "blocked" kem ten file, DUNG LAI. '
+    + 'KHONG tu sua file do, KHONG git checkout/restore no, KHONG "don dep" cho build qua.');
   if (cfg.commitPolicy === 'forbid') {
-    lines.push('- TUYET DOI KHONG chay `git commit`, `git push`, `git reset --hard`, `git checkout -- .` hay bat ky lenh lam mat thay doi dang co trong cay lam viec. PM se tu commit.');
+    lines.push('- KHONG chay `git commit`, `git push`. PM se tu commit.');
   }
+  lines.push('- Task qua lon / qua phuc tap: KHONG tu choi ca task. Lam BUOC NHO NHAT trong ke hoach truoc (theo thu tu nho -> lon), '
+    + 'ghi result.json phase "IMPLEMENT" cho phan da xong va liet ke buoc con lai trong "blocked". PM se giao tiep tung buoc.');
+  lines.push('- KHONG va file bang script (python/sed/patch/heredoc ghi de). Sua TRUC TIEP tung doan bang cong cu sua file. '
+    + 'Do duoc 14/09/2026: script va lam file nhan doi noi dung (HTML 4689 -> 6730 dong, SQL create table x2) va chen @Test ra ngoai class. '
+    + 'PM soi so dong tang + khoi lap + dinh nghia SQL trung, phat hien la tra viec.');
+  lines.push('- KHONG de lai script tam o goc repo (fix_*.py, update_*.py, modify_*.py, *_patch.kt, *.bak...). Xoa truoc khi bao cao, '
+    + 'va chay `git status --short` doi chieu: moi file thay doi phai nam trong "files_changed".');
   lines.push('- Truoc khi doi signature cua ham/lop, thanh vien cua lop cha / interface, API cong khai hay object dung chung: '
     + 'liet ke HET noi dang dung no (grep ca thu muc test — src/test, tests/ hay bi bo sot) va ghi vao result.json -> "notes". '
     + 'Khong liet ke duoc thi dung sua, bao PM.');
@@ -134,7 +151,7 @@ function resultContract(paths, phase, cfg) {
  * Prompt mo hoi thoai PHAN BIEN KE HOACH: agent doc plan cua PM va tim cho sai.
  * Chua duoc sua bat ky file nao o giai doan nay.
  */
-export function buildPlanCritiquePrompt(cfg, task) {
+export function buildPlanCritiquePrompt(cfg, task, { planHash = null, delta = null } = {}) {
   const paths = contractPaths(cfg, task);
   return [
     `# Phan bien KE HOACH cua PM — task ${task.id}: ${task.title}`,
@@ -147,7 +164,9 @@ export function buildPlanCritiquePrompt(cfg, task) {
     '## Yeu cau goc',
     task.brief,
     '',
+    planHash ? `MA KE HOACH (plan_hash): ${planHash} — ban phan bien DUNG ban nay; ghi lai ma nay vao plan-review.json.` : '',
     planBlock(cfg, task),
+    delta ? deltaBlock(delta) : '',
     dodBlock(task, cfg),
     rulesBlock(cfg),
     '## Viec can lam',
@@ -163,16 +182,46 @@ export function buildPlanCritiquePrompt(cfg, task) {
     '```json',
     `{
   "phase": "PLAN_REVIEW",
+  "plan_hash": "${planHash || '<ma ke hoach o dau prompt>'}",
   "verdict": "ok" | "co_van_de",
   "findings": [
-    { "severity": "blocker|major|minor", "buoc": "<buoc nao trong ke hoach>", "file": "<file:dong>", "problem": "<ke hoach sai cho nao>", "why": "<hong the nao neu lam theo>", "fix": "<nen sua ke hoach ra sao>" }
+    { "severity": "blocker|major|minor", "buoc": "<buoc nao trong ke hoach>", "file": "<file:dong>", "snippet": "<CHEP NGUYEN VAN 1 dong code tai file:dong>", "problem": "<ke hoach sai cho nao>", "why": "<hong the nao neu lam theo>", "fix": "<nen sua ke hoach ra sao>" }
   ],
-  "facts_checked": [ { "claim": "<dieu ke hoach khang dinh>", "ket qua": "dung|sai|khong kiem duoc", "evidence": "<file:dong hoac lenh da chay>" } ],
+  "facts_checked": [ { "claim": "<dieu ke hoach khang dinh>", "ket qua": "dung|sai|khong kiem duoc", "evidence": "<file:dong hoac lenh da chay>", "snippet": "<1 dong nguyen van tai file:dong, neu evidence la file>" } ],
   "notes": ""
 }`,
     '```',
+    '- Moi "file:dong" ban ghi se duoc PM KIEM BANG MAY (mo file dung dong, so snippet). Trich dan code khong ton tai = bao cao bi loai.',
+    '- Ghi DUNG khuon tren: "verdict" chi nhan "ok" hoac "co_van_de"; "findings" la mang (rong neu khong co). Khuon khac (hasErrors, ACCEPT_WITH_REVISIONS, id/category) KHONG duoc chap nhan.',
     '- Ghi xong file thi DUNG LAI. PM se doc roi quyet dinh sua ke hoach hay giao trien khai.',
   ].filter(Boolean).join('\n');
+}
+
+/** Khoi "chi phan bien phan doi" (focus=delta): diff ke hoach + finding da xu ly, de agent khong lap diem cu. */
+function deltaBlock(delta) {
+  return [
+    `## CHI PHAN BIEN PHAN DOI so voi ban truoc (v${delta.fromVersion} -> v${delta.toVersion})`,
+    '- Cac finding sau PM DA XU LY trong ban nay — KHONG neu lai tru khi ban thay chua xu ly dung (dan file:dong):',
+    ...(delta.previousFindings.length ? delta.previousFindings.map((f) => `  - ${f}`) : ['  (khong co)']),
+    '',
+    '### Diff ke hoach (unified)',
+    '```diff',
+    delta.diff || '(khong lay duoc diff — doc ban day du o tren)',
+    '```',
+    '',
+  ].join('\n');
+}
+
+/** Tin nhac agent ghi lai plan-review.json dung khuon (tu dong, 1 lan cho moi plan_hash). */
+export function buildPlanReviewFixMessage(cfg, task, loi, planHash) {
+  const paths = contractPaths(cfg, task);
+  return [
+    `# ${task.id} — plan-review.json SAI KHUON, ghi lai`,
+    '',
+    `Loi: ${loi.join('; ')}`,
+    `Ghi lai ${path.join(paths.dir, 'plan-review.json')} dung khuon: {"phase":"PLAN_REVIEW","plan_hash":"${planHash || ''}","verdict":"ok"|"co_van_de","findings":[...],"facts_checked":[...],"notes":""}`,
+    '- Khong doi noi dung phan bien, chi doi khuon. Ghi xong thi dung.',
+  ].join('\n');
 }
 
 /** Tin nhan duyet plan + lenh trien khai. */
@@ -254,14 +303,70 @@ export function buildAuditPrompt(cfg, task, scope = '') {
   "phase": "AUDIT",
   "verdict": "pass" | "fail",
   "findings": [
-    { "severity": "blocker|major|minor", "file": "<file:dong>", "problem": "<sai gi>", "why": "<hong the nao>", "fix": "<sua sao>" }
+    { "severity": "blocker|major|minor", "file": "<file:dong>", "snippet": "<CHEP NGUYEN VAN 1 dong code tai file:dong>", "problem": "<sai gi>", "why": "<hong the nao>", "fix": "<sua sao>" }
   ],
-  "dod_check": [ { "item": "<muc DoD>", "met": true, "evidence": "<bang chung>" } ],
+  "dod_check": [ { "item": "<muc DoD>", "met": true, "evidence": "<bang chung, file:dong neu la code>", "snippet": "<1 dong nguyen van neu evidence la file:dong>" } ],
   "notes": ""
 }`,
     '```',
+    '- Moi "file:dong" ban ghi se duoc PM KIEM BANG MAY (mo file dung dong, so snippet). Trich dan code khong ton tai = bao cao bi loai.',
     '- KHONG sua code. Chi doc va bao cao. Ghi xong file thi dung.',
   ].filter(Boolean).join('\n');
+}
+
+/**
+ * Tin nhan danh thuc hoi thoai im lau (pm_status nudge=true). Do tren may that 12/09/2026:
+ * send-message danh thuc duoc hoi thoai da im 11 phut. Tin nhan ngan, khong doi hoi gi moi.
+ */
+export function buildNudgeMessage(cfg, task, idleMinutes) {
+  const paths = contractPaths(cfg, task);
+  return [
+    `# ${task.id} — PM kiem tra: hoi thoai im ${idleMinutes} phut.`,
+    '',
+    '- Dang lam do: tiep tuc, khong can tra loi tin nay.',
+    `- Da xong: ghi ${paths.result} (phase "IMPLEMENT") theo dung schema da gui roi dung lai.`,
+    '- Dang vuong (thieu quyen, lenh treo, loi o file khong thuoc task): ghi result.json -> "blocked" roi dung lai. KHONG git checkout/restore.',
+    '- Thay task qua lon: lam buoc nho nhat truoc, bao cao phan da xong, liet ke buoc con lai trong "blocked".',
+  ].join('\n');
+}
+
+/**
+ * Mau ke hoach cho PM. Bai hoc T0012/T0022 (13/09/2026): agent tu choi "task qua phuc tap",
+ * rework voi thu tu buoc nho -> lon thi lam duoc. Muc "Thu tu buoc" la bat buoc phai co.
+ */
+export function planTemplate(task) {
+  return [
+    `# Ke hoach ${task?.id || 'Txxxx'} — ${task?.title || ''}`,
+    '',
+    '## Hien trang (file:dong, da doc that)',
+    '- ',
+    '',
+    '## Thu tu buoc (NHO -> LON, moi buoc tu kiem chung duoc)',
+    '1. ',
+    '2. ',
+    '',
+    '## File duoc sua / CAM sua',
+    '- Sua: ',
+    '- Cam: ',
+    '',
+    '## Oracle do -> xanh (task sua loi)',
+    '- Lenh tai hien: ',
+    '',
+    '## Test kem theo',
+    '- ',
+    '',
+  ].join('\n');
+}
+
+/** Ke hoach thieu gi? Chi canh bao, khong chan — PM van la nguoi quyet. */
+export function kiemTraKeHoach(text) {
+  const warnings = [];
+  const t = String(text || '');
+  if (!/^\s*\d+[.)]\s+\S/m.test(t)) {
+    warnings.push('Ke hoach khong co danh sach buoc danh so (1. 2. 3.) — agent hay tu choi "task qua phuc tap"; hay chia buoc NHO -> LON.');
+  }
+  if (!/test/i.test(t)) warnings.push('Ke hoach khong nhac den test nao — cong nghiem thu se doi file test thay doi.');
+  return warnings;
 }
 
 /** Tin nhan yeu cau agent tu chup anh nghiem thu. */

@@ -55,6 +55,29 @@ export const DEFAULT_CONFIG = {
     // Anh nghiem thu phai chup bang mot trong cac provider nay (thiet bi that).
     // Rong = chap nhan moi provider.
     proofFrom: [],
+    // Task sua loi (type=bugfix) phai co oracle do -> xanh trong result.json. Task cu (chua co type) duoc mien.
+    oracle: false,
+    // Thu muc doc quyen: KHONG giao song song hai task cung dung vao (vi du ["shared/"]).
+    exclusiveDirs: [],
+    // Regex them de nhan dien test "xanh gia" (bo mac dinh: src/evidence.js NOOP_RULES + SWALLOWED_RULES).
+    testSuspectPatterns: [],
+    // File rac o goc repo => canh bao (rong = bo mac dinh trong policy.js).
+    strayFilePatterns: [],
+  },
+  // Tran so ky tu plan.md nhung vao prompt (phan con lai agent doc theo duong dan). Unity T0007: plan 38 KB lam agent chet context.
+  promptPlanMaxBytes: 12000,
+  // Cac stage test rieng (pm_run kind=test stage=<ten> skipReason=...), vi du { "unit": "./scripts/test-all.sh --unit" }.
+  // Dung khi cong ngoai (kho public, thiet bi) dang do vi ly do ngoai code — van co evidence, khong chay tay ngoai tool.
+  testStages: {},
+  // Bang chung test phia PM (src/evidence.js): glob XML JUnit; rong = chi co stdout (weak).
+  // Android/Gradle: ["**/build/test-results/**/TEST-*.xml"].
+  testEvidence: {
+    resultsGlob: [],
+  },
+  // Oracle do -> xanh do PM tu replay (pm_run kind=oracle, src/oracle.js).
+  oracle: {
+    // File phu can chep vao worktree code goc de test chay duoc (vi du local.properties).
+    copyToWorktree: [],
   },
   antigravity: {
     // strict = dispatch that bai neu workspace cua conversation khong phai goc project nay.

@@ -1,7 +1,7 @@
 // Bao cao nghiem thu: 1 file markdown lam bang chung, dan duoc cho chu du an.
 import path from 'node:path';
 import fs from 'node:fs';
-import { contractPaths, gate, freshness } from './tasks.js';
+import { contractPaths, gate, freshness, isGreenRun } from './tasks.js';
 import { writeFileAtomic, nowIso } from './util.js';
 
 export function renderReport(cfg, task, { summary = '' } = {}) {
@@ -46,7 +46,7 @@ export function renderReport(cfg, task, { summary = '' } = {}) {
   L.push(`| Bao cao agent (result.json) | ${fresh.resultExists ? (fresh.resultFresh ? 'co, moi' : 'CO NHUNG CU') : 'THIEU'} |`);
   L.push(`| Audit | ${task.verdicts?.audit?.verdict || 'chua'} |`);
   L.push(`| Code review | ${task.verdicts?.review?.verdict || 'chua'} |`);
-  L.push(`| Test | ${runs.filter((r) => r.kind === 'test' && r.exitCode === 0).length} lan xanh / ${runs.filter((r) => r.kind === 'test').length} lan chay |`);
+  L.push(`| Test | ${runs.filter((r) => r.kind === 'test' && isGreenRun(r)).length} lan xanh (co bang chung) / ${runs.filter((r) => r.kind === 'test').length} lan chay${runs.some((r) => r.kind === 'test' && r.stage) ? ` — CHI STAGE: ${runs.filter((r) => r.kind === 'test' && r.stage).map((r) => `${r.stage} (${r.skipReason})`).join('; ')}` : ''} |`);
   L.push(`| Anh nghiem thu | ${proofs.length} / can ${cfg.proof?.require ?? 1} |`);
   L.push('');
 

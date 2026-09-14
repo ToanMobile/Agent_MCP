@@ -39,6 +39,11 @@ Thứ tự đè lên nhau: **mặc định → cấu hình chung → cấu hình
 | `proof.defaultProvider` | `null` | Provider dùng khi `pm_capture_proof` không chỉ định. Nếu chỉ khai đúng 1 provider thì tự chọn cái đó |
 | `proof.providers` | `{}` | Khai cách chụp, xem dưới |
 | `proof.maxWidth` | `1280` | Thu nhỏ ảnh về chiều ngang này (dùng `sips`) |
+| `testEvidence.resultsGlob` | `[]` | Glob XML JUnit để `pm_run kind=test` **đếm test thật** (chỉ XML có mtime ≥ lúc bắt đầu chạy). Android/Gradle: `["**/build/test-results/**/TEST-*.xml"]`. Rỗng = chỉ có stdout (bằng chứng `weak`) |
+| `oracle.copyToWorktree` | `[]` | File phụ chép vào worktree khi `pm_run kind=oracle` hoặc `pm_run worktree=true` (vd `local.properties`, `keystore.properties`) |
+| `testStages` | `{}` | Lệnh test theo stage, vd `{"unit": "./scripts/test-all.sh --unit"}` — dùng với `pm_run kind=test stage=unit skipReason="..."` khi cổng ngoài đỏ vì lý do ngoài code |
+| `promptPlanMaxBytes` | `12000` | Trần số ký tự `plan.md` nhúng vào prompt; phần dư agent đọc theo đường dẫn. Plan 38 KB từng làm agent chết context |
+| `proof.providers.<tên>.type = "browser"` | — | Chrome/Chromium headless: `binary` (tự dò nếu bỏ trống), `windowSize` (`1280,800`), `url` mặc định, `args`. Dùng cho task `proofKind: browser` |
 | `antigravity.workspaceCheck` | `"strict"` | `strict` ⇒ `pm_dispatch` **thất bại** nếu hội thoại mở trong workspace khác; `warn` ⇒ chỉ cảnh báo |
 | `antigravity.projectId` | `null` | Thử nghiệm, chưa chắc Antigravity tôn trọng |
 
@@ -53,24 +58,40 @@ Hai điều kiện này **nằm trong cổng nghiệm thu**, áp cho mọi task,
 | `mustHave.testChange` | `true` | Thay đổi **phải kèm file test** (thêm mới hoặc sửa test hiện có). Test cũ vẫn xanh **không** chứng minh được gì về phần mới ⇒ `pm_accept` từ chối |
 | `mustHave.testFilePatterns` | glob mặc định | Cách nhận diện file test. Mặc định phủ `**/src/test/**`, `**/src/androidTest/**`, `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/*Test.*`, `**/*_test.*`, `**/*.test.*`, `**/*.spec.*` |
 | `mustHave.proofFrom` | `[]` | Ảnh nghiệm thu **phải** chụp bằng một trong các provider này. Rỗng = nhận mọi provider |
+| `mustHave.oracle` | `false` | Task `type=bugfix` (hoặc agent tự khai `oracle.command`) phải có oracle đỏ→xanh **do PM tự replay** (`pm_run kind=oracle`). Task tạo trước khi có trường `type` được miễn |
+| `mustHave.exclusiveDirs` | `[]` | Thư mục độc quyền: `pm_dispatch kind=implement` **chặn** khi task khác đang chạy cũng đụng vào (vd `["shared/"]`), trừ `force=true` |
+| `mustHave.testSuspectPatterns` | `[]` | Regex thêm để coi một lần test là "chưa chạy thật" dù `exit 0` (bộ mặc định: `src/evidence.js`) |
+| `mustHave.strayFilePatterns` | `fix_*.py`, `update_*.py`, `modify_*.py`, `patch_*.{py,sh,rb}`, `fix_*.sh`, `update_*.sh`, `*_patch.*`, `*.bak`, `*.orig`, `*.rej`, `test_debug.sh`, `result.json`, `plan-review.json`, `audit-agent.json`, `plan.md` | File rác agent hay để lại ở **gốc** repo (kể cả hợp đồng ghi nhầm chỗ) |
+| `mustHave.strayFiles` | `"block"` | `block` ⇒ `pm_accept` từ chối khi còn file rác; `warn` ⇒ chỉ cảnh báo |
 
 ```json
 {
   "mustHave": {
     "testChange": true,
-    "proofFrom": ["xe", "mayao"]
-  }
+    "proofFrom": ["xe", "mayao"],
+    "oracle": true,
+    "exclusiveDirs": ["shared/"]
+  },
+  "testEvidence": { "resultsGlob": ["**/build/test-results/**/TEST-*.xml"] }
 }
 ```
 
 Với cấu hình trên (GeelyEx2 đang dùng): ảnh chụp bằng `man` (màn hình máy) hay ảnh agent tự đưa (`sourceFile` ⇒ provider `file`) **không được tính** — phải là ảnh chụp từ đầu xe hoặc máy ảo.
 
-Danh sách file thay đổi được đo bằng `git status` **ngay lúc gọi** `pm_accept`. Không đọc được git (project không phải repo) ⇒ cổng chặn báo `CHUA XAC MINH duoc co file test nao thay doi` và **không** cho qua — nghiêng về phía chặn, không phía tin.
+Danh sách file thay đổi được đo bằng `git status --untracked-files=all` **ngay lúc gọi** `pm_accept` ∪ các commit kể từ `baseCommit` của task. Không đọc được git (project không phải repo) ⇒ cổng chặn báo `CHUA XAC MINH duoc co file test nao thay doi` và **không** cho qua — nghiêng về phía chặn, không phía tin.
+
+**File test phải là của agent** (14/09/2026): chỉ file test nằm trong `files_changed` agent khai mới được tính — cây làm việc dùng chung nhiều phiên, file test của phiên khác không chứng minh gì cho task này. Agent khai `files_changed` rỗng mà cây có thay đổi ⇒ chặn, không đếm hộ.
+
+**Thứ tự thời gian** (14/09/2026): lần test xanh phải **bắt đầu sau** `mtime(result.json)` và **kết thúc sau** lần sửa file cuối của cây (mtime lớn nhất của các file đang thay đổi, bỏ `.antigravity-pm/`). Test chạy trước khi agent báo cáo ⇒ chặn, nhắn chạy lại `pm_run kind=test`.
+
+**`exit 0` không phải xanh** (14/09/2026): mỗi lần `pm_run kind=test` ghi kèm `evidence` (`src/evidence.js`). Chỉ `isGreenRun` = `exit 0` + không quá hạn + `evidence.ok` mới được tính. Bắt: Gradle không task nào `executed` (up-to-date / from-cache), task **test** `UP-TO-DATE`, `No tests found`, và lỗi bị **nuốt exit code** (`BUILD FAILED`, `N tests completed, M failed`, `failures=N` mà vẫn exit 0 — đo được T0023 r1 trên Geely EX2). Run không có `evidence` (ghi bởi bản cũ) = không xanh.
 
 `pm_doctor` in ra luật đang hiệu lực:
 
 ```
 LUAT BAT BUOC — thay doi phai kem file test: CO · anh phai chup tu: xe hoac mayao
+  · oracle do->xanh PM tu replay: CO (task bugfix) · thu muc doc quyen (khong giao song song): shared
+  · bang chung test: XML JUnit **/build/test-results/**/TEST-*.xml · file chep vao worktree oracle: (khong)
 ```
 
 ## Cách chụp ảnh nghiệm thu

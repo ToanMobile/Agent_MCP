@@ -11,7 +11,7 @@
 ## Lệnh hay dùng
 
 ```bash
-npm test                      # 51 test, offline
+npm test                      # offline, phai xanh het
 npm run lint
 npm run doctor -- <project>   # cần Antigravity đang mở
 node bin/antigravity-pm-mcp.js --tools

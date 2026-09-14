@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { TOOLS_BY_NAME } from '../src/tools.js';
@@ -64,9 +65,11 @@ test('ca luong: tao task -> duyet plan -> audit/review -> test -> anh -> nghiem 
   writeFile(path.join(dir, 'src', 'Kinh.kt'), 'fun haKinh() {\n  xacNhan()\n}\n');
   writeFile(path.join(dir, 'src', 'test', 'KinhTest.kt'), '// test cho nhanh xac nhan\n');
   writeFile(path.join(dir, 'src', 'Ngoai.kt'), '// file nam ngoai khai bao\n');
-  const later = new Date(Date.now() + 2000);
-  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da them xac nhan', files_changed: ['src/Kinh.kt'], tests: { command: 'echo', exitCode: 0 } }));
+  // Bao cao phai SAU moc giao trien khai (cung ms thi bi coi la cu) nhung TRUOC luc PM chay test — gia lap +20ms roi cho qua.
+  const later = new Date(Date.now() + 20);
+  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da them xac nhan', files_changed: ['src/Kinh.kt', 'src/test/KinhTest.kt'], tests: { command: 'echo', exitCode: 0 } }));
   fs.utimesSync(p.result, later, later);
+  await new Promise((r) => setTimeout(r, 40));
 
   // pm_diff phai to cao file sua ngoai khai bao.
   const diff = await call('pm_diff', { project: dir, taskId });
@@ -92,7 +95,8 @@ test('ca luong: tao task -> duyet plan -> audit/review -> test -> anh -> nghiem 
   assert.ok(noProof.text.includes('anh nghiem thu'));
 
   // Nhan anh do "agent" chup.
-  const shot = writeFile(path.join(dir, 'shot.png'), PNG_1PX);
+  // Anh nguon nam NGOAI cay lam viec: ghi file vao repo SAU khi test xanh la "sua file sau test" => gate bat lai (dung).
+  const shot = writeFile(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'agpm-shot-')), 'shot.png'), PNG_1PX);
   const proof = await call('pm_capture_proof', { project: dir, taskId, label: 'hop xac nhan hien tren xe', sourceFile: shot });
   assert.equal(proof.images.length, 1, 'phai tra ANH ve cho PM xem tan mat');
   assert.equal(proof.images[0].mime, 'image/png');
