@@ -82,7 +82,7 @@ Danh sách file thay đổi được đo bằng `git status --untracked-files=al
 
 **File test phải là của agent** (14/09/2026): chỉ file test nằm trong `files_changed` agent khai mới được tính — cây làm việc dùng chung nhiều phiên, file test của phiên khác không chứng minh gì cho task này. Agent khai `files_changed` rỗng mà cây có thay đổi ⇒ chặn, không đếm hộ.
 
-**Thứ tự thời gian** (14/09/2026): lần test xanh phải **bắt đầu sau** `mtime(result.json)` và **kết thúc sau** lần sửa file cuối của cây (mtime lớn nhất của các file đang thay đổi, bỏ `.antigravity-pm/`). Test chạy trước khi agent báo cáo ⇒ chặn, nhắn chạy lại `pm_run kind=test`.
+**Thứ tự thời gian** (14/09/2026): lần test xanh phải **bắt đầu sau** `mtime(result.json)` và **kết thúc sau** lần sửa cuối của **file thuộc task** (file agent khai trong `files_changed` ∪ file test đang thay đổi — không đo cả cây, vì phiên khác sửa repo song song sẽ bắt chạy lại test vô ích; chủ dự án chốt 14/09/2026). Test chạy trước khi agent báo cáo ⇒ chặn, nhắn chạy lại `pm_run kind=test`.
 
 **`exit 0` không phải xanh** (14/09/2026): mỗi lần `pm_run kind=test` ghi kèm `evidence` (`src/evidence.js`). Chỉ `isGreenRun` = `exit 0` + không quá hạn + `evidence.ok` mới được tính. Bắt: Gradle không task nào `executed` (up-to-date / from-cache), task **test** `UP-TO-DATE`, `No tests found`, và lỗi bị **nuốt exit code** (`BUILD FAILED`, `N tests completed, M failed`, `failures=N` mà vẫn exit 0 — đo được T0023 r1 trên Geely EX2). Run không có `evidence` (ghi bởi bản cũ) = không xanh.
 

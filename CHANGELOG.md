@@ -54,8 +54,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
      hoặc không nhắc test; `pm_rework` nhận ra agent vừa từ chối vì "quá phức tạp" và nhắc PM chia bước (bài học T0012/T0022).
   Thêm hai luật từ bàn giao OfficeReader: **file test phải là của agent** — chỉ file test nằm trong `files_changed`
   agent khai mới thoả luật "kèm file test"; khai rỗng mà cây có thay đổi ⇒ chặn (nhiều phiên dùng chung cây, không
-  đếm hộ). **Thứ tự thời gian**: test xanh phải bắt đầu **sau** `mtime(result.json)` và kết thúc **sau** lần sửa file
-  cuối của cây (đo bằng mtime, loại thư mục trạng thái `.antigravity-pm/`); không đo được ⇒ `CHUA XAC MINH`, chặn.
+  đếm hộ). **Thứ tự thời gian**: test xanh phải bắt đầu **sau** `mtime(result.json)` và kết thúc **sau** lần sửa cuối của
+  **file thuộc task** (`files_changed` agent khai ∪ file test; không đo cả cây — phiên khác sửa song song không bắt chạy lại);
+  không đo được ⇒ `CHUA XAC MINH`, chặn.
   `git status` dùng `--untracked-files=all` (thư mục mới từng bị gộp thành `src/test/` nên không khớp file khai).
   Test trong `tests/bai-hoc-14-09.test.js` + `tests/evidence.test.js`; mỗi cổng mới đã thử đột biến để chắc test đỏ đúng chỗ.
 

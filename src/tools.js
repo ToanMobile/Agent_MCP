@@ -17,6 +17,7 @@ import {
 } from './prompt.js';
 import { captureProof, describeProviders } from './proof.js';
 import { renderReport } from './report.js';
+import * as policyNs from './policy.js';
 import {
   mustHaveOf, fileRacGocRepo, cungFile, phamViTask, dangChay, kiemChongLan, PROOF_KINDS, kiemKhuonPlanReview,
 } from './policy.js';
@@ -128,10 +129,12 @@ async function gateCtx(cfg, task) {
   const snap = await gitSnapshot(cfg);
   const changedFiles = await changedFilesOf(cfg, task);
   const soi = snap.ok ? soiThayDoi(cfg.projectRoot, snap.wt, await baseCommitOf(cfg, task)) : { warnings: [], blockers: [] };
+  // Thu tu thoi gian chi do tren FILE CUA TASK (agent khai files_changed ∪ file test trong cay) — chu du an chot 14/09/2026:
+  // cay GeelyEx2 co phien khac sua song song, do ca cay thi moi lan ho sua gi la phai chay lai test 3 phut.
   return {
     changedFiles,
     untrackedFiles: snap.untracked,
-    lastChangeAt: snap.ok ? lastChangeAtOf(cfg, snap.wt) : null,
+    lastChangeAt: snap.ok ? lastChangeAtOf(cfg, fileCuaTask(cfg, task, snap.wt)) : null,
     lintBlockers: soi.blockers,
     lintWarnings: soi.warnings,
   };
@@ -231,6 +234,14 @@ async function goWorktree(cfg, dir) {
   await runShell(`git worktree remove --force ${JSON.stringify(dir)}`, { cwd: cfg.projectRoot, timeoutMs: 60000 });
   await runShell('git worktree prune', { cwd: cfg.projectRoot, timeoutMs: 60000 });
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* da don */ }
+}
+
+/** File trong cay lam viec thuoc ve task: agent khai trong files_changed, hoac la file test (luat "kem file test" dem chung). */
+function fileCuaTask(cfg, task, wt) {
+  const claimed = freshness(cfg, task).result?.files_changed;
+  const must = mustHaveOf(cfg);
+  const { matchesAny } = policyNs;
+  return (wt || []).filter((f) => (Array.isArray(claimed) && claimed.some((c) => cungFile(f, c))) || matchesAny(f, must.testFilePatterns));
 }
 
 /** mtime lon nhat cua cac file dang thay doi trong cay lam viec (ms). Khong file nao => 0 (cay sach, test luc nao cung sau). */

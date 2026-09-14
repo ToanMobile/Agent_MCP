@@ -563,3 +563,27 @@ test('BG3 tang tool: pm_run kind=oracle ghi run record + log, cong nghiem thu do
   assert.equal(worktreeCount(dir), 1);
   cleanup(dir);
 });
+
+test('BG2 lastChangeAt chi do tren FILE CUA TASK: phien khac sua file ngoai task SAU test khong lam gate chan', async () => {
+  const dir = gitRepo({ testCommand: 'echo "1 test ok"' });
+  const created = await call('pm_task_create', { project: dir, title: 'x', brief: 'y', definitionOfDone: ['z'] });
+  const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
+  const cfg = loadConfig(dir);
+  const p = contractPaths(cfg, loadTask(cfg, taskId));
+  writeFile(path.join(dir, 'src', 'Kinh.kt'), 'fun haKinh() { xacNhan() }\n');
+  writeFile(path.join(dir, 'src', 'test', 'KinhTest.kt'), '// test\n');
+  writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'xong', files_changed: ['src/Kinh.kt', 'src/test/KinhTest.kt'] }));
+  await new Promise((r) => setTimeout(r, 30));
+  await call('pm_run', { project: dir, taskId, kind: 'test' });
+  await new Promise((r) => setTimeout(r, 30));
+  // Phien khac sua file KHONG thuoc task sau khi test xanh.
+  writeFile(path.join(dir, 'docs', 'khac.md'), 'phien khac\n');
+  let st = await call('pm_status', { project: dir, taskId });
+  assert.ok(!st.text.includes('chay TRUOC khi agent bao cao'), `file ngoai task khong duoc lam gate chan:\n${st.text}`);
+  // Nhung sua file CUA task sau test thi van chan.
+  await new Promise((r) => setTimeout(r, 30));
+  writeFile(path.join(dir, 'src', 'Kinh.kt'), 'fun haKinh() { xacNhan(); themNua() }\n');
+  st = await call('pm_status', { project: dir, taskId });
+  assert.ok(st.text.includes('chay TRUOC khi agent bao cao'), st.text);
+  cleanup(dir);
+});
