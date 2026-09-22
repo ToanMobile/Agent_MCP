@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { ensureDir, writeJsonAtomic, readJsonIfExists, nowIso, slug, exists } from './util.js';
 import {
   checkTestChange, checkProofProvider, checkOracle, fileRacGocRepo, mustHaveOf, PROOF_KINDS, kiemKhuonResult, doiChieuKhaiTest,
-  fileCamDung,
+  fileCamDungTheoTask,
 } from './policy.js';
 import { createHash } from 'node:crypto';
 
@@ -466,8 +466,10 @@ export function gate(cfg, task, ctx = {}) {
   }
 
   // DE XUAT 4 (Unity): cham file plan CAM dung => CHAN cung, khong ban.
-  const cam = fileCamDung(task, ctx.changedFiles);
-  if (cam.length) missing.push(`Dung vao file plan CAM sua: ${cam.join(', ')} — hoan tac phan do (sua tay), khong nghiem thu`);
+  // 19/09: chi CHAN file quy duoc cho task nay (files_changed / scopeFiles); file cam cua phien khac => canh bao.
+  const cam = fileCamDungTheoTask(task, ctx.changedFiles, claimed);
+  if (cam.chan.length) missing.push(`Dung vao file plan CAM sua: ${cam.chan.join(', ')} — hoan tac phan do (sua tay), khong nghiem thu`);
+  if (cam.canhBao.length) warnings.push(`File CAM dang thay doi trong cay nhung task KHONG khai (phien khac / auto-commit?): ${cam.canhBao.slice(0, 20).join(', ')}${cam.canhBao.length > 20 ? ` … (+${cam.canhBao.length - 20})` : ''} — PM doi chieu pm_diff`);
 
   // DE XUAT 1c: dinh nghia SQL trung (create table x2) => CHAN; tang dong / khoi lap => canh bao.
   for (const b of ctx.lintBlockers || []) missing.push(`Nhan doi noi dung: ${b}`);

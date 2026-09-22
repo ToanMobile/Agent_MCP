@@ -244,6 +244,25 @@ export function fileCamDung(task, changedFiles) {
   return changedFiles.map(chuanHoaDuongDan).filter((f) => cam.some((c) => f === c || f.startsWith(`${c}/`) || matchesAny(f, [c])));
 }
 
+/**
+ * 19/09 (OfficeReader T0002-4): cay lam viec dung chung nhieu task + auto-commit tu phien khac => fileCamDung
+ * tren CA cay quy file cua task khac cho task dang nghiem thu, khong task nao qua duoc cong.
+ * Chi CHAN file quy duoc cho task nay: agent khai trong files_changed (claimed) HOAC nam trong scopeFiles.
+ * File cam khac dang thay doi trong cay => canhBao (PM doi chieu pm_diff, khong chan).
+ * claimed undefined + scopeFiles rong => chua co gi de quy => giu cach cu (chan het).
+ */
+export function fileCamDungTheoTask(task, changedFiles, claimed) {
+  if (!Array.isArray(changedFiles)) return { chan: [], canhBao: [] };
+  const tatCa = fileCamDung(task, changedFiles);
+  const scope = Array.isArray(task?.scopeFiles) ? task.scopeFiles.map(chuanHoaDuongDan).filter(Boolean) : [];
+  if (!Array.isArray(claimed) && scope.length === 0) return { chan: tatCa, canhBao: [] };
+  const khai = Array.isArray(claimed) ? claimed : [];
+  const cuaTask = (f) => khai.some((c) => cungFile(f, c)) || scope.some((s) => thuocThuMuc(f, s.replace(/\/+$/, '')));
+  const chan = tatCa.filter(cuaTask);
+  const canhBao = tatCa.filter((f) => !cuaTask(f));
+  return { chan, canhBao };
+}
+
 /** LUAT 5: file rac agent de lai o GOC repo (chi xet muc chua track, khong co "/"). */
 export function fileRacGocRepo(untrackedFiles, cfg) {
   const pats = cfg ? mustHaveOf(cfg).strayFilePatterns : DEFAULT_MUST_HAVE.strayFilePatterns;

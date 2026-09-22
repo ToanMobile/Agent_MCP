@@ -841,9 +841,11 @@ export const TOOLS = [
           if (ngoai.length) L.push(`CHU Y — file MOI ngoai pham vi plan (${ngoai.length}): ${ngoai.slice(0, 20).join(', ')}`);
         }
         if (tk?.forbiddenPaths?.length) {
-          const { fileCamDung } = await import('./policy.js');
-          const cam = fileCamDung(tk, snap.wt);
-          if (cam.length) L.push(`CHAN — dung vao file plan CAM sua: ${cam.join(', ')}`);
+          const { fileCamDungTheoTask } = await import('./policy.js');
+          const rs = readJsonIfExists(contractPaths(cfg, tk).result);
+          const cam = fileCamDungTheoTask(tk, snap.wt, Array.isArray(rs?.files_changed) ? rs.files_changed : undefined);
+          if (cam.chan.length) L.push(`CHAN — dung vao file plan CAM sua: ${cam.chan.join(', ')}`);
+          if (cam.canhBao.length) L.push(`CANH BAO — file CAM dang thay doi trong cay nhung task khong khai (phien khac?): ${cam.canhBao.slice(0, 20).join(', ')}`);
         }
       }
       L.push('--- git diff --stat ---');
