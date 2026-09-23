@@ -67,6 +67,7 @@ agent-kit init -p android -a claude     # một profile, một agent
 agent-kit init -m copy                  # file thật thay cho symlink (xem Team / CI)
 agent-kit init --lang=vi                # agent trả lời bằng tiếng Việt
 ```
+`--lang` (`vi` | `en`) cũng quyết định ngôn ngữ output của installer, profile, health và gate. Thứ tự: `--lang` > `$DEVKIT_LANG` > `lang` lưu trong `.active-profile.json` > `vi`.
 Tham số, profile hoặc mode không hợp lệ sẽ thoát với mã 2 trước khi ghi bất cứ thứ gì.
 
 #### Installer làm gì với dự án đã có
@@ -114,7 +115,7 @@ DevKit cung cấp một hệ sinh thái khép kín:
 │                        UNIVERSAL AGENT QUALITY PROTOCOL                                │
 ├────────────────────────────┬────────────────────────────┬──────────────────────────────┤
 │ 🛡️ Zero-Defect Protocol    │ 🚫 No-Fabrication Engine   │ 🔒 Lifecycle Hooks           │
-│ Paired Executable Oracle   │ Bảng quyết định C1-C9      │ 12 hook chạy + 2 helper      │
+│ Paired Executable Oracle   │ Bảng quyết định C1-C9      │ hook chạy + helper opt-in    │
 │ (Bắt buộc RED → GREEN)     │ Không bịa số, dòng, metric │ Pre-Code & Stop Gates        │
 ├────────────────────────────┼────────────────────────────┼──────────────────────────────┤
 │ ⚡ Cổng Hậu Sửa Lỗi         │ 📱 Dynamic Domain Profiles │ 🏛️ 10 Hội Đồng Review       │
@@ -136,7 +137,7 @@ DevKit cung cấp một hệ sinh thái khép kín:
 - **Triệt tiêu ảo giác:** Cấm tuyệt đối việc suy đoán file path, số dòng code, version thư viện, metric benchmark hoặc kết quả test.
 - **Phân loại claim chặt chẽ:** Bắt buộc có trích dẫn thực chứng cho C1 (Source Fact), C2 (Version/Docs), C3/C5 (Outcome/Fix Works), C4 (Scope Claim).
 
-### 3. 🔒 Lifecycle Hooks (14 hook scripts: 12 wired, 2 helper opt-in)
+### 3. 🔒 Lifecycle Hooks (gate đã wire + helper opt-in; xem `hooks/hooks.json`)
 - **Kiểm soát tức thời:** PreToolUse hook chạy trước thao tác sửa file và lệnh shell; mỗi hook được wire đều có contract test trong `hooks/tests/`.
 - **Những gì bị chặn:** lệnh git phá hủy (`git push --force`, `git reset --hard`, kể cả dạng bọc `(…)`, `timeout`, `sudo -u`, alias), lệnh thiết bị nguy hiểm (`adb remount`, `fastboot flash`, `dd of=/dev/…`), sửa file chưa đọc, và sửa file nhạy cảm khi chưa review bảo mật.
 - **Stop gate là nhắc nhở, không phải khóa:** các Stop gate claim/test-evidence/security chặn tuyên bố hoàn tất thiếu bằng chứng, chặn thêm một lần re-stop, rồi cho phiên kết thúc kèm cảnh báo có ghi log để không bao giờ treo.
@@ -174,7 +175,7 @@ graph TD
         Profiles["📱 Domain Profiles<br/>(Android / iOS / Web / Backend / Automotive / Game / Voice / Universal)"]
         PostFixGate["⚡ Cổng Hậu Sửa Lỗi<br/>(diff tĩnh + test hồi quy)"]
         AuditCouncils["🏛️ 10 Hội Đồng Review<br/>(agents/councils/)"]
-        Gates["🔒 Lifecycle Hooks<br/>(12 wired + 2 helper opt-in)"]
+        Gates["🔒 Lifecycle Hooks<br/>(wired + helper opt-in)"]
         SkillsCatalog["🧰 25 Curated Skills"]
         DesignMemory["🎨 DESIGN.md & Ký Ức Thất Bại (.agents/instincts.md)"]
         MCPHub["🔌 6-Server MCP Hub (100+ Schemas)"]
@@ -318,6 +319,18 @@ profiles/
 ```
 
 Mỗi profile gồm `profile.json`, `rules/<id>-rules.md`, `regression_matrix.json`, `DESIGN.md` và `instincts.md`. Kích hoạt profile sẽ link rules và ghi ma trận hồi quy của dự án vào `.agents/regression_matrix.active.json` (gate vẫn đọc được đường cũ `templates/regression_matrix.active.json`). MCP Unity/Blender của profile game là MCP ngoài — bạn tự cài.
+
+**Skill theo profile.** `profile.json` có thể khai `exclude_skills` (danh sách loại) hoặc `skills` (danh sách cho phép); installer và `agent-kit profile` chỉ link các skill được phép cùng slash command của chúng vào `.agents/skills` / `.claude/commands` (file tự viết của bạn không bao giờ bị xoá):
+
+| Profile | Skill bị loại |
+|---|---|
+| android, automotive | — (đủ catalog) |
+| game | `android-real-device-qa`, `compose-recomp-audit`, `deploy` |
+| ios, universal, web | `android-real-device-qa`, `compose-recomp-audit`, `deploy`, `unity-gc-audit` |
+| backend | như web + `qa-visual` |
+| voice-assistant | `compose-recomp-audit`, `unity-gc-audit` |
+
+`agent-kit init -y` chọn profile theo domain phát hiện được: Android → `android`, iOS → `ios`, web → `web`, backend → `backend`, còn lại → `universal`.
 
 ### Chuyển đổi Profile bằng CLI
 

@@ -185,6 +185,22 @@ alias_missing = [a for a in re.findall(r'^\s*"([a-z0-9-]+):[a-z0-9-]+"\s*$', syn
                  if not os.path.exists(os.path.join(ROOT, "commands", a + ".md"))]
 check(not alias_missing, "R5 every alias in sync_commands.sh has commands/<alias>.md", ", ".join(alias_missing))
 
+# /review collides with the agent's built-in /review: commands/review.md may only be the
+# deprecated redirect stub (never a live link to a skill). Same for every deprecated alias.
+MARKER = "<!-- devkit:deprecated-alias -->"
+dep_block = re.search(r"DEPRECATED_ALIASES=\((.*?)\)", sync, re.S)
+deprecated = re.findall(r'"([a-z0-9-]+):', dep_block.group(1)) if dep_block else []
+bad_dep = []
+for name in sorted(set(deprecated) | {"review"}):
+    p = os.path.join(ROOT, "commands", name + ".md")
+    if not os.path.lexists(p):
+        continue
+    if os.path.islink(p) or MARKER not in open(p, encoding="utf-8").read():
+        bad_dep.append(name)
+check("review" in deprecated and not bad_dep,
+      "R5 commands/review.md is only a deprecated stub; deprecated aliases are stubs",
+      ", ".join(bad_dep) or "review missing from DEPRECATED_ALIASES")
+
 # ── R6 profiles ────────────────────────────────────────────────────────────────
 mcp_names = set()
 for f in ("mcp/.mcp.json", "mcp/mcp_config.json"):

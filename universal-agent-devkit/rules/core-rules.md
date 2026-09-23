@@ -26,15 +26,11 @@ Thứ tự: Làm & Chạy test cục bộ → Self Review (Diff + DEMO/LIVE) →
 4. **Commit & Bàn giao:**
    - Commit bằng ngôn ngữ rõ ràng, tiền tố conventional: `feat:`, `fix:`, `test:`, `chore:`, `docs:`.
    - Báo cáo kết quả kiểm thử kèm ảnh nghiệm thu thành công đầy đủ cho Tech Lead / Reviewer.
-5. **Hoàn tất tự động (Task Completion Card):**
-   - Sau mỗi cập nhật tiến độ, checkpoint, reviewer finding, hoặc hướng điều tra thất bại, tự động tiếp tục thực thi các bước tiếp theo cho đến khi toàn bộ phạm vi công việc đạt trạng thái kết thúc hợp lệ.
-   - Tiến độ công việc không phải là câu trả lời cuối cùng; tuyệt đối không bao giờ yêu cầu người dùng phải gõ `continue` hay `làm tiếp`.
+5. **Hoàn tất tự động (Task Completion Card):** quy tắc gốc ở `AGENTS.md` §3 (TASK COMPLETION CARD) — tự tiếp tục tới trạng thái kết thúc hợp lệ, không bao giờ bắt người dùng gõ `continue` hay `làm tiếp`.
 
 ## 3. Quy chuẩn Test Automation & Chống Spam Thao Tác (Anti-Spam / Debounce)
 - **Tương tác UI chặt chẽ:** Tương tác UI bằng các tiện ích an toàn (`safeClick`, `safeFill`) có cơ chế wait visible, scroll into view, kiểm tra disabled; không dùng click mù quáng hoặc sleep cố định.
-- **Chống Spam Thao Tác & Tránh Quá Tải Hạ Tầng:**
-  - Mọi nút kích hoạt thao tác tốn kém, gọi API hoặc xác nhận giao dịch bắt buộc phải có cơ chế **Debounce / Disable ngay tức thì sau cú click đầu tiên** và hiển thị trạng thái Loading.
-  - Test runner: Tuyệt đối không spam tạo mới workflow liên tục hoặc bắn request dồn dập. Chỉ chạy test chỉ định đích danh từng test case cần thiết khi phát triển.
+- **Chống Spam Thao Tác & Tránh Quá Tải Hạ Tầng:** quy tắc gốc ở §14 (Debounce ≥ 1000ms, Disable tức thì, kỷ luật test runner).
 
 ## 4. Triết lý Kỹ sư Già "Lười biếng" (Lazy Senior Dev Principle)
 - **Tái sử dụng tiện ích có sẵn trước:** Trước khi viết mới bất kỳ hàm utility, helper hay service nào, bắt buộc phải tìm kiếm trong codebase xem dự án đã có sẵn hàm tương tự chưa. Tuyệt đối không viết trùng lặp logic ("Don't Reinvent the Wheel").
@@ -47,7 +43,7 @@ Thứ tự: Làm & Chạy test cục bộ → Self Review (Diff + DEMO/LIVE) →
 - **Bảo toàn tính tương thích ngược (Backward Compatibility):** Không tự ý phá vỡ interface/chữ ký hàm công khai đang có khi chưa kiểm tra toàn bộ điểm gọi (caller blast radius).
 
 ## 6. Quy chuẩn Giao diện & Trải nghiệm Tiếp cận (UI/UX & a11y Gate)
-- **Tuân thủ `DESIGN.md`:** Mọi mã nguồn sinh UI bắt buộc phải lấy token màu sắc, typography và khoảng cách từ `DESIGN.md`.
+- **Tuân thủ `DESIGN.md`:** Mọi mã nguồn sinh UI bắt buộc phải lấy token màu sắc (semantic color tokens), typography (lưới 8pt/4px) và khoảng cách từ `DESIGN.md`.
 - **Kích thước Vùng chạm An toàn:** Touch target tối thiểu $\ge 48\times 48\text{dp}$ (hoặc $\ge 44\times 44\text{px}$ trên Web) cho mọi phần tử có thể nhấn/chạm.
 - **Phản hồi Tức thì:** Mọi hành động kích hoạt qua UI phải hiển thị trạng thái tương tác tức thì (loading indicator, disabled state, ripple/highlight) để người dùng không bấm lặp lại.
 
@@ -119,10 +115,10 @@ Mọi dòng mã sinh ra hoặc sửa đổi BẮT BUỘC phải tuân thủ 5 ng
 
 ## 14. Kỷ luật Chống Spam Thao Tác Nâng Cao (Debounce >= 1000ms & Instant Disable)
 1. **Khóa nút bấm ngay mili-giây đầu tiên:**
-   - Mọi nút bấm kích hoạt hành động quan trọng (gọi API, thanh toán, ký chứng từ, submit form, xử lý file nặng) bắt buộc phải Disable tức thì ngay cú click đầu tiên + hiển thị Loading spinner.
+   - Mọi nút bấm kích hoạt hành động quan trọng hoặc tốn kém (gọi API, thanh toán, xác nhận giao dịch, ký chứng từ, submit form, xử lý file nặng) bắt buộc phải có cơ chế **Debounce / Disable ngay tức thì sau cú click đầu tiên** + hiển thị trạng thái Loading (spinner).
    - Duy trì khoảng nghỉ (cooldown/debounce) tối thiểu $\ge 1000\text{ms}$ giữa các thao tác để ngăn chặn người dùng hoặc mạng lag kích đúp gây trùng lặp giao dịch.
 2. **Kỷ luật Runner & Test Automation:**
-   - Cấm spam tạo workflow hoặc bắn request dồn dập làm nghẽn job queue và tràn rác CSDL.
+   - Cấm spam tạo workflow hoặc bắn request dồn dập làm nghẽn job queue và tràn rác CSDL. Khi phát triển, chỉ chạy đích danh từng test case cần thiết.
    - Duy trì khoảng nghỉ tối thiểu giữa các lượt kiểm thử để hệ thống backend kịp đồng bộ trạng thái.
 
 ## 15. Giao Thức Điều Phối Dual-Agent (Leader PM ↔ Worker Sandbox Protocol)
@@ -144,9 +140,7 @@ Mọi dòng mã sinh ra hoặc sửa đổi BẮT BUỘC phải tuân thủ 5 ng
    - **Khi làm việc với Android:** Tự động kích hoạt `android-real-device-qa` (đo FPS SurfaceFlinger, dump view hierarchy, ANR logcat triage, DEX scan).
    - **Khi điều phối Leader PM ↔ Worker:** Tự động kích hoạt `giao` (giao thức 7 giai đoạn có cổng nghiệm thu cứng).
    - **Trước khi hoàn tất:** Tự động chạy `open-code-review` và xuất báo cáo nghiệm thu 4 mục kèm ảnh chụp PASS.
-3. **Bao Phủ Toàn Bộ 25 Kỹ Năng Chuẩn Mực (100% Zero-Touch Automation):**
-   - 100% kỹ năng trong bộ 25 skills chuẩn mực (`skills/`) đã được quy định điều kiện kích hoạt tự động theo 6 giai đoạn vòng đời trong `AGENTS.md` Mục 8.2.
-   - Senior Developer không cần phải ghi nhớ cú pháp slash command (`/cmd`), không cần can thiệp thủ công bất kỳ bước nào. Mọi rào chắn chất lượng, kiểm toán TIA hồi quy, đo đạc thiết bị thật, chụp ảnh nghiệm thu và xuất báo cáo B10 đều được hệ thống tự giác thực thi 100%.
+3. **Điều kiện kích hoạt từng skill:** bảng điều phối theo giai đoạn vòng đời ở `AGENTS.md` §8.2 (nguồn duy nhất).
 
 ## 17. Quy Chuẩn Tối Ưu Hóa Token & Quản Trị Ngân Sách Ngữ Cảnh (Token Economics & Context Budget Management)
 Mọi tác vụ thực thi BẮT BUỘC phải tuân thủ 5 nguyên tắc vàng về kinh tế token nhằm giữ nguyên chất lượng 10/10 và workflow chuẩn mực nhưng tiết kiệm 70% – 90% chi phí token:
@@ -158,5 +152,4 @@ Mọi tác vụ thực thi BẮT BUỘC phải tuân thủ 5 nguyên tắc vàng
    - Nghiêm cấm ghi đè toàn bộ tệp tin (Full-file rewrite) khi thực hiện sửa đổi cục bộ. Bắt buộc dùng công cụ thay thế khối liên tục (`replace_file_content`), chỉ sinh đúng phần diff cần thiết để tiết kiệm đến 95% output tokens.
 4. **Cô Lập Thư Mục Rác & Giới Hạn Quyền Đọc (Permissions Deny Gate):**
    - Cấm Agent đọc các thư mục tự sinh và tệp nhị phân (`build/`, `.gradle/`, `node_modules/`, `dist/`, `*.apk`, `*.hprof`).
-5. **Chống Phình Ngữ Cảnh & Ngưỡng "Dumb Zone" (Anti-Dumb Zone Context Hygiene):**
-   - Kiểm soát ngân sách ngữ cảnh không vượt quá 50% cửa sổ làm việc. Tự động checkpoint và nén ngữ cảnh (`/compact` hoặc handoff) trước khi bước vào các đợt refactor nhiều file, bảo toàn 100% năng lực suy luận sắc bén của mô hình.
+5. **Chống Phình Ngữ Cảnh:** quy tắc gốc ở §7 (ngưỡng >50% → checkpoint + `/compact`/handoff trước refactor nhiều file).

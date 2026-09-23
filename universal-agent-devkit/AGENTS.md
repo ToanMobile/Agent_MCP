@@ -143,9 +143,22 @@ Whenever the user asks to fix a bug, refactor code, or change behavior in a comp
 
 > **Modular Domain Profiles:**
 > Domain-specific and project-specific rules (such as Automotive Hardware, FlymeAuto, or CAN Bus specifics) are kept isolated in `profiles/` (e.g. `profiles/automotive/`) to keep the DevKit core 100% universal and domain-agnostic.
+>
+> | Profile | Domain | Skills left out (`exclude_skills`) |
+> |---|---|---|
+> | `android` | Compose, Coroutines, Vitals | — |
+> | `automotive` | AAOS, CAN, Vehicle HAL | — |
+> | `ios` | Swift 6, SwiftUI | Android/Unity skills |
+> | `web` | TypeScript, React/Next.js | Android/Unity skills |
+> | `backend` | API services (Python/Go/Rust/Node) | Android/Unity skills + `qa-visual` |
+> | `game` | Unity 6, Zero-GC | Android skills |
+> | `voice-assistant` | edge audio AI | `compose-recomp-audit`, `unity-gc-audit` |
+> | `universal` | anything else | Android/Unity skills |
+>
+> Switch with `agent-kit profile <id>`; the active one is linked at `.agents/active-profile`.
 
 ### 8.2 Autonomous Skill Routing Matrix (Bảng Điều Phối Tự Động Toàn Bộ 25 Kỹ Năng - Zero Manual Effort)
-AI Agent BẮT BUỘC PHẢI TỰ ĐỘNG nhận diện ngữ cảnh và kích hoạt các kỹ năng sau ĐỘC LẬP TỰ ĐỘNG, TUYỆT ĐỐI KHÔNG bắt người dùng phải gõ lệnh slash command hay chạy bằng tay. Người dùng (Senior Dev) chỉ cần đưa ra yêu cầu tự nhiên, hệ thống tự động điều phối toàn bộ:
+The agent MUST trigger these skills from context by itself and NEVER ask the user to type a slash command (rule and skill chains: `rules/core-rules.md` §16):
 
 | Giai Đoạn Vòng Đời | Kỹ Năng Tự Động Kích Hoạt | Ngữ Cảnh / Tình Huống Kỹ Thuật Tự Động Kích Hoạt | Hành Động Tự Động Của Agent |
 |---|---|---|---|
@@ -190,10 +203,10 @@ The DevKit provides 10 council subagent prompts in `agents/councils/` (5 focus a
 - **Council 10 — Standards Compliance & Delivery (5 Agents):** Bidirectional requirement traceability, protocol & data stream integrity, accessibility & UX visual safety, offline resilience & fault tolerance, Tech Lead handover formatting.
 
 ### 8.4 Engineering Excellence & Failure Prevention
-- **`DESIGN.md` Design System Baseline:** Every UI change adheres to the semantic color tokens, 8pt/4px typography grid, and accessibility touch target ($\ge 48\times 48\text{dp}$ / $\ge 44\times 44\text{px}$) defined in `DESIGN.md`.
+- **`DESIGN.md`, touch targets, instant feedback:** `rules/core-rules.md` §6.
 - **Instincts & Failure Memory (`.agents/instincts.md`):** Traps, anti-patterns, and past regressions are recorded so that the agent never falls into the same mistake twice.
-- **Triết lý Kỹ sư Già "Lười biếng" (Lazy Senior Dev Principle):** Always reuse internal utilities before creating new ones; avoid dependency bloat; celebrate negative net diff (deleting dead code).
-- **Anti-Laziness & File Integrity:** Strictly prohibit `// ... existing code ...` or placeholder omissions; enforce full contiguous block replacement and backward compatibility.
+- **Lazy Senior Dev Principle (reuse first, no dependency bloat, celebrate Negative Net Diff):** `rules/core-rules.md` §4.
+- **Anti-Laziness & File Integrity (no `// ... existing code ...` placeholders, backward compatibility):** `rules/core-rules.md` §5.
 - **Compiler AST Self-Healing:** Parse compiler diagnostic logs to extract exact `file:line:col`, error codes, and caller blast radius to fix build issues methodically.
 
 Health Diagnostic Command (configuration only; add `--run-tests` to run the suites):

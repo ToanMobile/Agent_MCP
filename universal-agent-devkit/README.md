@@ -29,7 +29,7 @@
 
 ## 🎯 What It Is, and Who It Is For
 
-AI coding agents are fast but will happily claim "tests pass" without running them, rewrite files with `// ... existing code ...`, force-push, or commit a keystore. This DevKit gives the agent a shared rulebook (`AGENTS.md`), lifecycle hooks that block the worst of that in Claude Code, reusable skills/slash commands, and a post-fix gate you run before calling a change done. It is aimed at solo developers and small teams using Claude Code, Codex, Gemini/Antigravity or Cursor; the skills and hooks lean towards Android/Kotlin, with profiles for iOS, game (Unity), automotive, voice-assistant and general projects.
+AI coding agents are fast but will happily claim "tests pass" without running them, rewrite files with `// ... existing code ...`, force-push, or commit a keystore. This DevKit gives the agent a shared rulebook (`AGENTS.md`), lifecycle hooks that block the worst of that in Claude Code, reusable skills/slash commands, and a post-fix gate you run before calling a change done. It is aimed at solo developers and small teams using Claude Code, Codex, Gemini/Antigravity or Cursor; the skills and hooks lean towards Android/Kotlin, with profiles for iOS, web, backend, game (Unity), automotive, voice-assistant and general projects.
 
 ## 🚀 Quick Start & Installation
 
@@ -67,6 +67,7 @@ agent-kit init -p android -a claude     # one profile, one agent
 agent-kit init -m copy                  # real files instead of symlinks (see Team / CI)
 agent-kit init --lang=vi                # agent replies in Vietnamese
 ```
+`--lang` (`vi` | `en`) also sets the language of installer, profile, health and gate output. Order: `--lang` > `$DEVKIT_LANG` > `lang` saved in `.active-profile.json` > `vi`.
 Invalid options, profiles or modes exit with status 2 before anything is written.
 
 #### What the installer does to an existing project
@@ -114,7 +115,7 @@ It delivers a complete, closed-loop software engineering ecosystem:
 │                        UNIVERSAL AGENT QUALITY PROTOCOL                                │
 ├────────────────────────────┬────────────────────────────┬──────────────────────────────┤
 │ 🛡️ Zero-Defect Protocol    │ 🚫 No-Fabrication Engine   │ 🔒 Lifecycle Hooks           │
-│ Paired Executable Oracle   │ C1–C9 Decision Table       │ 12 wired + 2 opt-in helpers  │
+│ Paired Executable Oracle   │ C1–C9 Decision Table       │ wired hooks + opt-in helpers │
 │ (Mandatory RED → GREEN)    │ Zero hallucinated metrics  │ Pre-Code & Stop Gates        │
 ├────────────────────────────┼────────────────────────────┼──────────────────────────────┤
 │ ⚡ Post-Fix Gate           │ 📱 Dynamic Domain Profiles │ 🏛️ 10 Review Councils       │
@@ -136,7 +137,7 @@ It delivers a complete, closed-loop software engineering ecosystem:
 - **Eliminating Hallucinations:** Strict prohibition against guessing file paths, symbol signatures, library versions, benchmark metrics, or test outcomes.
 - **Strict Evidence Classes:** Enforces explicit citations for structural source facts (C1), version measurements (C2), runtime fixes (C3), scope coverage (C4), and terminal completion claims (C5).
 
-### 3. 🔒 Lifecycle Hooks (14 hook scripts: 12 wired, 2 opt-in helpers)
+### 3. 🔒 Lifecycle Hooks (wired gates + opt-in helpers; see `hooks/hooks.json`)
 - **Real-Time Interception:** PreToolUse hooks run before edits and shell commands; each wired hook is covered by the hook contract suite (`hooks/tests/`).
 - **What is blocked:** destructive git commands (`git push --force`, `git reset --hard`, including wrapped forms like `(…)`, `timeout`, `sudo -u`, aliases), destructive device commands (`adb remount`, `fastboot flash`, `dd of=/dev/…`), edits to files not read first, and sensitive edits without a security review.
 - **Stop gates are reminders, not locks:** the claim/test-evidence/security Stop gates block a completion claim that has no evidence, block one re-stop, then let the session end with a logged warning so it can never hang.
@@ -174,7 +175,7 @@ graph TD
         Profiles["📱 Domain Profiles<br/>(Android / iOS / Web / Backend / Automotive / Game / Voice / Universal)"]
         PostFixGate["⚡ Post-Fix Gate<br/>(static diff gate + regression tests)"]
         AuditCouncils["🏛️ 10 Review Councils<br/>(agents/councils/)"]
-        Gates["🔒 Lifecycle Hooks<br/>(12 wired + 2 opt-in helpers)"]
+        Gates["🔒 Lifecycle Hooks<br/>(wired + opt-in helpers)"]
         SkillsCatalog["🧰 25 Curated Skills"]
         DesignMemory["🎨 DESIGN.md & Failure Memory (.agents/instincts.md)"]
         MCPHub["🔌 6-Server MCP Hub (100+ Schemas)"]
@@ -318,6 +319,18 @@ profiles/
 ```
 
 Each profile holds `profile.json`, `rules/<id>-rules.md`, `regression_matrix.json`, `DESIGN.md` and `instincts.md`. Activating a profile links its rules and writes the project's regression matrix to `.agents/regression_matrix.active.json` (the gate still reads the old `templates/regression_matrix.active.json`). Unity/Blender MCP servers for the game profile are external — install them yourself.
+
+**Skills per profile.** `profile.json` can carry `exclude_skills` (deny-list) or `skills` (allow-list); the installer and `agent-kit profile` only link the allowed skills and their slash commands into `.agents/skills` / `.claude/commands` (your own files are never removed):
+
+| Profile | Skills left out |
+|---|---|
+| android, automotive | — (full catalog) |
+| game | `android-real-device-qa`, `compose-recomp-audit`, `deploy` |
+| ios, universal, web | `android-real-device-qa`, `compose-recomp-audit`, `deploy`, `unity-gc-audit` |
+| backend | same as web + `qa-visual` |
+| voice-assistant | `compose-recomp-audit`, `unity-gc-audit` |
+
+`agent-kit init -y` picks the profile from the detected domain: Android → `android`, iOS → `ios`, web → `web`, backend → `backend`, anything else → `universal`.
 
 ### Profile Switching CLI
 

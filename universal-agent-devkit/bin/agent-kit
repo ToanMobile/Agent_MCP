@@ -121,7 +121,9 @@ Commands:
   init [path] [opts]  Initialize AI agents in a project (opts are passed to install.sh,
                       e.g. -y, -p android, -a claude,cursor, -m copy, --lang=vi)
   install-global      Install 'agent-kit', 'agent-install' and 'postfix-gate' into ~/.local/bin
-  profile [opts]      Switch or inspect domain profile (see: agent-kit profile --help)
+  profile [name|opts] Switch or inspect domain profile (see: agent-kit profile --help)
+                      android | ios | web | backend | automotive | game | voice-assistant | universal
+                      (case-insensitive; aliases e.g. xehoi, frontend, api)
   health              Run the health diagnostic
   gate                Run the post-fix static diff gate on the current changes
   test                Run all regression suites (hook contract, workflow engine, installer & gate)
@@ -139,7 +141,9 @@ Examples:
   agent-kit init ../my-app -y      # Non-interactive setup of another project
   agent-kit list-old               # Inspect preserved *_old folders and files
   agent-kit restore-old --apply    # Restore recorded *_old backups (see restore-old)
-  agent-kit profile -p automotive  # Switch domain profile to Automotive (AAOS/CAN)
+  agent-kit profile automotive     # Switch domain profile to Automotive (AAOS/CAN)
+  agent-kit profile web            # Web front-end profile (Android/Unity skills left out)
+  DEVKIT_LANG=en agent-kit health  # English output (order: --lang > DEVKIT_LANG > .active-profile.json > vi)
   agent-kit health                 # Run the health diagnostic
   agent-kit gate                   # Run post-fix quality gate
   agent-kit test                   # Run all regression suites
