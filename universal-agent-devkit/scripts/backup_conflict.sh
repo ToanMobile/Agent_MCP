@@ -2,6 +2,9 @@
 # backup_conflict.sh — Safe Isolation for Existing Project Collisions (X_old Protection)
 # Preserves user's existing skills, rules, commands, hooks, and configs without overwriting.
 
+# Output language helper L "<vi>" "<en>" (DEVKIT_LANG) — see scripts/i18n.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/i18n.sh"
+
 # resolve_link_target <link> — absolute target of a symlink (relative targets are
 # resolved against the link's own directory). Links may be relative since the
 # devkit's self-install writes portable relative links.
@@ -139,10 +142,10 @@ backup_conflict() {
   local GREEN='\033[0;32m'
   local RESET='\033[0m'
 
-  echo -e "${YELLOW}  ⚠️ [X_old Protection] Phát hiện xung đột dự án cũ:${RESET} ${CYAN}${base_name}${RESET}"
+  echo -e "${YELLOW}  ⚠️ [X_old Protection] $(L "Phát hiện xung đột dự án cũ:" "conflict with an existing project item:")${RESET} ${CYAN}${base_name}${RESET}"
   local shown="$(basename "$backup_path")"
   [ "$backup_dir" != "$parent_dir" ] && shown="$(basename "$backup_dir")/$shown"
-  echo -e "     ➔ ${GREEN}ĐÃ ĐỔI TÊN THÀNH:${RESET} ${CYAN}${shown}${RESET} để bạn tự merge theo ý mình (Không ghi đè làm mất mã nguồn)!"
+  echo -e "     ➔ ${GREEN}$(L "ĐÃ ĐỔI TÊN THÀNH:" "RENAMED TO:")${RESET} ${CYAN}${shown}${RESET} $(L "để bạn tự merge theo ý mình (Không ghi đè làm mất mã nguồn)!" "so you can merge it yourself (nothing was overwritten).")"
 
   # Record to a session backup ledger next to the conflicting item
   local ledger_dir="$backup_dir"
@@ -306,6 +309,53 @@ devkit_install_agents_md() {
   fi
 }
 
+# ---- Profile skill filter (P1-5) -------------------------------------------------
+# DEVKIT_SKILLS_ALLOWED: space-separated skill names the active profile installs
+# (set by install.sh from scripts/profile_skills.py). Unset/empty = every skill.
+
+# devkit_skill_allowed <skill-name>
+devkit_skill_allowed() {
+  [ -n "${DEVKIT_SKILLS_ALLOWED:-}" ] || return 0
+  case " $DEVKIT_SKILLS_ALLOWED " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+
+# devkit_command_skill <devkit command file> — the skill a command resolves to
+# (commands/*.md are link chains ending at skills/<name>/SKILL.md); "" when none.
+devkit_command_skill() {
+  local f="$1" n=0 t
+  while [ -L "$f" ] && [ "$n" -lt 10 ]; do
+    t="$(resolve_link_target "$f")"
+    [ -n "$t" ] || break
+    f="$t"; n=$((n + 1))
+  done
+  case "$f" in
+    */skills/*/SKILL.md) f="${f%/SKILL.md}"; printf '%s' "${f##*/}" ;;
+    *) printf '' ;;
+  esac
+}
+
+# devkit_command_allowed <devkit command file>
+devkit_command_allowed() {
+  local skill
+  skill="$(devkit_command_skill "$1")"
+  [ -z "$skill" ] || devkit_skill_allowed "$skill"
+}
+
+# devkit_remove_filtered <dst> — remove a DevKit item the profile no longer installs.
+# Only our own links / unmodified copies go; anything the user edited stays.
+devkit_remove_filtered() {
+  local dst="$1"
+  if [ -L "$dst" ]; then
+    link_is_devkit_owned "$dst" "${DEVKIT_ROOT:-}" && rm -f "$dst"
+  elif [ -d "$dst" ]; then
+    is_unmodified_devkit_copy "$dst" && rm -rf "$dst"
+  elif [ -f "$dst" ]; then
+    if is_recorded_devkit_file "$dst"; then rm -f "$dst"; forget_devkit_file "$dst"; fi
+  fi
+  return 0
+}
+
 backup_dir_if_user_content() {
   local dir="$1"
   local devkit_root="${2:-}"
@@ -327,8 +377,8 @@ backup_file_if_user_content() {
 list_old_backups() {
   local root_dir="${1:-$PWD}"
   echo "================================================================="
-  echo "  🔍 Danh Sách Các Mục Đã Được Bảo Vệ (*_old) Trong Dự Án:"
-  echo "  Thư mục kiểm tra: $root_dir"
+  echo "  🔍 $(L "Danh Sách Các Mục Đã Được Bảo Vệ (*_old) Trong Dự Án:" "Protected items (*_old) in this project:")"
+  echo "  $(L "Thư mục kiểm tra:" "Checked directory:") $root_dir"
   echo "================================================================="
   local found=0
   while IFS= read -r item; do
@@ -336,20 +386,93 @@ list_old_backups() {
     found=1
     local rel_path="${item#$root_dir/}"
     if [ -d "$item" ]; then
-      echo "  📁 [Thư mục cũ] $rel_path"
+      echo "  📁 [$(L "Thư mục cũ" "old dir")] $rel_path"
     else
-      echo "  📄 [Tập tin cũ]  $rel_path"
+      echo "  📄 [$(L "Tập tin cũ" "old file")]  $rel_path"
     fi
   done < <(find "$root_dir" -maxdepth 3 \( -name "*_old" -o -name "*_old.*" -o -name "*_old_*" \) 2>/dev/null | grep -v "/\.git/")
 
   if [ "$found" -eq 0 ]; then
-    echo "  ✔ Không có mục *_old nào (Dự án sạch hoặc chưa phát sinh xung đột)."
+    echo "  ✔ $(L "Không có mục *_old nào (Dự án sạch hoặc chưa phát sinh xung đột)." "No *_old items (clean project, no conflicts so far).")"
   else
     echo "-----------------------------------------------------------------"
-    echo "  👉 Lời khuyên: Bạn có thể xem lại mã nguồn trong các mục *_old"
-    echo "     và chủ động copy/merge các kỹ năng, quy tắc riêng vào thư mục mới."
+    echo "  👉 $(L "Lời khuyên: Bạn có thể xem lại mã nguồn trong các mục *_old" "Tip: review the *_old items")"
+    echo "     $(L "và chủ động copy/merge các kỹ năng, quy tắc riêng vào thư mục mới." "and copy/merge your own skills and rules into the new directories.")"
     echo "================================================================="
   fi
+}
+
+# restore_old_backups <project_dir> [--apply]
+# Puts *_old backups recorded in .devkit_backups.log ledgers back in place. Dry-run by
+# default. A backup is restored only when its original location is now empty, a symlink
+# into the DevKit, a devkit-copied file the user never edited (.devkit-files) or an
+# unmodified devkit copy directory (.devkit-copy). Anything else at that location holds
+# content that is not the DevKit's, so it is reported and left alone — merge by hand.
+# When one location was backed up several times, the OLDEST backup (the user's original)
+# is the one restored; later ones are listed and kept.
+restore_old_backups() {
+  local root_dir="${1:-$PWD}" apply=0 root_p
+  [ "${2:-}" = "--apply" ] && apply=1
+  root_p="$(cd "$root_dir" 2>/dev/null && pwd -P)" || { echo "restore-old: no such directory: $root_dir" >&2; return 2; }
+  local seen_file restored=0 would=0 skipped=0 ledger line target backup rest
+  seen_file="$(mktemp "${TMPDIR:-/tmp}/devkit-restore.XXXXXX")" || return 1
+  echo "restore-old: ${root_p} ($([ "$apply" -eq 1 ] && echo apply || echo 'dry-run — add --apply to restore'))"
+  while IFS= read -r ledger; do
+    [ -n "$ledger" ] || continue
+    while IFS= read -r line || [ -n "$line" ]; do
+      rest="${line#* | }"
+      [ "$rest" != "$line" ] || continue
+      target="${rest%% -> *}"
+      backup="${rest#* -> }"
+      [ "$target" != "$rest" ] && [ -n "$backup" ] || continue
+      case "$target" in "$root_p"/*) ;; *) continue ;; esac
+      case "$backup" in "$root_p"/*) ;; *) continue ;; esac
+      if grep -qxF -- "$target" "$seen_file"; then
+        [ -e "$backup" ] || [ -L "$backup" ] && echo "  kept     ${backup#$root_p/} (a later backup of ${target#$root_p/})"
+        continue
+      fi
+      [ -e "$backup" ] || [ -L "$backup" ] || continue
+      printf '%s\n' "$target" >> "$seen_file"
+      local free=0
+      if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+        free=1
+      elif link_is_devkit_owned "$target" "${DEVKIT_ROOT:-}"; then
+        free=1
+      elif is_recorded_devkit_file "$target" || is_unmodified_devkit_copy "$target"; then
+        free=1
+      fi
+      if [ "$free" -ne 1 ]; then
+        echo "  SKIP     ${target#$root_p/} — holds content that is not the DevKit's; merge ${backup#$root_p/} by hand"
+        skipped=$((skipped + 1))
+        continue
+      fi
+      if [ "$apply" -ne 1 ]; then
+        echo "  would    ${backup#$root_p/} -> ${target#$root_p/}"
+        would=$((would + 1))
+        continue
+      fi
+      if [ -L "$target" ] || [ -f "$target" ]; then
+        rm -f "$target" && forget_devkit_file "$target"
+      elif [ -d "$target" ]; then
+        rm -rf "$target"
+      fi
+      if mv "$backup" "$target"; then
+        echo "  restored ${backup#$root_p/} -> ${target#$root_p/}"
+        restored=$((restored + 1))
+      else
+        echo "ERROR: could not move '$backup' back to '$target'" >&2
+        rm -f "$seen_file"
+        return 1
+      fi
+    done < "$ledger"
+  done < <(find "$root_p" -maxdepth 4 -name .devkit_backups.log -not -path '*/.git/*' 2>/dev/null | LC_ALL=C sort)
+  rm -f "$seen_file"
+  if [ "$apply" -eq 1 ]; then
+    echo "restore-old: ${restored} restored, ${skipped} skipped"
+  else
+    echo "restore-old: ${would} would be restored, ${skipped} skipped"
+  fi
+  [ "$skipped" -eq 0 ]
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -358,11 +481,14 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     list|list-old)
       list_old_backups "${2:-$PWD}"
       ;;
+    restore|restore-old)
+      restore_old_backups "${2:-$PWD}" "${3:-}"
+      ;;
     *)
       if [ $# -ge 1 ]; then
         backup_conflict "$1" "${2:-}"
       else
-        echo "Usage: $0 <target_path> [devkit_root] OR $0 list [project_dir]"
+        echo "Usage: $0 <target_path> [devkit_root] | $0 list [project_dir] | $0 restore [project_dir] [--apply]"
         exit 1
       fi
       ;;

@@ -1,21 +1,16 @@
-// KNOWN BROKEN AT LAUNCH — measured 2026-08-05, three launches, zero agents spawned in each.
-// This script was written against a Node-like environment, but the workflow sandbox provides
-// neither `process` nor `TextEncoder`/`TextDecoder`. Both failures were observed directly, in order:
-// launches 1-2 threw "process is not defined" from module scope; after `process` was removed,
-// launch 3 threw "TextEncoder is not defined" from parseArgs (that call sits in the string branch,
-// outside the object branch's try/catch, so the message escapes rather than being wrapped).
+// Launch history: on 2026-08-05 this workflow failed at launch three times with zero agents spawned —
+// the workflow sandbox provides neither `process` nor `TextEncoder`/`TextDecoder`, and this script
+// used both. `process` was removed first; the six TextEncoder/TextDecoder call sites (the two
+// byte-length limits in parseArgs, the path-length cap in validRepoPath, sha256Text, the UTF-8
+// decode in artifactText and the lens-result size cap in Consolidate) now use the pure-JS UTF-8
+// codecs below. A launch failure produces no findings at all, which reads like a clean audit if the
+// caller only looks at the finding count — so a zero-finding run is never, by itself, proof of CLEAN.
 //
-// The codecs are load-bearing — six call sites: the two byte-length limits in parseArgs; the
-// repo-relative-path length cap in validRepoPath, which guards owned paths, scope changes, oracle
-// sources, pre-existing dirty paths and finding.file alike; sha256Text; the UTF-8 decode in
-// artifactText; and the lens-result size cap in Consolidate. Until they are replaced with pure-JS
-// UTF-8 encode/decode, this workflow produces no findings at all — which reads like a clean audit if
-// the caller only looks at the finding count.
-//
-// The unit tests cannot see this on their own: they run under Node, where these globals exist. The
-// harness used to inject `process` too, which is exactly why a `process.env` read survived 95 green
-// tests. `workflow source does not reach for host globals the sandbox lacks` now guards the globals
-// already cleaned up; extend that list in the same commit that removes the remaining codec use.
+// The unit tests run under Node, where those globals exist, so they cannot see a launch failure on
+// their own. `workflow source does not reach for host globals the sandbox lacks` guards `process`,
+// `TextEncoder` and `TextDecoder`; add any new host global the sandbox lacks to that list.
+// This engine only runs inside the Claude Code Workflow harness; the installer does not copy it into
+// target projects.
 export const meta = {
   name: 'multi-lens-audit',
   description: 'Scoped 11-lens v3 audit with inline SHA-256 artifacts, machine oracles, RED/GREEN proof pairing, exact-patch coverage, bounded state, and fail-closed verdicts.',
@@ -59,7 +54,7 @@ const ORACLE_OPS = new Set(['eq', 'neq', 'lt', 'lte', 'gt', 'gte', 'zero', 'nonz
 
 // --- Pure-JS UTF-8 codecs -----------------------------------------------------------------
 // The workflow sandbox provides neither TextEncoder nor TextDecoder (see the header note). Six
-// call sites depended on them, and the failure happened in parseArgs BEFORE any agent spawned —
+// call sites used to depend on them, and the failure happened in parseArgs BEFORE any agent spawned —
 // so the audit reported zero findings, which reads exactly like a clean result. These replace
 // them with plain arithmetic so the codecs can never take the audit down again.
 

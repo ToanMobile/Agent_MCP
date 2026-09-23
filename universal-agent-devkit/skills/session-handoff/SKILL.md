@@ -1,6 +1,6 @@
 ---
 name: session-handoff
-description: Dùng khi User gọi /session-handoff để chuyển công việc đang dở sang session/người khác hoặc sắp hết context. Bỏ qua fact cần lưu lâu dài; dùng .Codex/memory cho nội dung persistent.
+description: Dùng khi User gọi /session-handoff để chuyển công việc đang dở sang session/người khác hoặc sắp hết context. Bỏ qua fact cần lưu lâu dài; dùng `.agents/instincts.md` cho nội dung persistent.
 disable-model-invocation: true
 ---
 
@@ -10,8 +10,9 @@ Handoff là pointer-doc ephemeral, không sao chép artifact và không thay th�
 
 ## Quy trình
 
-1. Tạo `.Codex/worktrees/session-handoffs/handoff-<YYYY-MM-DD>-<topic>.md`; dùng ngày hiện tại thật và
-   topic ngắn an toàn cho filename.
+1. Ghi `.agents/handoff.md` (file ephemeral, thêm `.agents/handoff.md` vào `.gitignore` nếu chưa có).
+   Nếu file cũ còn việc dở chưa bàn giao, giữ nó dưới `.agents/handoffs/handoff-<YYYY-MM-DD>-<topic>.md`
+   (ngày hiện tại thật, topic ngắn an toàn cho filename) thay vì ghi đè.
 2. Trỏ tới spec/plan, memory, diff/commit và path đã verify. Chỉ viết mới trạng thái đang dở, quyết định
    chưa được ghi, blocker, residual và next step.
 3. Nếu có `$ARGUMENTS`, ưu tiên trọng tâm đó nhưng không bỏ blocker/risk ảnh hưởng việc tiếp quản.
@@ -42,6 +43,6 @@ Handoff là pointer-doc ephemeral, không sao chép artifact và không thay th�
 ```
 
 Không commit/push, copy secret, ghi claim test xanh chưa chạy hoặc biến handoff thành tài liệu kiến thức
-dài. Fact reusable phải vào `.Codex/memory/` và update INDEX theo rule hiện hành.
+dài. Fact reusable phải vào `.agents/instincts.md` (rồi `agent-kit index-memory` để cập nhật index).
 
-Liên kết: [[rulebook/23-ai-workflow]] · [[rulebook/16-security]] · `.Codex/memory/INDEX.md`.
+Liên kết: `AGENTS.md` · `rules/core-rules.md` §1 (bảo mật) · `.agents/instincts.md`.

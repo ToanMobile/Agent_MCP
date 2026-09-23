@@ -1,0 +1,1 @@
+../../commands/skill-author.md

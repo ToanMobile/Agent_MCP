@@ -86,6 +86,11 @@
           },
           {
             "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/regression_gate.sh\"",
+            "timeout": 1800
+          },
+          {
+            "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/test_evidence_gate.sh\"",
             "timeout": 30
           },

@@ -53,3 +53,20 @@ tmp/
 *.swp
 *.swo
 *~
+
+# Local DevKit state (per machine — never commit)
+*_old
+*_old.*
+*_old_*
+!tests/test_x_old_*.sh
+.claude/settings_old.json
+.active-profile.json
+.antigravity-pm.json
+.agents/regression_matrix.active.json
+.agents/regression_status.json
+.agents/regression_checklist.md
+.agents/handoff.md
+templates/regression_matrix.active.json
+templates/last_postfix_audit_report.md
+.claude/audit-gate/
+.devkit_backups.log

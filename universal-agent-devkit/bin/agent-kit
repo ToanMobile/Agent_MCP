@@ -38,6 +38,11 @@ case "$CMD" in
     bash "$DEVKIT_ROOT/hooks/tests/hook_contract_test.sh" || exit 1
     echo
     echo "================================================================="
+    echo "  📋 Running Hook Contract Facts (registries, headers, wiring)..."
+    echo "================================================================="
+    CONTRACT_FACTS_SKIP_HARNESS=1 bash "$DEVKIT_ROOT/hooks/tests/contract_facts_test.sh" || exit 1
+    echo
+    echo "================================================================="
     echo "  ⚡ Running Workflow Engine Tests..."
     echo "================================================================="
     node --test "$DEVKIT_ROOT/workflows"/*.test.mjs || exit 1
@@ -92,6 +97,19 @@ case "$CMD" in
     shift || true
     bash "$DEVKIT_ROOT/scripts/backup_conflict.sh" list "${1:-$PWD}"
     ;;
+  restore-old|restore)
+    # restore-old [path] [--apply] — dry-run unless --apply
+    shift || true
+    R_TARGET="$PWD"; R_APPLY=""
+    for a in "$@"; do
+      case "$a" in
+        --apply) R_APPLY="--apply" ;;
+        -*) echo "agent-kit restore-old: unknown option '$a' (use --apply)" >&2; exit 2 ;;
+        *) R_TARGET="$a" ;;
+      esac
+    done
+    DEVKIT_ROOT="$DEVKIT_ROOT" bash "$DEVKIT_ROOT/scripts/backup_conflict.sh" restore "$R_TARGET" $R_APPLY
+    ;;
   help|*)
     cat << HELP_EOF
 Universal Agent DevKit CLI (agent-kit)
@@ -111,12 +129,16 @@ Commands:
   list                List all curated skills
   commands            List all available slash commands
   list-old [path]     List all preserved *_old backup folders and files
+  restore-old [path] [--apply]
+                      Put *_old backups recorded by the installer back in place
+                      (dry-run unless --apply; never overwrites non-DevKit content)
   help                Show this help message
 
 Examples:
   agent-kit init                   # Interactive setup for current project
   agent-kit init ../my-app -y      # Non-interactive setup of another project
   agent-kit list-old               # Inspect preserved *_old folders and files
+  agent-kit restore-old --apply    # Restore recorded *_old backups (see restore-old)
   agent-kit profile -p automotive  # Switch domain profile to Automotive (AAOS/CAN)
   agent-kit health                 # Run the health diagnostic
   agent-kit gate                   # Run post-fix quality gate

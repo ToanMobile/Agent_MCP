@@ -1,0 +1,40 @@
+{
+  "version": "1.0.0",
+  "project": "Backend Service (API / Workers)",
+  "description": "Ma trận hồi quy cho dịch vụ backend. Runner tự phát hiện theo go.mod / Cargo.toml / pyproject.toml / package.json; không phát hiện được thì FAIL chứ không coi là PASS.",
+  "rules": [
+    {
+      "component": "BackendService",
+      "watch_files": [
+        "**/*.py",
+        "**/*.go",
+        "**/*.rs",
+        "**/*.ts",
+        "**/*.js",
+        "**/*.java",
+        "**/*.kt",
+        "**/*.rb",
+        "**/*.sql",
+        "**/migrations/**",
+        "go.mod",
+        "Cargo.toml",
+        "pyproject.toml",
+        "requirements.txt",
+        "package.json"
+      ],
+      "immutable_guards": [
+        "PublicApiContract",
+        "DatabaseMigrationOrder",
+        "IdempotencyKeys",
+        "AuthzChecks"
+      ],
+      "mandatory_regression_tests": [
+        {
+          "id": "REG-BE-01",
+          "name": "Test suite of the detected runner (go test / cargo test / pytest / npm test)",
+          "command": "if [ -f go.mod ]; then go test ./...; elif [ -f Cargo.toml ]; then cargo test; elif [ -f pyproject.toml ] || [ -f pytest.ini ] || [ -f setup.cfg ] || [ -f tox.ini ] || [ -f requirements.txt ]; then python3 -m pytest -q; elif [ -f package.json ]; then npm test; else echo 'REG-BE: no test runner detected (go.mod / Cargo.toml / pyproject.toml / package.json)' >&2; exit 1; fi"
+        }
+      ]
+    }
+  ]
+}

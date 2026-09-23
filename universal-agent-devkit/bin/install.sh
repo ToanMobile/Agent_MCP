@@ -10,7 +10,7 @@ DOMAIN="auto"
 AGENTS="ask"
 PROFILE="ask"
 MODE="symlink"
-LANGUAGE="en"
+LANGUAGE=""   # output language; resolved below: --lang > $DEVKIT_LANG > project .active-profile.json > vi
 ASSUME_YES=0
 
 PROFILES_AVAILABLE="$(cd "$DEVKIT_ROOT/profiles" && for d in */; do [ -f "$d/profile.json" ] && printf '%s ' "${d%/}"; done)"
@@ -39,7 +39,8 @@ Options:
   -m, --mode <mode>       Install mode: symlink | copy (default: symlink)
                           symlink = absolute links into this DevKit checkout (single machine);
                           copy    = real files (use this if the project is committed for a team/CI)
-  -l, --lang <code>       Primary communication language: en | vi (default: en)
+  -l, --lang <code>       Output language of the installer, profile and gate: en | vi
+                          (default: \$DEVKIT_LANG, then the project's saved language, then vi)
   -s, --skip-existing     Keep project hooks/commands/agents/skills that share a DevKit name
   -y, --yes               Non-interactive: all agents, profile from the detected domain
   -h, --help              Show this help message
@@ -77,6 +78,8 @@ normalize_profile() {
     4|universal|general|default) p="universal" ;;
     5|voice|voice-assistant|audio) p="voice-assistant" ;;
     6|ios|swift|swiftui|apple) p="ios" ;;
+    7|web|frontend|react|nextjs) p="web" ;;
+    8|backend|server|api) p="backend" ;;
     none|ask|auto) printf '%s' "$p"; return 0 ;;
   esac
   if [ -f "$DEVKIT_ROOT/profiles/$p/profile.json" ]; then printf '%s' "$p"; else printf ''; fi
@@ -121,7 +124,7 @@ done
 
 # Validate everything BEFORE the first write to the project.
 case "$MODE" in symlink|copy) ;; *) die_usage "invalid --mode '$MODE' (expected: symlink | copy)" ;; esac
-case "$LANGUAGE" in en|vi) ;; *) die_usage "invalid --lang '$LANGUAGE' (expected: en | vi)" ;; esac
+case "$LANGUAGE" in ""|en|vi) ;; *) die_usage "invalid --lang '$LANGUAGE' (expected: en | vi)" ;; esac
 case "$DOMAIN" in auto|android|ios|web|backend|general) ;; *) die_usage "invalid --domain '$DOMAIN' (expected: auto | android | ios | web | backend | general)" ;; esac
 if [ "$PROFILE" != "ask" ]; then
   norm="$(normalize_profile "$PROFILE")"
@@ -136,23 +139,29 @@ fi
 
 TARGET_DIR="$(cd "$TARGET_DIR" && pwd -P)"
 
+# Output language, shared with every adapter / agent-config / gate run from here.
+source "$DEVKIT_ROOT/scripts/i18n.sh"
+DEVKIT_LANG="$(devkit_resolve_lang "$LANGUAGE" "$TARGET_DIR")"
+export DEVKIT_LANG
+LANGUAGE="$DEVKIT_LANG"
+
 # Interactive Agent Selection Menu if not specified via CLI
 if [ "$AGENTS" = "ask" ]; then
   echo "================================================================="
-  echo "  🤖 Universal AI Agent DevKit — Bước 1/2: Chọn AI Coding Tools"
+  echo "  🤖 Universal AI Agent DevKit — $(L "Bước 1/2: Chọn AI Coding Tools" "Step 1/2: choose AI coding tools")"
   echo "================================================================="
   echo "  [1] 🤖 Claude Code          (AGENTS.md, .claude/commands/, hooks, .mcp.json)"
   echo "  [2] 🧠 OpenAI Codex         (AGENTS.md SSOT)"
   echo "  [3] ✨ Google Gemini / AGY  (AGENTS.md, .agents/skills, mcp_config.json)"
   echo "  [4] ⚡ Cursor IDE           (AGENTS.md SSOT)"
-  echo "  [A] 🌟 All Agents           (Cấu hình toàn bộ 4 nền tảng)"
+  echo "  [A] 🌟 All Agents           ($(L "Cấu hình toàn bộ 4 nền tảng" "configure all 4 tools"))"
   echo "-----------------------------------------------------------------"
   user_choice="A"
   if [ -t 0 ]; then
-    read -r -p "Chọn AI Tools (ví dụ: 1,2 hoặc A cho tất cả) [Default: A]: " input_choice || input_choice=""
+    read -r -p "$(L "Chọn AI Tools (ví dụ: 1,2 hoặc A cho tất cả)" "Choose AI tools (e.g. 1,2 or A for all)") [Default: A]: " input_choice || input_choice=""
     user_choice="${input_choice:-A}"
   elif (exec 3</dev/tty) 2>/dev/null; then
-    read -r -p "Chọn AI Tools (ví dụ: 1,2 hoặc A cho tất cả) [Default: A]: " input_choice < /dev/tty || input_choice=""
+    read -r -p "$(L "Chọn AI Tools (ví dụ: 1,2 hoặc A cho tất cả)" "Choose AI tools (e.g. 1,2 or A for all)") [Default: A]: " input_choice < /dev/tty || input_choice=""
     user_choice="${input_choice:-A}"
   fi
 
@@ -182,21 +191,23 @@ fi
 if [ "$PROFILE" = "ask" ]; then
   echo
   echo "================================================================="
-  echo "  🎯 Universal AI Agent DevKit — Bước 2/2: Chọn Profile Dự Án"
+  echo "  🎯 Universal AI Agent DevKit — $(L "Bước 2/2: Chọn Profile Dự Án" "Step 2/2: choose the project profile")"
   echo "================================================================="
-  echo "  [1] 🚗 Xe hơi (Automotive: AAOS / IVI / Flyme Auto / CAN bus)"
+  echo "  [1] 🚗 $(L "Xe hơi" "Automotive") (Automotive: AAOS / IVI / Flyme Auto / CAN bus)"
   echo "  [2] 📱 Android (Mobile App / Jetpack Compose / Clean Arch)"
   echo "  [3] 🎮 Game (Unity 6 / Blender 3D / Shaders & Assets)"
-  echo "  [4] 🌐 Universal / General (Mặc định đa nền tảng)"
-  echo "  [5] 🎙️ Trợ lý Giọng nói (Voice Assistant: Edge AI / Audio / AEC / VAD)"
+  echo "  [4] 🌐 Universal / General ($(L "Mặc định đa nền tảng" "default, any stack"))"
+  echo "  [5] 🎙️ $(L "Trợ lý Giọng nói" "Voice Assistant") (Voice Assistant: Edge AI / Audio / AEC / VAD)"
   echo "  [6] 🍏 iOS (Swift 6 / SwiftUI / Swift Concurrency / XCTest)"
+  echo "  [7] 🕸️ Web (Frontend / Full-Stack JS / TypeScript)"
+  echo "  [8] 🗄️ Backend (API / Services / Python · Go · Rust · Node)"
   echo "-----------------------------------------------------------------"
   user_profile="4"
   if [ -t 0 ]; then
-    read -r -p "Chọn Profile dự án (1=Xe hơi, 2=Android, 3=Game, 4=Universal, 5=Voice, 6=iOS) [Default: 4]: " input_prof || input_prof=""
+    read -r -p "$(L "Chọn Profile dự án (1=Xe hơi, 2=Android, 3=Game, 4=Universal, 5=Voice, 6=iOS, 7=Web, 8=Backend)" "Choose the project profile (1=Automotive, 2=Android, 3=Game, 4=Universal, 5=Voice, 6=iOS, 7=Web, 8=Backend)") [Default: 4]: " input_prof || input_prof=""
     user_profile="${input_prof:-4}"
   elif (exec 3</dev/tty) 2>/dev/null; then
-    read -r -p "Chọn Profile dự án (1=Xe hơi, 2=Android, 3=Game, 4=Universal, 5=Voice, 6=iOS) [Default: 4]: " input_prof < /dev/tty || input_prof=""
+    read -r -p "$(L "Chọn Profile dự án (1=Xe hơi, 2=Android, 3=Game, 4=Universal, 5=Voice, 6=iOS, 7=Web, 8=Backend)" "Choose the project profile (1=Automotive, 2=Android, 3=Game, 4=Universal, 5=Voice, 6=iOS, 7=Web, 8=Backend)") [Default: 4]: " input_prof < /dev/tty || input_prof=""
     user_profile="${input_prof:-4}"
   fi
 
@@ -224,6 +235,8 @@ if [ "$PROFILE" = "auto" ]; then
   case "$DOMAIN" in
     android) PROFILE="android" ;;
     ios) PROFILE="ios" ;;
+    web) PROFILE="web" ;;
+    backend) PROFILE="backend" ;;
     *) PROFILE="universal" ;;
   esac
 fi
@@ -249,7 +262,7 @@ source "$DEVKIT_ROOT/scripts/backup_conflict.sh"
 
 # 3. Setup Project Rules, Skills & Commands with X_old Protection
 if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
-  echo "  🛡️  [X_old Protection] Kiểm tra xung đột tài nguyên dự án..."
+  echo "  🛡️  [X_old Protection] $(L "Kiểm tra xung đột tài nguyên dự án..." "checking for conflicts with project files...")"
   placed=()
   for item in rules skills commands; do
     if is_foreign_project_dir "$TARGET_DIR/$item"; then
@@ -270,6 +283,25 @@ if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
     echo "      re-run with '-m copy' for a committed team setup, or keep the links untracked." >&2
   fi
 fi
+
+# 3b. Skills allowed by the profile (P1-5): adapters place only these into
+#     .agents/skills and .claude/commands. Empty = every skill (no profile / self-install).
+DEVKIT_SKILLS_ALLOWED=""
+if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
+  if ! DEVKIT_SKILLS_ALLOWED="$(python3 "$DEVKIT_ROOT/scripts/profile_skills.py" "${PROFILE:-none}" | tr '\n' ' ')"; then
+    echo "✖ profiles/$PROFILE/profile.json lists an unknown skill — fix it before installing." >&2
+    exit 1
+  fi
+  if [ "$PROFILE" != "none" ]; then
+    skipped=""
+    for d in "$DEVKIT_ROOT/skills"/*/; do
+      d="$(basename "$d")"
+      [[ " $DEVKIT_SKILLS_ALLOWED " == *" $d "* ]] || skipped="$skipped$d "
+    done
+    [ -n "$skipped" ] && echo "  - $(L "Profile '$PROFILE' bỏ qua skill không liên quan" "Profile '$PROFILE' skips unrelated skills"): ${skipped% }"
+  fi
+fi
+export DEVKIT_SKILLS_ALLOWED
 
 # 4. Configure selected agents
 IFS=',' read -ra AGENT_LIST <<< "$AGENTS"
@@ -354,15 +386,15 @@ GI_EOF
   fi
 fi
 
-# 6. Kích hoạt Domain Profile nếu có chọn
+# 6. Activate the domain profile, if one was chosen
 if [ -n "$PROFILE" ] && [ "$PROFILE" != "none" ]; then
-  if ! python3 "$DEVKIT_ROOT/bin/agent-config.py" --profile "$PROFILE" --target "$TARGET_DIR"; then
+  if ! python3 "$DEVKIT_ROOT/bin/agent-config.py" --profile "$PROFILE" --target "$TARGET_DIR" --lang "$DEVKIT_LANG"; then
     echo "✖ Activating profile '$PROFILE' failed — the project was set up without a profile." >&2
     exit 1
   fi
 fi
 
-# 7. Hiển thị báo cáo bảo vệ X_old nếu có
+# 7. Report *_old backups, if any
 if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
   list_old_backups "$TARGET_DIR"
 fi

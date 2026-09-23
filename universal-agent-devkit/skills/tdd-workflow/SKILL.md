@@ -7,7 +7,7 @@ description: Dùng khi thêm/sửa logic testable, viết regression test hoặc
 
 ## Contract
 
-Tuân theo `AGENTS.md`, `/fix`, `/plan` và `.Codex/rulebook/45-tdd-enforcement.md`. Skill này chỉ vận hành
+Tuân theo `AGENTS.md`, `/fix`, `/plan` và `rules/core-rules.md` §3. Skill này chỉ vận hành
 RED→GREEN và chọn evidence; không tự đặt coverage, performance budget hay tỷ lệ test.
 
 ## Safety

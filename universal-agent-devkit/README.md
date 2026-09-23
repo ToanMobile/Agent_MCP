@@ -1,16 +1,16 @@
 <div align="center">
 
 # 🚀 Universal AI Agent DevKit & Quality Protocol
-### *A unified, production-grade framework providing Zero-Defect protocols, automated safety gates, 25 curated skills, 6 dynamic domain profiles, 50 audit agents, X_old conflict isolation protection, and an 8-layer Post-Fix Audit Gate across Claude Code, OpenAI Codex, Google Gemini/Antigravity, and Cursor.*
+### *Shared rules, lifecycle hooks, 25 skills, domain profiles (Android, iOS, web, backend, game, automotive, voice, universal) and a static post-fix diff gate for Claude Code, OpenAI Codex, Google Gemini/Antigravity and Cursor — installed into your project without overwriting what is already there.*
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-ToanMobile%2Funiversal--agent--devkit-blue.svg?style=for-the-badge&logo=github)](https://github.com/ToanMobile/universal-agent-devkit)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Tests Passing](https://img.shields.io/badge/Tests-302%20PASS%20(100%25)-success.svg?style=for-the-badge)](./hooks/tests)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](./LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-agent--kit%20test-success.svg?style=for-the-badge)](#-verification--devkit-cli-agent-kit)
 [![Supported Agents](https://img.shields.io/badge/Agents-4%20Core%20Platforms-orange.svg?style=for-the-badge)](#-universal-multi-agent-matrix)
 [![Rulebook](https://img.shields.io/badge/Rules-AGENTS.md%20(SSOT)-red.svg?style=for-the-badge)](#-complete-rulebook--engineering-standards-single-source-of-truth)
 [![Skills Catalog](https://img.shields.io/badge/Skills-25%20Curated-purple.svg?style=for-the-badge)](#-25-curated-engineering-skills-catalog)
-[![Domain Profiles](https://img.shields.io/badge/Profiles-6%20Domains-cyan.svg?style=for-the-badge)](#-dynamic-domain-profiles-system)
-[![Audit Councils](https://img.shields.io/badge/Audits-10%20Councils%20(50%20Agents)-yellow.svg?style=for-the-badge)](#-10-quality-audit-councils-50-specialized-agents)
+[![Domain Profiles](https://img.shields.io/badge/Profiles-Android%20%C2%B7%20iOS%20%C2%B7%20Web%20%C2%B7%20Backend%20%C2%B7%20more-cyan.svg?style=for-the-badge)](#-dynamic-domain-profiles-system)
+[![Review Councils](https://img.shields.io/badge/Councils-10%20Reviewer%20Prompts-yellow.svg?style=for-the-badge)](#-10-review-councils--self-consistency-checks)
 [![MCP Servers](https://img.shields.io/badge/MCP-6%20Integrated-brightgreen.svg?style=for-the-badge)](#-mcp-model-context-protocol-hub)
 
 <p align="center">
@@ -21,27 +21,89 @@
   <b>One DevKit to rule them all:</b> Elevate your AI coding assistants from conversational LLMs into rigorous, disciplined, and evidence-backed <b>Principal Pair Programmers</b>.
 </p>
 
-[Quick Start](#-quick-start--installation) • [Architecture](#-system-architecture) • [Workflows](#-production-engineering-workflows) • [Domain Profiles](#-dynamic-domain-profiles-system) • [Post-Fix Shield](#-post-fix-quality-shield--8-layer-audit-gate) • [50-Agent Councils](#-10-quality-audit-councils-50-specialized-agents) • [Multi-Agent Matrix](#-universal-multi-agent-matrix) • [Rulebook SSOT](#-complete-rulebook--engineering-standards-single-source-of-truth) • [Skills Catalog](#-25-curated-engineering-skills-catalog) • [MCP Hub](#-mcp-model-context-protocol-hub) • [Verification](#-verification--devkit-cli-agent-kit)
+[Quick Start](#-quick-start--installation) • [Architecture](#-system-architecture) • [Workflows](#-production-engineering-workflows) • [Domain Profiles](#-dynamic-domain-profiles-system) • [Post-Fix Gate](#-post-fix-gate-static-diff-gate--regression-tests) • [Councils](#-10-review-councils--self-consistency-checks) • [Which command when](#-qa-commands-which-one-when) • [Team / CI](#-team--ci-usage) • [Uninstall](#-uninstall--restoring-_old-backups) • [Troubleshooting](#-troubleshooting) • [Multi-Agent Matrix](#-universal-multi-agent-matrix) • [Rulebook SSOT](#-complete-rulebook--engineering-standards-single-source-of-truth) • [Skills Catalog](#-25-curated-engineering-skills-catalog) • [MCP Hub](#-mcp-model-context-protocol-hub) • [Verification](#-verification--devkit-cli-agent-kit)
 
 ---
 
 </div>
 
+## 🎯 What It Is, and Who It Is For
+
+AI coding agents are fast but will happily claim "tests pass" without running them, rewrite files with `// ... existing code ...`, force-push, or commit a keystore. This DevKit gives the agent a shared rulebook (`AGENTS.md`), lifecycle hooks that block the worst of that in Claude Code, reusable skills/slash commands, and a post-fix gate you run before calling a change done. It is aimed at solo developers and small teams using Claude Code, Codex, Gemini/Antigravity or Cursor; the skills and hooks lean towards Android/Kotlin, with profiles for iOS, game (Unity), automotive, voice-assistant and general projects.
+
+## 🚀 Quick Start & Installation
+
+### Option 1: Remote One-Liner (Zero-Clone)
+
+```bash
+# Interactive Mode (Recommended — prompts for domain profile and agent platforms):
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ToanMobile/universal-agent-devkit/main/bin/quick-install.sh)"
+
+# Quick non-interactive setup (Configures all core agents automatically):
+curl -fsSL https://raw.githubusercontent.com/ToanMobile/universal-agent-devkit/main/bin/quick-install.sh | bash
+```
+
+---
+
+### Option 2: Clone & Global CLI Setup (Recommended)
+```bash
+# 1. Clone the repository
+git clone https://github.com/ToanMobile/universal-agent-devkit.git
+cd universal-agent-devkit
+
+# 2. Install agent-kit globally to ~/.local/bin
+make install
+
+# 3. Initialize DevKit instantly inside ANY project on your machine
+cd /path/to/your-project
+agent-kit init
+```
+
+#### Useful `agent-kit init` forms
+```bash
+agent-kit init                          # interactive, current directory
+agent-kit init ../my-app -y             # non-interactive: all agents, profile from the detected domain
+agent-kit init -p android -a claude     # one profile, one agent
+agent-kit init -m copy                  # real files instead of symlinks (see Team / CI)
+agent-kit init --lang=vi                # agent replies in Vietnamese
+```
+Invalid options, profiles or modes exit with status 2 before anything is written.
+
+#### What the installer does to an existing project
+- Files it would replace (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, your own hooks/commands with a DevKit name) are kept as `*_old` — nothing is overwritten. List them with `agent-kit list-old`, put them back with `agent-kit restore-old`.
+- A real `commands/`, `rules/` or `skills/` directory that belongs to your project (for example a CLI's own `commands/build.js`) is **left in place**; that DevKit item is skipped with a warning.
+- Symlink mode in a git repository prints a warning: the links point into this checkout and break on other machines — use `-m copy` for committed setups.
+- In a git project, `*_old*`, `.claude/audit-gate/` and the installer's ledgers are added to `.gitignore`.
+- The installer never writes into the DevKit checkout itself.
+
+---
+
+### Option 3: Claude Code Plugin
+```bash
+claude plugin install github.com/ToanMobile/universal-agent-devkit
+# or from local path:
+claude plugin install /path/to/universal-agent-devkit
+```
+
+---
+
+---
+
 ## 📖 Executive Summary
 
-**Universal Agent DevKit** is an enterprise-grade engineering framework designed for the 4 core AI Coding Agents (**Claude Code**, **OpenAI Codex**, **Google Antigravity & Gemini CLI**, and **Cursor IDE**) and foundation models (**Claude 3.5/3.7 Sonnet**, **GPT-4o / o1 / o3**, **Gemini 2.0/3.0**, **DeepSeek R1/V3**).
+**Universal Agent DevKit** is an enterprise-grade engineering framework designed for the 4 core AI Coding Agents (**Claude Code**, **OpenAI Codex**, **Google Antigravity & Gemini CLI**, and **Cursor IDE**) and whichever model you run inside them (current Claude, GPT, Gemini or open-weight models — nothing here is tied to a specific model version).
 
 It delivers a complete, closed-loop software engineering ecosystem:
 1. **Supreme Engineering Protocols:** Zero-Defect Protocol, Paired Executable Oracle (RED→GREEN), and No-Fabrication Engine (C1–C9 Decision Table).
 2. **Single Source of Truth Rulebook (`AGENTS.md`):** Eliminates rule sprawl and conflicting chapters by unifying all engineering standards, architecture rules, pre-code gates, and quality protocols into a single, authoritative master rule file (`AGENTS.md` / `Agent.md`).
-3. **Dynamic Domain Profiles:** Instant project domain switching between **Android** (Compose/Vitals/Tombstones), **iOS** (Swift 6/SwiftUI/Concurrency), **Automotive** (AAOS/CAN), **Game** (Unity 6/Zero-GC), **Voice Assistant** (AAOS Audio Focus/Mic Safety), and **Universal** clean architecture via `agent-kit profile`.
-4. **Post-Fix Quality Shield (8-Layer Audit Gate):** Automated multi-tier verification (`/audit-gate`, `agent-kit gate`, `postfix-gate`) executing structural AST diff checks, DESIGN.md/a11y baseline verification, RED→GREEN oracle confirmation (with `deliberate_red` bypass), 50-agent council review, TIA regression matrix validation with immutable guards, non-destructive secret scanning, AST machine linters (Compose stability & Unity GC), error resilience checks, and Alibaba OpenCodeReview diff analysis.
-5. **10 Quality Audit Councils (50 Specialized Agents):** Comprehensive governance engine scrutinizing Architecture, Security, Concurrency, Performance, Error Resilience, Memory Leaks, Test Integrity, Adversarial Chaos, Zero-Regression, and State Continuity.
-6. **25 Curated Engineering Skills:** Standardized `SKILL.md` packages across 5 functional suites, including 23 canonical skills + 2 senior domain performance skills (`compose-recomp-audit` and `unity-gc-audit`), alongside direct integration with **Alibaba OpenCodeReview v1.12.9 (`ocr`)** for deterministic AST diff review.
-7. **X_old Conflict Isolation Protection:** Non-destructive installation for existing repositories. Automatically detects colliding user files (`skills`, `rules`, `commands`, `CLAUDE.md`, `AGENTS.md`, `.cursorrules`) and safely preserves them as `*_old` instead of overwriting, allowing users to seamlessly merge custom code via `agent-kit list-old`.
+3. **Dynamic Domain Profiles:** Instant project domain switching between **Android** (Compose/Vitals/Tombstones), **iOS** (Swift 6/SwiftUI/Concurrency), **Automotive** (AAOS/CAN), **Game** (Unity 6/Zero-GC), **Voice Assistant** (edge audio AI), **Web** (TypeScript/React/Next.js), **Backend** (API services in Python/Go/Rust/Node) and **Universal** clean architecture via `agent-kit profile`.
+4. **Post-Fix Gate (`/audit-gate`, `agent-kit gate`, `postfix-gate`):** a static diff gate. What can make it fail: 5 regex checks on the changed files (secrets, lazy placeholders, performance anti-patterns, swallowed exceptions, raw logging) plus, with `--run-tests`, the regression tests from the active matrix. DESIGN.md/a11y, RED→GREEN proof, screenshots/devices and OpenCodeReview are printed as reminders — the gate does not verify them.
+5. **10 Review Councils:** reviewer prompts in `agents/councils/` (subsystem isolation, architecture/blast radius, TDD, OpenCodeReview, security, game/Unity/Blender, performance/ANR, memory governance, solo-dev process, standards/delivery) that a profile activates. The `scripts/audit_*` scripts are grep-based self-consistency checks of the DevKit's own files, not code reviewers.
+6. **25 Curated Engineering Skills:** Standardized `SKILL.md` packages in 5 groups, including the domain performance skills `compose-recomp-audit` and `unity-gc-audit`, and a wrapper for the **Alibaba OpenCodeReview (`ocr`)** CLI.
+7. **X_old Conflict Isolation Protection:** Non-destructive installation for existing repositories. Colliding user files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, same-named hooks/commands/agents) are preserved as `*_old` instead of overwritten; project directories `commands/`, `rules/`, `skills/` that hold your own files are left in place and skipped. Inspect with `agent-kit list-old`, restore with `agent-kit restore-old`.
 8. **Design System & Proactive Failure Memory:** Strict UI/UX token baselines (`DESIGN.md`, Touch Target $\ge 48\text{dp}$, WCAG AA, Debounced buttons) paired with persistent repository failure lessons (`.agents/instincts.md`).
 9. **Android Native Crash Diagnostics:** Automated C/C++ tombstone triage tool (`profiles/android/scripts/qa/tombstone-triage.sh`) decoding signals (`SIGSEGV`, `SIGABRT`) and stack traces with `ndk-stack`.
-10. **Universal MCP Hub:** Pre-configured with 8 Model Context Protocol servers for AST Knowledge Graph discovery, real-time documentation lookup, Android ADB control, Blender, Unity, and Play Store automation.
+10. **MCP Hub:** `mcp/` ships 6 Model Context Protocol server entries (code knowledge graph, documentation lookup, Android code search, Android skills, ADB automation, Play Store), with npm packages pinned to exact versions. Unity/Blender MCP servers are not shipped; the game profile lists them as external.
 
 ---
 
@@ -51,15 +113,15 @@ It delivers a complete, closed-loop software engineering ecosystem:
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                        UNIVERSAL AGENT QUALITY PROTOCOL                                │
 ├────────────────────────────┬────────────────────────────┬──────────────────────────────┤
-│ 🛡️ Zero-Defect Protocol    │ 🚫 No-Fabrication Engine   │ 🔒 13 Hooks · 168 Contract Tests │
-│ Paired Executable Oracle   │ C1–C9 Decision Table       │ Lifecycle Hooks              │
+│ 🛡️ Zero-Defect Protocol    │ 🚫 No-Fabrication Engine   │ 🔒 Lifecycle Hooks           │
+│ Paired Executable Oracle   │ C1–C9 Decision Table       │ 12 wired + 2 opt-in helpers  │
 │ (Mandatory RED → GREEN)    │ Zero hallucinated metrics  │ Pre-Code & Stop Gates        │
 ├────────────────────────────┼────────────────────────────┼──────────────────────────────┤
-│ ⚡ Post-Fix Quality Shield │ 📱 Dynamic Domain Profiles │ 🏛️ 10 Audit Councils        │
-│ 8-Layer Audit Gate         │ Automotive, Android,       │ 50 Specialized Agents        │
-│ (/audit-gate / agent-kit)  │ Game, Universal            │ 100% Zero-Regression Audit   │
+│ ⚡ Post-Fix Gate           │ 📱 Dynamic Domain Profiles │ 🏛️ 10 Review Councils       │
+│ Static diff + regression   │ Android, iOS, Automotive,  │ Reviewer prompts             │
+│ (/audit-gate / agent-kit)  │ Game, Voice, Universal     │ (agents/councils/)           │
 ├────────────────────────────┴────────────────────────────┴──────────────────────────────┤
-│ 🧰 25 Curated Skills (Incl. 2 Senior Domain Skills) • 🛡️ X_old Conflict Protection     │
+│ 🧰 25 Curated Skills (incl. Compose & Unity performance) • 🛡️ X_old Conflict Protection │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,29 +136,29 @@ It delivers a complete, closed-loop software engineering ecosystem:
 - **Eliminating Hallucinations:** Strict prohibition against guessing file paths, symbol signatures, library versions, benchmark metrics, or test outcomes.
 - **Strict Evidence Classes:** Enforces explicit citations for structural source facts (C1), version measurements (C2), runtime fixes (C3), scope coverage (C4), and terminal completion claims (C5).
 
-### 3. 🔒 13 Automated Safety Gates (Lifecycle Hooks, 168 contract tests)
-- **Real-Time Interception:** PreToolUse and Stop hooks intercept every write, shell execution, and subagent handoff.
-- **Automated Rejection:** Automatically blocks destructive git commands (`git push --force`, `git reset --hard`), unvetted file edits, credential leakage, and unverifiable completion claims.
+### 3. 🔒 Lifecycle Hooks (14 hook scripts: 12 wired, 2 opt-in helpers)
+- **Real-Time Interception:** PreToolUse hooks run before edits and shell commands; each wired hook is covered by the hook contract suite (`hooks/tests/`).
+- **What is blocked:** destructive git commands (`git push --force`, `git reset --hard`, including wrapped forms like `(…)`, `timeout`, `sudo -u`, aliases), destructive device commands (`adb remount`, `fastboot flash`, `dd of=/dev/…`), edits to files not read first, and sensitive edits without a security review.
+- **Stop gates are reminders, not locks:** the claim/test-evidence/security Stop gates block a completion claim that has no evidence, block one re-stop, then let the session end with a logged warning so it can never hang.
+- **Missing python3:** `precode_gate` and `security_gate` fail closed; the others print a warning.
 
-### 4. ⚡ Post-Fix Quality Shield & 5-Layer Audit Gate
-- **Layer 1: Structural & Diff Hygiene:** Enforces surgical hunks, verifies boundary constraints, and blocks lazy placeholder comments (`// ... existing code ...`).
-- **Layer 2: Zero-Defect Paired Oracle Check:** Validates RED→GREEN test proof on the exact failure boundary before allowing sign-off.
-- **Layer 3: 50-Agent Council Audit:** Executes multi-lens automated scrutiny across Security, Architecture, Performance, Chaos, and Regression prevention.
-- **Layer 4: TIA Regression Matrix Validation:** Validates full test impact analysis checklist (`regression_matrix.json`) with deterministic verification stamps.
-- **Layer 5: Non-Destructive Git & Credential Shield:** Audits secret exclusion (`.env`, keystores, tokens), verifies Solo Dev Rule 0 compliance, and checks conventional commit readiness.
+### 4. ⚡ Post-Fix Gate (static diff gate + regression tests)
+- **Blocking:** secrets & lazy placeholders, performance anti-patterns, swallowed exceptions, raw logging (all regex-based, on changed files only), and — with `--run-tests` — the regression tests the active matrix maps to the changed files.
+- **Tamper-resistant tests:** test commands are read from the matrix at `HEAD`; a matrix or an existing test edited in the same change makes the verdict UNVERIFIED, never PASS.
+- **Reminders only:** DESIGN.md/a11y, RED→GREEN proof, screenshots/devices, OpenCodeReview.
 
 ### 5. 📱 Dynamic Domain Profiles
 - **Zero Pollution:** Keeps root `AGENTS.md` clean and universal while loading domain-specific rules (AAOS CAN Bus, Compose Vitals, Game ECS) dynamically into `rules/` symlinks.
 
-### 6. 🏛️ 10 Quality Audit Councils (50 Specialized Agents)
-- **Multi-Lens Auditing:** Analyzes diffs and codebases across 10 rigorous councils with 50 specialized automated agents.
-- **Fail-Closed Receipts:** Requires deterministic cryptographically signed or content-hashed execution receipts before promoting any change to PASS.
+### 6. 🏛️ 10 Review Councils
+- **Reviewer prompts:** each council in `agents/councils/` is a subagent prompt with 5 focus areas; the active profile chooses which councils apply.
+- **Workflow engine receipts:** the `workflows/` engines bind evidence with SHA-256 content hashes (not signatures).
 
 ### 7. 🧰 25 Curated Engineering Skills
-- **Complete Software Lifecycle:** 23 Canonical foundation skills + 2 Senior Domain Performance Skills (`compose-recomp-audit` and `unity-gc-audit`), covering TDD, Bug Fixing, Spec-Kit Lite Planning, Visual QA, Crashlytics Triage, Conflict Resolution, Knowledge Graph discovery, and Alibaba OpenCodeReview (`ocr`).
+- **Complete Software Lifecycle:** foundation skills plus the domain performance skills `compose-recomp-audit` and `unity-gc-audit`, covering TDD, Bug Fixing, Spec-Kit Lite Planning, Visual QA, Crashlytics Triage, Conflict Resolution, Knowledge Graph discovery, and Alibaba OpenCodeReview (`ocr`).
 
 ### 8. 🛡️ X_old Conflict Isolation & P0 Security Hardening
-- **Zero-Loss Installation:** When initializing DevKit in an existing project, all user-authored skills, rules, commands, and agent prompts are non-destructively preserved with `*_old` suffixes.
+- **Zero-Loss Installation:** When initializing DevKit in an existing project, user-authored files it would replace are preserved with `*_old` suffixes (copy-mode upgrades only back up files you actually edited — tracked by a per-directory hash ledger), and your own `commands/`, `rules/`, `skills/` directories are never renamed.
 - **Python Stdin Hardening:** Safety gates eliminate bash quote injection vulnerabilities by reading directly via `python3 -c` and piped stdin.
 
 </details>
@@ -109,11 +171,11 @@ It delivers a complete, closed-loop software engineering ecosystem:
 graph TD
     subgraph DevKit_Core ["📦 Universal Agent DevKit Core"]
         Rulebook["Single Source of Truth (AGENTS.md)"]
-        Profiles["📱 5 Dynamic Profiles<br/>(Automotive / Android / Game / Universal / Voice)"]
-        PostFixGate["⚡ Post-Fix Quality Shield<br/>(8-Layer Audit Gate / post-fix-gate.py)"]
-        AuditCouncils["🏛️ 10 Audit Councils<br/>(50 Specialized Governance Agents)"]
-        Gates["🔒 13 Safety Gates & Lifecycle Hooks"]
-        SkillsCatalog["🧰 25 Curated Skills<br/>(23 Canonical + 2 Senior Performance)"]
+        Profiles["📱 Domain Profiles<br/>(Android / iOS / Web / Backend / Automotive / Game / Voice / Universal)"]
+        PostFixGate["⚡ Post-Fix Gate<br/>(static diff gate + regression tests)"]
+        AuditCouncils["🏛️ 10 Review Councils<br/>(agents/councils/)"]
+        Gates["🔒 Lifecycle Hooks<br/>(12 wired + 2 opt-in helpers)"]
+        SkillsCatalog["🧰 25 Curated Skills"]
         DesignMemory["🎨 DESIGN.md & Failure Memory (.agents/instincts.md)"]
         MCPHub["🔌 6-Server MCP Hub (100+ Schemas)"]
     end
@@ -121,14 +183,14 @@ graph TD
     subgraph CLI_Interface ["⚙️ DevKit Management CLI"]
         AgentKit["bin/agent-kit CLI"]
         ConfigPy["bin/agent-config.py"]
-        HealthPy["bin/agent-health.py (100/100 Health)"]
+        HealthPy["bin/agent-health.py (health check)"]
     end
 
     subgraph Coding_Agents ["🤖 Supported Core Agent Ecosystems"]
         Claude["🤖 Claude Code<br/>(AGENTS.md, .claude/commands, hooks, settings)"]
         Codex["🧠 OpenAI Codex & ChatGPT<br/>(AGENTS.md SSOT)"]
         Gemini["✨ Google Antigravity & Gemini<br/>(AGENTS.md, .agents/skills, mcp_config.json)"]
-        Cursor["⚡ Cursor IDE<br/>(AGENTS.md SSOT, .mcp.json)"]
+        Cursor["⚡ Cursor IDE<br/>(AGENTS.md, .cursorrules block)"]
     end
 
     DevKit_Core --> AgentKit
@@ -146,7 +208,7 @@ graph TD
 ## 🔄 Production Engineering Workflows
 
 Universal Agent DevKit orchestrates two interconnected workflow tiers:
-1. **Automated Workflow Engines (`workflows/`):** Sandboxed JavaScript execution engines providing multi-lens auditing, cryptographic diff binding, and paired test oracle proofs backed by 134 automated unit test cases.
+1. **Automated Workflow Engines (`workflows/`):** JavaScript engines for the Claude Code Workflow harness providing multi-lens auditing, SHA-256 diff binding and paired test oracle proofs, covered by `node --test workflows/*.test.mjs`. They run inside the DevKit checkout only; the installer does not copy them into projects.
 2. **End-to-End Developer Workflows:** Production-grade loops that guide AI agents and human developers from initial spec planning to verified release.
 
 ```mermaid
@@ -168,7 +230,7 @@ flowchart LR
     end
 
     subgraph Gate_Phase ["4. Quality Gate & Handover"]
-        H --> I["agent-kit gate (/audit-gate)<br/>5-Layer Post-Fix Shield"]
+        H --> I["agent-kit gate (/audit-gate)<br/>Static diff gate + regression tests"]
         I --> J["/verify<br/>Pre-PR Acceptance Gate"]
         J --> K["/handoff or PR<br/>Session Continuity Snapshot"]
     end
@@ -176,7 +238,7 @@ flowchart LR
 
 ### 1. ⚙️ Automated Workflow Engines (`workflows/`)
 
-Backed by **134 automated unit test cases** (Node.js test runner), these engines enforce mathematical rigor on code changes:
+Covered by the Node.js test suite `workflows/*.test.mjs`, these engines enforce rigor on code changes:
 
 #### A. Scoped 11-Lens v3 Audit Engine (`workflows/multi-lens-audit.js`)
 An automated audit engine executing in a sandboxed runtime. Evaluates tasks across **11 specialized lenses** with inline SHA-256 artifacts, machine oracles, exact-patch coverage, and fail-closed verdicts:
@@ -198,7 +260,7 @@ An automated audit engine executing in a sandboxed runtime. Evaluates tasks acro
   * **Phase 3: Consolidate** — Validates coverage shapes, merges stable finding identities, and computes a non-lossy, fail-closed audit verdict.
 
 #### B. Fix Evidence & Paired Oracle Driver (`workflows/fix-evidence-driver.mjs`)
-* Enforces **cryptographic execution receipts**: Binds test runs to exact git commit hashes, patch byte lengths, and SHA-256 output hashes.
+* Enforces **content-hashed execution receipts**: Binds test runs to exact git commit hashes, patch byte lengths, and SHA-256 output hashes.
 * Rejects fabricated or model-authored test outputs: Demands driver-attested exit codes and terminal capture windows.
 * Prevents silent regressions: Guarantees that pre-edit RED evidence and post-edit GREEN evidence bind to the exact same finding key.
 
@@ -214,16 +276,16 @@ Used when adding new features or making changes touching $\ge 3$ files or $\ge 2
 4. **Surgical Implementation:** Implement minimal required production code following Clean Architecture principles.
 5. **Oracle Re-Execution:** Run the exact same test to confirm the passing (**GREEN**) state.
 6. **Visual & Layout Audit (`/visual`):** Capture screenshots and audit DOM layouts for overflow, alignment, or clipping issues.
-7. **Code Review (`/ocr` & `/review`):** Run Alibaba OpenCodeReview for AST line-accurate feedback and generate test scenarios.
+7. **Code Review (`/review-code` & `/plan-tests`):** Run Alibaba OpenCodeReview on the diff and generate acceptance criteria / test scenarios.
 8. **Pre-PR Acceptance Gate (`/verify`):** Final sign-off before opening a pull request.
 
 #### 🛠️ Workflow 2: Zero-Defect Bug Diagnostic & Repair (Bug Fixing)
 Used for resolving crashes, UI defects, logic bugs, or regressions:
-1. **Triage & Trace:** Inspect stack traces via `/crashlytics` or trace call graphs via `/graph` (AST Knowledge Graph).
+1. **Triage & Trace:** Inspect stack traces (Crashlytics/ANR) via `/fix` or trace call graphs via `/graph` (AST Knowledge Graph).
 2. **Author Failing Test Oracle (`/fixbugs`):** Formulate a deterministic test reproducing the exact defect on the failure boundary. Run to verify **RED** exit code.
 3. **Surgical Root-Cause Fix:** Apply the minimal surgical change directly targeting the root cause. Avoid unneeded refactoring.
 4. **Verify Passing Oracle:** Re-run the exact same oracle to verify **GREEN** exit code with identical execution parameters.
-5. **Post-Fix Quality Shield (`agent-kit gate` / `/audit-gate`):** Run the 5-layer audit gate to ensure zero side-effects, valid TIA regression matrix (`regression_matrix.json`), and clean diff hygiene.
+5. **Post-Fix Gate (`agent-kit gate --run-tests` / `/audit-gate`):** Run the static diff gate and the regression tests the active matrix (`.agents/regression_matrix.active.json`) maps to the changed files.
 
 #### 🔀 Workflow 3: Semantic Git Merge & Conflict Resolution
 Used when git merge, rebase, cherry-pick, or stash pop encounters conflicts:
@@ -247,11 +309,15 @@ Universal Agent DevKit features a dynamic domain configuration system that activ
 profiles/
 ├── android/          # Mobile App: Jetpack Compose, Coroutines, M3, Android Vitals, Tombstones
 ├── automotive/       # AAOS: CAN Bus, Vehicle HAL, CarPropertyManager, ASIL-B, HMI Safety
+├── backend/          # API services: contracts, idempotency, safe migrations, timeouts/retries (Python · Go · Rust · Node)
 ├── game/             # Game Dev: Unity 6, Zero-GC C#, unity-test.sh, unity-compile-check.sh
 ├── ios/              # iOS Native: Swift 6, SwiftUI, Concurrency (@MainActor), Instruments, XCTest
 ├── universal/        # Cross-platform: Clean Architecture, REST/gRPC, Multi-Tenant Platform
-└── voice-assistant/  # Voice Assistant: AAOS Assistant, Audio Focus, Microphone Safety
+├── voice-assistant/  # Voice assistants & edge audio AI: graceful silence, two-tier audio tests, mic safety
+└── web/              # Web apps: strict TypeScript, React/Next.js/Vue/Svelte, Core Web Vitals, WCAG AA, XSS/CSRF
 ```
+
+Each profile holds `profile.json`, `rules/<id>-rules.md`, `regression_matrix.json`, `DESIGN.md` and `instincts.md`. Activating a profile links its rules and writes the project's regression matrix to `.agents/regression_matrix.active.json` (the gate still reads the old `templates/regression_matrix.active.json`). Unity/Blender MCP servers for the game profile are external — install them yourself.
 
 ### Profile Switching CLI
 
@@ -274,32 +340,42 @@ agent-kit profile game
 # Switch to Universal profile (Standard Cross-platform Clean Architecture):
 agent-kit profile universal
 
-# Switch to Voice Assistant profile (Android Automotive / AAOS / Custom Assistant):
+# Switch to Voice Assistant profile (edge audio AI / speech-to-text):
 agent-kit profile voice-assistant
+
+# Web front-end / full-stack TypeScript, or backend API services:
+agent-kit profile web
+agent-kit profile backend
+
+# Profiles are case-insensitive and accept aliases (e.g. xehoi, blender); run it from the project —
+# it writes to the git root of the current directory and refuses to write into the DevKit itself.
 ```
 
 > **Slash Command:** You can also switch profiles inside chat via `/profile [name]`.
 
 ---
 
-## ⚡ Post-Fix Quality Shield & 8-Layer Audit Gate
+## ⚡ Post-Fix Gate (Static Diff Gate + Regression Tests)
 
-Every bug fix or code modification must pass through the automated **8-Layer Quality Gate** before code completion or pull request creation:
+Run it before calling a change done. It audits only the files changed since `HEAD` (or `--diff <ref>`), inside the current project. Each of its 8 printed sections is labelled **BLOCKING** or **REMINDER**:
 
 ```
-[Layer 1] Git Diff & Structural Hygiene ──► Surgical hunks, zero secrets, anti-laziness
-[Layer 2] Design System & Accessibility  ──► DESIGN.md, Touch Target ≥ 48dp, Debounced buttons
-[Layer 3] Zero-Defect Paired Oracle      ──► Verified failing RED → passing GREEN proof
-[Layer 4] TIA Regression Matrix & Guards ──► Checklist [x] PASS & Immutable Guards preserved
-[Layer 5] Performance & Resource Audit  ──► AST Compose stability & Unity Zero-GC linters, non-blocking UI
-[Layer 6] Error Resilience & Crash Trap  ──► Anti-swallowing (0 empty catch), timeouts, circuit breaker
-[Layer 7] Structured Logging & PII Mask ──► Structured logs, masked secrets/credentials/tokens
-[Layer 8] Alibaba OpenCodeReview Gate   ──► AST line resolution (resolver.go), 0 regressions
+[1] BLOCKING  Secrets & lazy placeholders   — AWS/GitHub/Slack/Google keys, JWT, private keys, keystores, .env files, `// ... existing code ...`
+[2] REMINDER  DESIGN.md & a11y              — only checks that DESIGN.md exists; layout is not measured
+[3] REMINDER  RED/GREEN proof, screenshots, devices — not verified by the gate
+[4] BLOCKING  Regression tests (--run-tests) — commands read from the matrix at HEAD; a matrix or existing test edited in the same change -> UNVERIFIED
+[5] BLOCKING  Performance anti-patterns (regex)
+[6] BLOCKING  Swallowed exceptions (regex)
+[7] BLOCKING  Raw logging (regex)
+[8] REMINDER  OpenCodeReview                 — run `ocr` yourself
 ```
 
-### Layer 5 AST Machine Linters
-- **`scripts/lint_compose_stability.py`**: Static AST linter for Kotlin Jetpack Compose detecting unstable parameters (`List<T>`, `Set<T>`, `Map<T>`) without `@Immutable` / `ImmutableList` wrappers, and unremembered heavy object allocations (`SimpleDateFormat`, `Regex`) inside `@Composable`.
-- **`scripts/lint_unity_gc.py`**: Static frame loop linter for C# detecting `new ` heap allocations, costly hierarchy lookups (`GameObject.Find`, `GetComponent`), LINQ queries, and allocating physics methods inside `Update()`, `FixedUpdate()`, `LateUpdate()`.
+Verdicts: **PASS** (exit 0), **REJECT** (exit 1, something blocking was found), **UNVERIFIED** (exit 2, e.g. no tests ran, matrix missing or tampered). DevKit links and `.claude/`/`.agents/` files installed by the DevKit are not counted as your changes.
+
+### Regex Linters (domain profiles)
+- **`scripts/lint_compose_stability.py`**: regex-based linter for Kotlin Jetpack Compose — unstable parameters (`List<T>`, `Set<T>`, `Map<T>`) without `@Immutable` / `ImmutableList`, and unremembered heavy allocations (`SimpleDateFormat`, `Regex`) inside `@Composable` (multi-line signatures supported).
+- **`scripts/lint_unity_gc.py`**: regex-based frame-loop linter for C# — `new` allocations, `GameObject.Find`/`GetComponent`, LINQ and allocating physics calls inside `Update()`, `FixedUpdate()`, `LateUpdate()`.
+Both exit 2 on a missing path and skip test directories (`test/`, `tests/`, `androidTest/`, `*Test.kt`, …) only.
 
 ### Running the Post-Fix Gate
 
@@ -307,36 +383,43 @@ Every bug fix or code modification must pass through the automated **8-Layer Qua
 # Via agent-kit CLI:
 agent-kit gate --run-tests
 
-# Via standalone binary:
+# Via the global command (installed by `make install` / `agent-kit install-global`):
 postfix-gate --run-tests
 
-# Via Python script:
-python3 bin/post-fix-gate.py --run-tests
+# Without the global command:
+python3 /path/to/universal-agent-devkit/bin/post-fix-gate.py --run-tests
 
 # In-chat Slash Command:
 /audit-gate
 ```
 
+#### Living regression checklist
+Every gate run updates `.agents/regression_checklist.md` (human view) and `.agents/regression_status.json` (source of truth): one row per matrix test with ✅/❌/⏳, when, which task (`--task`), which commit, and the last 10 runs. **Results are written only when the gate actually ran the test (`--run-tests`)** — there is no way to mark a row passed by hand. Changed source files that no matrix rule covers show up as `⚠️ UNCOVERED:<file>` until linked to a real test (`python3 bin/regression_checklist.py link UNCOVERED:<file> <TEST-ID>`); a `--record-lesson` on a passing gate adds a `BUG-…` row tied to the tests that just passed. Disable with `--no-checklist`.
+
+**Enforced automatically by the `regression_gate.sh` Stop hook:** whenever the agent tries to finish with uncommitted changes, the hook runs the gate with `--run-tests`; a failing related test or an UNCOVERED source file blocks the stop and the reason is fed back to the agent. It only enforces a matrix the project has adopted (committed in the repo and different from the DevKit samples), caches the result per diff, releases after 2 blocks on the same change with a visible warning, and can be skipped with `REGRESSION_GATE=0`.
+
 ---
 
-## 🏛️ 10 Quality Audit Councils (50 Specialized Agents)
+## 🏛️ 10 Review Councils & Self-Consistency Checks
 
-The DevKit integrates 10 automated quality audit councils comprising 50 specialized agents that continuously govern workflows, rules, skills, and regression resistance:
+`agents/councils/` holds 10 council subagent prompts, each with 5 focus areas. A profile's `active_councils` lists the ones that apply to that domain.
 
-| Council # | Audit Council Name | Specialized Agent Focus Areas |
+| # | Council (file) | Focus |
 |:---:|---|---|
-| **1** | **Architecture & Boundaries** | Clean Architecture, dependency directions, layer isolation, interface segregation, single responsibility. |
-| **2** | **Security & Zero-Leak** | Secret scanning, permission boundaries, intent traversal, credential sanitization, secure storage. |
-| **3** | **Concurrency & Thread-Safety** | Race condition prevention, thread dispatching, coroutine scope safety, mutual exclusion, deadlock guards. |
-| **4** | **Performance & Resource** | Memory footprint, frame pacing (60/120 FPS), battery drain, unneeded allocations, disk I/O offloading. |
-| **5** | **Error Resilience & Recovery** | Fail-closed defaults, graceful degradation, circuit breaking, network retry policies, unhandled crash traps. |
-| **6** | **Memory & Leak Hunter** | Lifecycle leaks, context retention, observer unregistration, bitmap recycling, static reference cleanup. |
-| **7** | **Test Quality & Oracle** | RED→GREEN paired oracle authenticity, assertion strength, coverage integrity, non-tautological test checks. |
-| **8** | **Adversarial Chaos Council** | Boundary conditions, corrupted payloads, unexpected nulls, rapid cancellation, out-of-order execution. |
-| **9** | **Zero-Regression Council** | Historical bug recurrence prevention, regression matrix validation, backward compatibility preservation. |
-| **10** | **State Continuity & Handoff** | Context preservation, session handoff readiness, documentation freshness, unambiguous workstream state. |
+| 1 | `01-subsystem-shared-flow.md` | Surgical isolation in shared flows, legacy platform guards, shared resources, event throttling, multi-window. |
+| 2 | `02-architecture-blast-radius.md` | Inbound callers, cyclic dependencies, layer boundaries, API contract breaks, dead code. |
+| 3 | `03-zero-defect-tdd.md` | Paired RED→GREEN oracles, regression matrix, assertion integrity, flaky tests, mutation coverage. |
+| 4 | `04-deterministic-ocr-review.md` | OpenCodeReview hunk positioning, semantic bundling, noise filtering, suggested diffs. |
+| 5 | `05-security-vulnerability.md` | Secrets, IPC/Intent security, data exfiltration, OWASP Mobile/API Top 10, tamper defense. |
+| 6 | `06-game-unity-blender.md` | Unity GC/delegate leaks, draw calls, scene integrity, Blender topology, asset memory budget. |
+| 7 | `07-performance-anr.md` | Main-thread blocking/ANR, jank, battery/thermal, bitmap OOM, Binder limits. |
+| 8 | `08-tiered-memory-governance.md` | Session traces, instinct promotion, on-demand context routing, rulebook bloat. |
+| 9 | `09-solo-dev-workflow.md` | Debounce/instant disable, visual proof, audit trail, DEMO vs LIVE isolation. |
+| 10 | `10-standards-compliance-delivery.md` | Requirement traceability, data integrity, accessibility, offline resilience, handover. |
 
-> **Diagnostic Verification:** Run `./bin/agent-health.py` or `agent-kit health` to audit all 50 agents and 12 diagnostic checks (current score: **100/100 HEALTHY**).
+**Self-consistency checks:** `scripts/audit_*_agents.py` and `scripts/adversarial_chaos_test_10_agents.py` are grep-based checks that the DevKit's own docs and scripts still contain what they should; they print `N/M checks passed` and do not review your code. The repository-level truth test is `tests/test_repo_consistency.sh` (links, JSON, frontmatter, documented commands and counts).
+
+> **Health check:** `agent-kit health` scores installation and configuration (profiles, rules, skills, councils, hooks, the active profile's MCP servers). Tests are **not** run by default (`tests: not run`); `agent-kit health --run-tests` runs `agent-kit test` and lowers the score when a suite fails.
 
 ---
 
@@ -363,44 +446,44 @@ Prevents agents from repeating known past repository failures:
 
 ## 📜 Complete Rulebook & Engineering Standards (Single Source of Truth)
 
-All engineering rules, multi-agent architecture contracts, and quality protocols are consolidated into a single authoritative source of truth: [`AGENTS.md`](file://AGENTS.md).
+All engineering rules, multi-agent architecture contracts, and quality protocols are consolidated into a single authoritative source of truth: [`AGENTS.md`](./AGENTS.md).
 
-No fragmented rule files or conflicting directories exist. Key protocols enforced within `AGENTS.md`:
+`AGENTS.md` is complemented by `rules/core-rules.md` (engineering, security, performance and reporting standards) and one `rules/<profile>-rules.md` per domain profile; `CLAUDE.md` imports the first two. Key protocols in `AGENTS.md`:
 - **Architecture & Modularization:** Clean Architecture boundaries, Layer isolation (Presentation → Domain → Data), and clean DI.
 - **Pre-Code Gate (Section 5):** 5-box mandatory check (Target + authority, real source read, consumer list, failure mechanism, residual) before modifying production code.
 - **Zero-Defect Protocol & Paired Executable Oracle:** Mandatory RED → GREEN verification on physical failure boundary with zero waivers.
 - **No-Fabrication Engine (C1–C9 Decision Table):** Strict prohibition against hallucinated metrics, file paths, or test results.
 - **Solo Dev & Git Conventions:** Conventional Commits (`feat`, `fix`, `chore`), zero secret commits, surgical diffs, and clean PR workflows (Rule 0: No commits or pushes without explicit user instruction).
-- **Multi-Agent Cross-Compatibility:** Synchronized to all 4 AI agent platforms with 100% fidelity.
+- **Multi-Agent Cross-Compatibility:** The same `AGENTS.md` is read by all 4 supported agent platforms.
 
 ---
 
 ## 🧰 25 Curated Engineering Skills Catalog
 
-Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclosure) across **5 functional suites** (23 canonical foundation skills + 2 senior domain performance skills):
+Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclosure) in **5 groups**:
 
-### 1. 🧪 Testing & Zero-Defect QA (6 Skills)
+### 1. 🧪 Testing & Zero-Defect QA
 | Skill | Slash Command | Description & Purpose |
 |---|---|---|
-| **`qc`** | `/qc`, `/test`, `/qa` | Automated quality control: unit tests, lint checks (ktlint), Metalava API checks, and release QA gates. |
-| **`fixbugs`** | `/fixbugs`, `/fix`, `/bugs`, `/crashlytics` | Systematic bug diagnostic, Crashlytics/ANR triage, and repair enforcing **Paired Executable Oracle (RED → GREEN)**. |
+| **`qc`** | `/qc`, `/check` | Detects the build tool (Gradle, npm/pnpm/yarn, pytest, go, cargo, xcodebuild, dotnet) and runs its tests/lint; ktlint, Metalava and translation gates for Android/Gradle projects. |
+| **`fixbugs`** | `/fixbugs`, `/fix` | Systematic bug diagnostic, Crashlytics/ANR triage, and repair enforcing **Paired Executable Oracle (RED → GREEN)**. |
 | **`tdd-workflow`** | `/tdd` | Test-Driven Development workflow: write failing unit tests before implementing production code. |
-| **`verification-before-completion`** | `/verify` | Final 8-layer verification gate before declaring task completion or opening pull requests. |
-| **`deploy`** | `/deploy`, `/build` | Artifact building (APK/AAB), signing verification, ProGuard/R8 mapping checks, and release gates. |
+| **`verification-before-completion`** | `/verify`, `/done` | Evidence checklist before declaring a task complete or opening a pull request. |
+| **`deploy`** | `/deploy`, `/build` | **Android/Gradle only:** APK/AAB builds, signing verification, ProGuard/R8 mapping checks, release gates. |
 
 ---
 
-### 2. 🔍 Code Review & Visual QA (4 Skills)
+### 2. 🔍 Code Review & Visual QA
 | Skill | Slash Command | Description & Purpose |
 |---|---|---|
-| **`qa-review`** | `/qa-review`, `/review` | Deep code diff audit before PR, acceptance criteria generation, and test scenario matrix (Role × Data × Error). |
-| **`open-code-review`** | `/ocr`, `/open-code-review` | Direct integration with **Alibaba OpenCodeReview v1.12.9**: deterministic line resolution (`resolver.go`), semantic file bundling ($\le 10$ files), and high-precision diff auditing with 1/9 token consumption. |
+| **`qa-review`** | `/qa-review`, `/plan-tests` | Deep code diff audit before PR, acceptance criteria generation, and test scenario matrix (Role × Data × Error). |
+| **`open-code-review`** | `/ocr`, `/review-code`, `/open-code-review` | Wrapper for the **Alibaba OpenCodeReview** CLI (`ocr`, installed separately): line-resolved review comments on the diff. |
 | **`qa-visual`** | `/qa-visual`, `/visual` | Automated screenshot capture and DOM layout auditing (overflow, alignment, overlaps) with cloud upload. |
 | **`android-real-device-qa`** | `/android-qa` | Real-device & emulator QA via ADB/Replicant: SurfaceFlinger FPS profiling, view hierarchy dumps, and ANR logcat triage. |
 
 ---
 
-### 3. 📐 Architecture, Git & Planning (6 Skills)
+### 3. 📐 Architecture, Git & Planning
 | Skill | Slash Command | Description & Purpose |
 |---|---|---|
 | **`spec-driven-development`** | `/plan` | Spec-Kit Lite planning for all changes touching $\ge 3$ files or $\ge 2$ modules. |
@@ -412,7 +495,7 @@ Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclos
 
 ---
 
-### 4. 🚀 Execution Refinement & System Governance (8 Skills)
+### 4. 🚀 Execution Refinement & System Governance
 | Skill | Slash Command | Description & Purpose |
 |---|---|---|
 | **`context-enricher`** | `/enrich` | Gateway 5-dimensional context enrichment (5D Dossier) for all terse user prompts. |
@@ -426,7 +509,7 @@ Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclos
 
 ---
 
-### 5. ⚡ Senior Domain Performance Skills (2 Skills)
+### 5. ⚡ Senior Domain Performance Skills
 | Skill | Slash Command | Description & Purpose |
 |---|---|---|
 | **`compose-recomp-audit`** | `/compose-recomp-audit`, `/recomp-audit` | **Jetpack Compose 120 FPS Recomposition Audit:** Audits recomposition hot-paths, Layout Inspector metrics, stability annotations (`@Immutable`, `@Stable`), `derivedStateOf`, deferred state reads, and Skia frame budget pacing. |
@@ -436,17 +519,17 @@ Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclos
 
 ## ⌨️ Complete Slash Commands Catalog
 
-All 25 skills, domain profiles, and safety gates are bound to auto-discovered slash commands with convenient shorthand aliases:
+All 25 skills, the profile switcher and the post-fix gate are bound to auto-discovered slash commands with shorthand aliases (`agent-kit commands` lists them):
 
 | Slash Command | Shorthand Aliases | Backing Skill / Target | Key Functionality |
 |---|---|---|---|
-| `/qc` | `/test`, `/qa` | `skills/qc` | Runs unit tests, linting, Metalava API check, and QA gate suites. |
-| `/fixbugs` | `/fix`, `/bugs`, `/crashlytics` | `skills/fixbugs` | Executes RED→GREEN bug fixing workflow with paired test oracle & Crashlytics triage. |
+| `/qc` | `/check` | `skills/qc` | Detects the build tool and runs tests/lint (Metalava & translation gates on Android). |
+| `/fixbugs` | `/fix` | `skills/fixbugs` | Executes RED→GREEN bug fixing workflow with paired test oracle & Crashlytics triage. |
 | `/tdd-workflow` | `/tdd` | `skills/tdd-workflow` | Author failing test first, then minimal implementation, then refactor. |
-| `/verification-before-completion` | `/verify` | `skills/verification-before-completion` | Pre-completion 8-layer checklist and verification gate. |
-| `/deploy` | `/build` | `skills/deploy` | Builds and verifies APK/AAB release packages. |
+| `/verification-before-completion` | `/verify`, `/done` | `skills/verification-before-completion` | Pre-completion evidence checklist. |
+| `/deploy` | `/build` | `skills/deploy` | Builds and verifies APK/AAB release packages (Android/Gradle only). |
 | `/qa-review` | `/review` | `skills/qa-review` | Pre-PR code review and test scenario generation. |
-| `/open-code-review` | `/ocr` | `skills/open-code-review` | Alibaba OpenCodeReview deterministic AST diff audit. |
+| `/open-code-review` | `/ocr`, `/review-code` | `skills/open-code-review` | Alibaba OpenCodeReview diff review (needs the `ocr` CLI). |
 | `/qa-visual` | `/visual` | `skills/qa-visual` | Visual screenshot capture and layout defect auditing. |
 | `/android-real-device-qa` | `/android-qa` | `skills/android-real-device-qa` | Real Android device QA, FPS measurement, and ANR logcat triage. |
 | `/spec-driven-development` | `/plan` | `skills/spec-driven-development` | Spec-Kit Lite planning for multi-file/multi-module features. |
@@ -465,8 +548,23 @@ All 25 skills, domain profiles, and safety gates are bound to auto-discovered sl
 | `/writing-skills` | `/skill-author` | `skills/writing-skills` | Authors and audits DevKit skills and rules. |
 | `/compose-recomp-audit` | `/recomp-audit` | `skills/compose-recomp-audit` | Jetpack Compose 120 FPS recomposition auditing & stability analysis. |
 | `/unity-gc-audit` | `/gc-audit` | `skills/unity-gc-audit` | Unity 6 C# Zero-GC allocation auditing in frame update loops. |
-| `/audit-gate` | `/postfix-gate` | `commands/audit-gate.md` | Executes 8-layer post-fix quality gate and TIA regression check. |
+| `/audit-gate` | `/postfix-gate` | `commands/audit-gate.md` | Runs the post-fix static diff gate and the matrix regression tests. |
 | `/profile` | — | `commands/profile.md` | Inspects or switches active domain profile. |
+
+---
+
+### 🧭 QA Commands: Which One When
+
+Run them in this order — **plan-tests → review-code → check → done**:
+
+| Step | Command | Skill | What it does | What it does **not** do |
+|---|---|---|---|---|
+| 1. Plan tests (before writing tests / opening a PR) | `/plan-tests` | `qa-review` | Questions the diff, writes acceptance criteria and a test-scenario matrix | Does not hunt bugs or run tests |
+| 2. Review code (the diff, for defects) | `/review-code` | `open-code-review` | Runs the OpenCodeReview CLI on the diff | Needs `ocr` installed |
+| 3. Check (the project's own checks) | `/check` | `qc` | Detects the build tool and runs tests/lint | Does not judge the diff |
+| 4. Done (before saying "done") | `/done`, then `/audit-gate` | `verification-before-completion` + post-fix gate | Evidence checklist, then static diff checks + matrix regression tests (`postfix-gate --run-tests`, PASS/REJECT/UNVERIFIED) | Does not verify UI, devices or RED→GREEN |
+
+> **Renamed in 1.1.0:** `/review` → `/plan-tests` (it collided with the agent's built-in `/review`); `/qa`, `/test` → `/check`; `/bugs`, `/crashlytics` → `/fix`. The old names remain as deprecated stubs that redirect for one release and are removed in 1.2.0.
 
 ---
 
@@ -479,7 +577,7 @@ The DevKit natively synchronizes with the 4 core AI coding ecosystems using `AGE
 | **Claude Code** | `AGENTS.md`, `.claude/settings.json`, `.claude/commands/`, `.claude/hooks/`, `.mcp.json` | Slash Commands, automated runtime safety hooks, subagents, MCP tools | `READY` 🟢 |
 | **OpenAI Codex** | `AGENTS.md` (SSOT) | Universal Master Rules, Pre-Code Gate & Zero-Defect protocol for OpenAI GPT models & Canvas | `READY` 🟢 |
 | **Antigravity / Gemini** | `AGENTS.md`, `.agents/skills/`, `mcp_config.json` | Auto-discovery skills, Zero-Defect QA protocols, MCP integration | `READY` 🟢 |
-| **Cursor IDE** | `AGENTS.md` (SSOT), `.mcp.json` | Native repository rules, Zero-Defect QA & Pre-Code Gate enforcement | `READY` 🟢 |
+| **Cursor IDE** | `AGENTS.md`, DevKit block merged into an existing `.cursorrules` | Repository rules (MCP servers are not configured by the installer — add them in Cursor's MCP settings) | `READY` 🟢 |
 
 ---
 
@@ -512,49 +610,6 @@ universal-agent-devkit/mcp/
 
 ---
 
-## 🚀 Quick Start & Installation
-
-### Option 1: Remote One-Liner (Zero-Clone)
-
-```bash
-# Interactive Mode (Recommended — prompts for domain profile and agent platforms):
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ToanMobile/universal-agent-devkit/main/bin/quick-install.sh)"
-
-# Quick non-interactive setup (Configures all core agents automatically):
-curl -fsSL https://raw.githubusercontent.com/ToanMobile/universal-agent-devkit/main/bin/quick-install.sh | bash
-```
-
----
-
-### Option 2: Clone & Global CLI Setup (Recommended)
-```bash
-# 1. Clone the repository
-git clone https://github.com/ToanMobile/universal-agent-devkit.git
-cd universal-agent-devkit
-
-# 2. Install agent-kit globally to ~/.local/bin
-make install
-
-# 3. Initialize DevKit instantly inside ANY project on your machine
-cd /path/to/your-project
-agent-kit init
-```
-
-#### Language Option:
-- **Default (English):** `agent-kit init`
-- **Vietnamese Option:** `agent-kit init --lang=vi`
-
----
-
-### Option 3: Claude Code Plugin
-```bash
-claude plugin install github.com/ToanMobile/universal-agent-devkit
-# or from local path:
-claude plugin install /path/to/universal-agent-devkit
-```
-
----
-
 ## 🧪 Verification & DevKit CLI (`agent-kit`)
 
 Universal Agent DevKit includes a dedicated management, diagnostic, and testing CLI:
@@ -564,15 +619,15 @@ Universal Agent DevKit includes a dedicated management, diagnostic, and testing 
 agent-kit init
 
 # 2. Switch or inspect active domain profile:
-agent-kit profile [automotive | android | game | universal]
+agent-kit profile [android | ios | web | backend | automotive | game | voice-assistant | universal]
 
-# 3. Run comprehensive health & 50-agent audit diagnostic:
+# 3. Health check of the installation (add --run-tests to run the suites too):
 agent-kit health
 
-# 4. Execute post-fix 5-layer quality & regression audit:
+# 4. Post-fix static diff gate + regression tests:
 agent-kit gate --run-tests
 
-# 5. Run full 302+ regression test suite:
+# 5. Run every regression suite:
 agent-kit test
 
 # 6. List all 25 curated skills:
@@ -581,22 +636,49 @@ agent-kit list
 # 7. List all available slash commands:
 agent-kit commands
 
-# 8. List and inspect preserved user custom assets (*_old):
+# 8. List preserved user files (*_old), and put recorded ones back (dry-run unless --apply):
 agent-kit list-old
+agent-kit restore-old [--apply]
 
 # 9. Resynchronize skills, slash commands, and aliases:
 agent-kit sync
 ```
 
-### 📊 Verified Test Evidence:
-- **Hook Contract Tests:** `160 / 160 PASS (100%)` ✅
-- **Workflow Engine Tests:** `134 / 134 PASS (100%)` ✅
-- **Total Test Points:** `302 / 302 PASS (100%)` (168 hook contract + 134 workflow engine) + installer/gate suites ✅
-- **Post-Fix Quality Gate:** `8 / 8 Layers PASS (100%)` ✅
-- **50-Agent Audit Councils:** `50 / 50 PASS (100%)` ✅
-- **Health Diagnostic Score:** `12 / 12 Checks (100/100 HEALTHY)` ✅
-- **X_old Conflict Isolation:** `3 / 3 Scenarios PASS` ✅
-- **Multi-Agent Sandbox Matrix:** `4 / 4 Core Ecosystems Verified` ✅
+### 📊 What `agent-kit test` Runs
+- `hooks/tests/hook_contract_test.sh` — contract points for every wired hook (block/allow cases, bypass attempts, missing python3).
+- `hooks/tests/contract_facts_test.sh` — the three hook registries agree, no orphan hooks, every hook runs via `bash`.
+- `node --test workflows/*.test.mjs` — workflow engine tests.
+- `tests/test_*.sh` — installer CLI & safety, idempotency, X_old isolation, JSON/Markdown merge, post-fix gate, profile switching, health, linters, `restore-old`, and the repository consistency test.
+
+Counts are printed by each suite; the docs deliberately do not hard-code them.
+
+---
+
+## 👥 Team / CI Usage
+
+- **Commit the setup with `-m copy`.** The default symlink mode points into *your* DevKit checkout with absolute paths — fine on one machine, broken for teammates and CI. The installer warns when it sees a git repository in symlink mode.
+- Copy mode records a hash per installed file (`.devkit-files`); re-running the installer after a DevKit upgrade replaces files you never edited and keeps your edited ones as `*_old`.
+- In CI, run the gate on the change: `python3 <devkit>/bin/post-fix-gate.py --run-tests --diff origin/main` (exit 0 PASS, 1 REJECT, 2 UNVERIFIED). Hooks only run inside Claude Code sessions, not in CI.
+- `agent-kit init … </dev/null` works without a TTY (it never forces `/dev/tty`).
+
+## 🧹 Uninstall / Restoring `*_old` Backups
+
+1. `agent-kit list-old` — see what the installer preserved.
+2. Remove DevKit links: `find . -type l -lname '*universal-agent-devkit*' -not -path './.git/*'` lists them (symlink mode); in copy mode the installed files are listed in each directory's `.devkit-files`.
+3. Remove the DevKit hook entries from `.claude/settings.json` and the `<!-- universal-agent-devkit:start --> … end -->` blocks from `CLAUDE.md` / `.cursorrules`.
+4. `agent-kit restore-old` (dry-run) then `agent-kit restore-old --apply` — puts every recorded `*_old` back when its original location holds only DevKit content; anything else is reported for a manual merge. There is no automatic `uninstall` command yet.
+
+## 🩺 Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| A hook blocks with exit 2 | Read its message: it names the rule (destructive git, unread file, missing review, no test evidence). Do the missing step; do not disable the hook. |
+| Stop is blocked twice, then allowed | Expected: Stop gates block a claim without evidence and one re-stop, then release with a logged warning (`.claude/audit-gate/`). |
+| Gate says UNVERIFIED | No test ran (`--run-tests` missing or no matrix rule matched), the matrix is uncommitted, or the change edits the matrix/an existing test. Commit the matrix separately, then re-run. |
+| `postfix-gate: command not found` | Run `make install` or `agent-kit install-global`, and add `~/.local/bin` to `PATH`. |
+| Hooks do nothing on a machine | `python3` is missing: `precode_gate`/`security_gate` block, the others warn on stderr. Install python3. |
+| Links broken after cloning a project | It was installed in symlink mode; re-run `agent-kit init -m copy`. |
+| Installer skipped `commands/` (or `rules/`, `skills/`) | Your project owns that directory; the DevKit item is skipped on purpose. Use `.claude/commands` / `.agents/skills`, which are always installed. |
 
 ---
 
@@ -608,18 +690,18 @@ universal-agent-devkit/
 ├── bin/                         # CLI entrypoints (agent-kit, agent-config.py, agent-health.py, post-fix-gate.py)
 ├── AGENTS.md                    # Universal Master Rules & SSOT (Sole Root Rulebook)
 ├── DESIGN.md                    # Universal Design System & UI/UX Accessibility Baseline
-├── profiles/                    # 6 Dynamic Domain Profiles (android, ios, automotive, game, universal, voice-assistant)
+├── profiles/                    # Domain profiles (android, ios, web, backend, automotive, game, voice-assistant, universal)
 │   ├── android/scripts/qa/      # Native crash triage tools (tombstone-triage.sh, adb-fps-measure.sh)
 │   ├── game/scripts/            # Unity test runners and bot marathon
 │   └── ios/                     # iOS Swift 6, SwiftUI, Concurrency rules & matrix
 ├── rules/                       # Core rules & dynamic profile rules symlinks
-├── skills/                      # 25 Curated Skills (23 Canonical + 2 Senior Domain Performance)
-├── commands/                    # Auto-discovered Slash Commands & Aliases (45+ commands)
-├── agents/                      # Specialized Subagents (.md)
-├── hooks/                       # 13 Lifecycle Safety Gates & 168 Contract Tests
-├── workflows/                   # Audit & Test Engines (134+ JS/MJS Tests)
-├── scripts/                     # 50-Agent Councils, Chaos Audits & AST Machine Linters (Compose, Unity GC)
-├── .github/workflows/           # CI/CD Multi-OS Pipeline (Ubuntu & macOS Matrix)
+├── skills/                      # 25 Curated Skills
+├── commands/                    # Slash commands & aliases (links into skills/, plus audit-gate & profile)
+├── agents/                      # Subagents (.md) and the 10 councils (agents/councils/)
+├── hooks/                       # Lifecycle hooks (hooks.json) and their contract tests (hooks/tests/)
+├── workflows/                   # Workflow engines (Claude Code Workflow harness) and their tests
+├── scripts/                     # Installer helpers, self-consistency checks, regex linters (Compose, Unity GC)
+├── tests/                       # Installer, gate, profile, health, linter & repo-consistency suites
 ├── mcp/                         # MCP Hub (.mcp.json, mcp_config.json, schemas)
 ├── setup.sh                     # Root setup entrypoint
 ├── Makefile                     # Build & Global install automation
@@ -631,7 +713,7 @@ universal-agent-devkit/
 ## 📄 License & Repository
 
 - **GitHub:** [https://github.com/ToanMobile/universal-agent-devkit](https://github.com/ToanMobile/universal-agent-devkit)
-- **License:** Distributed under the **MIT License**.
+- **License:** Distributed under the **MIT License** — see [`LICENSE`](./LICENSE). Changes: [`CHANGELOG.md`](./CHANGELOG.md).
 
 <div align="center">
   <sub>Built with precision by Senior AI Software Engineers. Powered by Universal Agent Architecture.</sub>

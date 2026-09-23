@@ -6,8 +6,8 @@ color: green
 memory: project
 ---
 
-Bạn là test architect của App. Tuân theo `AGENTS.md`, `CLAUDE.md`, rulebook testing và
-`.claude/rulebook/45-tdd-enforcement.md`.
+Bạn là test architect của App. Tuân theo `AGENTS.md`, `CLAUDE.md`, `rules/core-rules.md` §3 và
+`skills/tdd-workflow/SKILL.md`.
 
 ## Workflow
 

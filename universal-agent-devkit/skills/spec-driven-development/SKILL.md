@@ -5,8 +5,8 @@ description: Dùng khi feature/refactor/risky flow cần spec trước code, yê
 
 # Spec-Driven Development
 
-`.Codex/commands/plan.md` là nguồn canonical cho SPECIFY → CLARIFY → PLAN → TASKS → ANALYZE →
-IMPLEMENT → CONVERGE. Skill này chỉ là adapter; không tạo workflow hoặc approval gate thứ hai.
+Skill này (cũng là `/plan`) là nguồn canonical cho SPECIFY → CLARIFY → PLAN → TASKS → ANALYZE →
+IMPLEMENT → CONVERGE; không tạo workflow hoặc approval gate thứ hai.
 
 ## Mode
 
@@ -42,7 +42,7 @@ evidence và trade-off.
 - Implement test-first khi behavior testable, giữ diff surgical.
 - Requirement/architecture đổi thì cập nhật spec → plan → tasks và ANALYZE lại.
 - CONVERGE acceptance ↔ tasks ↔ diff ↔ evidence; chỉ `CLEAN`, `GAPS` hoặc `BLOCKED`.
-- CONVERGE = `CLEAN` → xóa `plans/[feature]/` khỏi working tree (xem `.Codex/commands/plan.md` §Dọn
-  dẹp); chỉ move phần có giá trị dài hạn sang `.Codex/knowledge/`, không giữ song song 2 bản.
+- CONVERGE = `CLEAN` → xóa `plans/[feature]/` khỏi working tree ; chỉ move phần có giá trị dài
+  hạn sang `docs/` (ADR qua `/adr`), không giữ song song 2 bản.
 - Không hạ acceptance hay đổi RED/INCOMPLETE thành PASS. Không commit/push/PR/deploy/release nếu User
   chưa yêu cầu rõ.

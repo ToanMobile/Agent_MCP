@@ -27,12 +27,10 @@ const executeWorkflow = new AsyncFunction(
 // ES2020 intrinsic present in every conforming engine and was wrongly listed at first; `require` and
 // `__dirname` are absent because this is an ES module, not because of the sandbox.
 //
-// TextEncoder/TextDecoder are deliberately NOT in this list even though the sandbox lacks them and
-// they are what currently kills this workflow at launch: the script still uses them at six call
-// sites, so listing them would leave a permanently red test in the repo. Add them in the same
-// change that replaces those uses with pure-JS UTF-8 codecs — see the header note.
+// The workflow sandbox lacks all of these; the script uses pure-JS UTF-8 codecs instead of
+// TextEncoder/TextDecoder (see the header note).
 test('workflow source does not reach for host globals the sandbox lacks', () => {
-  for (const forbidden of ['process']) {
+  for (const forbidden of ['process', 'new TextEncoder', 'new TextDecoder']) {
     assert.doesNotMatch(
       rawSource,
       new RegExp(`(^|[^\\w.'"\`])${forbidden}\\s*[.(\\[]`, 'm'),

@@ -15,7 +15,7 @@ của cả hai; không bịa behavior thứ ba. Chỉ chạm vùng conflict và 
 1. Đọc `git status`, operation hiện tại và danh sách unmerged. Đọc toàn bộ file conflict và lịch sử liên
    quan (`git log -p --follow`, `git blame`) để hiểu why của hai phía.
 2. Với Kotlin/code, dùng graph-first để trace symbol/caller. Với config/docs/literal dùng Read/Grep.
-   Kiểm `.Codex/memory/` nếu một phía chứa bug prevention đã biết.
+   Kiểm `.agents/instincts.md` nếu một phía chứa bug prevention đã biết.
 3. Resolve từng hunk, xóa marker. Nếu hai intent mâu thuẫn không thể dung hòa, chọn theo mục tiêu đã
    tuyên bố của operation; nếu mục tiêu không suy ra an toàn và behavior khác đáng kể, hỏi User.
 4. Verify vùng đụng: marker search, targeted compile/test và ktlint; detekt khi logic/risk cần. Không
@@ -33,4 +33,4 @@ của cả hai; không bịa behavior thứ ba. Chỉ chạm vùng conflict và 
 Terminal: không còn marker/unmerged trong scope, intent truy được, checks đã chạy được báo đúng và
 dirty/staged state được nêu chính xác.
 
-Liên kết: [[rulebook/22-git-conventions]] · [[rulebook/17-testing]].
+Liên kết: `AGENTS.md` · `rules/core-rules.md` §3 (test).

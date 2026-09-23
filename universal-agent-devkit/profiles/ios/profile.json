@@ -18,5 +18,11 @@
     "10-standards-compliance-delivery.md"
   ],
   "rules_file": "profiles/ios/rules/ios-rules.md",
-  "regression_matrix": "profiles/ios/regression_matrix.json"
+  "regression_matrix": "profiles/ios/regression_matrix.json",
+  "exclude_skills": [
+    "android-real-device-qa",
+    "compose-recomp-audit",
+    "deploy",
+    "unity-gc-audit"
+  ]
 }

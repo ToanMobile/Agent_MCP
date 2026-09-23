@@ -2,6 +2,7 @@
   "id": "android",
   "name": "📱 Android (Mobile App / Jetpack Compose / Clean Architecture)",
   "description": "Cấu hình chuẩn cho phát triển ứng dụng di động Android: Solo-Dev workflow, chống spam thao tác (Debounce/Loading), Jetpack Compose recomposition, Room/SQLite local cache, chống ANR/Bitmap OOM, kiểm soát cờ PendingIntent an toàn.",
+  "description_en": "Android mobile apps: solo-dev workflow, anti-spam debounce/loading, Jetpack Compose recomposition, Room/SQLite local cache, ANR/Bitmap OOM prevention, safe PendingIntent flags.",
   "essential_mcps": [
     "codebase-memory-mcp",
     "android-code-search",
@@ -20,5 +21,6 @@
     "10-standards-compliance-delivery.md"
   ],
   "regression_matrix": "profiles/android/regression_matrix.json",
-  "rules_file": "profiles/android/rules/android-rules.md"
+  "rules_file": "profiles/android/rules/android-rules.md",
+  "exclude_skills": []
 }

@@ -1,0 +1,28 @@
+{
+  "id": "web",
+  "name": "🕸️ Web (Frontend / Full-Stack JS / TypeScript)",
+  "description": "Cấu hình cho ứng dụng web: React/Next.js/Vue/Svelte, TypeScript strict, Core Web Vitals, a11y WCAG AA, chống XSS/CSRF, test runner phát hiện theo package.json (npm/pnpm/yarn).",
+  "description_en": "Web applications: React/Next.js/Vue/Svelte, strict TypeScript, Core Web Vitals, WCAG AA accessibility, XSS/CSRF defences, test runner detected from package.json (npm/pnpm/yarn).",
+  "essential_mcps": [
+    "codebase-memory-mcp",
+    "context7"
+  ],
+  "active_councils": [
+    "02-architecture-blast-radius.md",
+    "03-zero-defect-tdd.md",
+    "04-deterministic-ocr-review.md",
+    "05-security-vulnerability.md",
+    "07-performance-anr.md",
+    "08-tiered-memory-governance.md",
+    "09-solo-dev-workflow.md",
+    "10-standards-compliance-delivery.md"
+  ],
+  "regression_matrix": "profiles/web/regression_matrix.json",
+  "rules_file": "profiles/web/rules/web-rules.md",
+  "exclude_skills": [
+    "android-real-device-qa",
+    "compose-recomp-audit",
+    "deploy",
+    "unity-gc-audit"
+  ]
+}

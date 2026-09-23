@@ -32,7 +32,7 @@ thiếu một vế. Không có safe pre-run → `BLOCKED`.
 | Security/release safe | Relevant release/config/runtime gate, không chỉ debug compile |
 | Agent khác hoàn tất | Đọc diff/file thật và tự chạy verification phù hợp |
 
-Chọn command theo module/blast radius trong `AGENTS.md` và `.Codex/rulebook/45-tdd-enforcement.md`.
+Chọn command theo module/blast radius trong `AGENTS.md` và `skills/tdd-workflow/SKILL.md`.
 Không chạy root full suite, screenshot matrix, macrobenchmark, device hay release gate mặc định nếu claim
 không cần chúng. Ngược lại, compile/mock-only test không đủ cho runtime/device/security/performance.
 
@@ -44,4 +44,4 @@ không cần chúng. Ngược lại, compile/mock-only test không đủ cho run
 - Finding/residual còn thật thì verdict phải là residual/blocked, không `CLEAN`.
 - Không commit/push/PR chỉ vì verification pass; cần request rõ của User.
 
-Liên kết: `AGENTS.md` Rule 5/W6 · [[rulebook/17-testing]] · [[tdd-workflow]].
+Liên kết: `AGENTS.md` Rule 5/W6 · `rules/core-rules.md` §3 (test) · [[tdd-workflow]] · `/audit-gate`.

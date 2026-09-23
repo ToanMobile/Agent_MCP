@@ -979,6 +979,16 @@ run_case "non-code file not scanned" comment_claim_guard.sh 0 \
 echo
 
 # ── testsourceset_gate.sh — Stop (documented SKIP paths only) ───────────────
+# ── regression_gate.sh — Stop (full scenarios: tests/test_regression_gate_hook.sh) ──
+echo "regression_gate.sh"
+run_case "not a git repo: allowed (silent)"     regression_gate.sh 0 \
+  '{"session_id":"s","hook_event_name":"Stop"}'
+run_case "REGRESSION_GATE=0 escape hatch"        regression_gate.sh 0 \
+  '{"session_id":"s","hook_event_name":"Stop"}' REGRESSION_GATE=0
+run_case "malformed stdin fails open"            regression_gate.sh 0 \
+  'not json'
+echo
+
 echo "testsourceset_gate.sh"
 run_case "no ./gradlew in root → skip" testsourceset_gate.sh 0 \
   "{\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"xong\"}"

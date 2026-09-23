@@ -5,9 +5,9 @@ description: Dùng khi đổi external Intent/URI/file handling, exported compon
 
 # Android Security Checklist
 
-Adapter cho `/scan` và rulebooks canonical:
-[[rulebook/16-security]] · [[rulebook/33-deep-linking]] · [[rulebook/35-file-permissions]] ·
-[[rulebook/30-r8-proguard]] · [[rulebook/49-supabase]] · [[rulebook/46-firebase]].
+Adapter cho `/scan`. Nguồn quy tắc: `rules/core-rules.md` §1 (bảo mật), §11 (logging & PII) và
+`rules/android-rules.md` (profile Android). Checklist này dành cho Android; dự án khác dùng các mục
+tương đương của nền tảng (ATS/Keychain cho iOS, CSP/CORS/secret handling cho web/backend).
 
 ## Surfaces bắt buộc
 

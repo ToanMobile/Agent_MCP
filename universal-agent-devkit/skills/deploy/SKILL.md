@@ -1,9 +1,12 @@
 ---
 name: deploy
-description: Quy trình build, đóng gói APK/AAB, kiểm tra signing và chuẩn bị release cho Target Project / Codebase.
+description: "Quy trình build, đóng gói APK/AAB, kiểm tra signing và chuẩn bị release cho dự án Android/Gradle. Không dùng cho dự án không phải Android."
 ---
 
-# Build & Deployment Pipeline
+# Build & Deployment Pipeline (Android/Gradle)
+
+> Skill này chỉ áp dụng cho dự án Android dùng Gradle. Dự án iOS, web, backend: dùng pipeline
+> release của chính dự án đó; skill này không có lệnh tương đương.
 
 Skill hướng dẫn và tự động hóa quy trình build artifact (APK/AAB), kiểm tra chữ ký (signing), xác minh ProGuard/R8 mappings và chuẩn bị deployment cho Target Project / Codebase.
 

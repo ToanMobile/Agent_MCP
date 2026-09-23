@@ -26,5 +26,5 @@ help:
 	@echo "Targets:"
 	@echo "  make install    Install 'agent-kit' globally into ~/.local/bin"
 	@echo "  make init       Initialize DevKit for current directory"
-	@echo "  make test       Run all regression suites (302 hook+engine tests + installer/gate tests)"
+	@echo "  make test       Run all regression suites (hook contract + facts, workflow engine, installer/gate/repo)"
 	@echo "  make sync       Resynchronize skills & slash commands"

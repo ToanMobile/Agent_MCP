@@ -2,6 +2,7 @@
   "id": "universal",
   "name": "🌐 Universal (General / Full-Stack / Clean Architecture)",
   "description": "Cấu hình chuẩn chung cho mọi dự án: Clean Architecture, TDD Paired Oracle, Zero Secret Leakage, Solo-Dev Delivery, TIA Regression Verification.",
+  "description_en": "Baseline for any project: Clean Architecture, TDD paired oracle, zero secret leakage, solo-dev delivery, TIA regression verification.",
   "essential_mcps": [
     "codebase-memory-mcp",
     "context7"
@@ -17,5 +18,11 @@
     "10-standards-compliance-delivery.md"
   ],
   "regression_matrix": "profiles/universal/regression_matrix.json",
-  "rules_file": "profiles/universal/rules/universal-rules.md"
+  "rules_file": "profiles/universal/rules/universal-rules.md",
+  "exclude_skills": [
+    "android-real-device-qa",
+    "compose-recomp-audit",
+    "deploy",
+    "unity-gc-audit"
+  ]
 }

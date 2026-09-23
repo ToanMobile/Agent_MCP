@@ -1,7 +1,7 @@
 {
   "name": "universal-agent-devkit",
-  "version": "1.0.0",
-  "description": "A unified, production-grade framework providing Zero-Defect protocols, automated safety gates, 44 curated canonical skills, and MCP tools across Claude Code, Google Gemini/Antigravity, Cursor, Windsurf, Copilot, and Codex.",
+  "version": "1.1.0",
+  "description": "Rules, lifecycle hooks, 25 curated skills, domain profiles and a static post-fix diff gate for Claude Code, OpenAI Codex, Google Gemini/Antigravity and Cursor.",
   "author": {
     "name": "Toan Mobile",
     "url": "https://github.com/ToanMobile"

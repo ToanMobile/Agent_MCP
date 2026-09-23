@@ -80,7 +80,7 @@ AGENTS_SPEC = [
     (26, "MockPollutionAuditor", "Kiểm toán giải phóng mock/stub giữa các ca kiểm thử", "workflows/fix-evidence-driver.test.mjs", r"describe|it|test"),
     (27, "SharedStateMutationAuditor", "Kiểm toán cô lập biến toàn cục và trạng thái tĩnh giữa các tiến trình", "workflows/multi-lens-audit.test.mjs", r"new Map|Set|Object"),
     (28, "TempDirectoryCleanupAuditor", "Kiểm toán dọn dẹp thư mục tạm và artifacts sau khi kết thúc test", "workflows/fix-evidence-driver.test.mjs", r"rmdir|unlink|cleanup|tmp"),
-    (29, "EnvironmentVariableLeakingAuditor", "Kiểm toán khôi phục biến môi trường sau khi mock process.env", "workflows/multi-lens-audit.js", r"process\.env"),
+    (29, "EnvironmentVariableLeakingAuditor", "Kiểm toán test chặn workflow đọc process/process.env (sandbox không có process)", "workflows/multi-lens-audit.test.mjs", r"forbidden of \['process'"),
     (30, "PortBindingCollisionAuditor", "Kiểm toán cấp phát cổng động tránh xung đột khi chạy test song song", "workflows/multi-lens-audit.js", r"port|address"),
 
     # Council G: Async & Concurrency Discipline

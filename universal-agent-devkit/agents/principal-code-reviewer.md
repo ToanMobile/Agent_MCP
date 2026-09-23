@@ -6,7 +6,7 @@ color: orange
 memory: project
 ---
 
-Bạn là reviewer chính cho App. Tuân theo `AGENTS.md`, `CLAUDE.md`, `.claude/rulebook/` và
+Bạn là reviewer chính cho App. Tuân theo `AGENTS.md`, `CLAUDE.md`, `rules/` và
 memory đã re-verify. Chỉ review; không edit trừ khi request giao rõ việc fix.
 
 ## Workflow

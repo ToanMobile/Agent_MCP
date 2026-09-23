@@ -1,6 +1,6 @@
 ---
 name: giao
-description: Giao một task cho Google Antigravity làm rồi tự audit, code review, chạy test, đòi ảnh nghiệm thu trước khi chốt (Leader PM ↔ Worker Sandbox Protocol). Dùng cho MỌI project có MCP antigravity-pm. Tự động kích hoạt khi gõ /giao, "giao Antigravity", "giao cho Antigravity làm", "bảo Antigravity sửa", hoặc khi Leader PM cần phân công cho Antigravity làm trong môi trường sandbox với chính sách commitPolicy: forbid.
+description: "Giao một task cho Google Antigravity làm rồi tự audit, code review, chạy test, đòi ảnh nghiệm thu trước khi chốt (Leader PM ↔ Worker Sandbox Protocol). Dùng cho MỌI project có MCP antigravity-pm. Tự động kích hoạt khi gõ /giao, \"giao Antigravity\", \"giao cho Antigravity làm\", \"bảo Antigravity sửa\", hoặc khi Leader PM cần phân công cho Antigravity làm trong môi trường sandbox với chính sách commitPolicy: forbid."
 ---
 
 # Giao Việc Cho Antigravity (Leader PM ↔ Worker Protocol)

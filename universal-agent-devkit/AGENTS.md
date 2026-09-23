@@ -19,24 +19,26 @@ Every repository adopting this framework follows Clean Architecture, Unidirectio
 
 ## 2. Slash Commands & Skills Router
 
-All automated skills reside in `.agents/skills/` (SSOT) or are loaded directly via the DevKit Plugin:
+Skills live in `skills/` (source of truth); `.agents/skills/` and `commands/` link to them, and the DevKit plugin loads them directly:
 
 | Slash Command / Alias | Canonical Skill Path | Description / Trigger | Primary Scope |
 |---|---|---|---|
-| `/qc`, `/test`, `/qa` | [qc](skills/qc/SKILL.md) | Automated testing, lint checks, unit tests, and QA release gates | Test / Build Gates |
-| `/deploy`, `/build` | [deploy](skills/deploy/SKILL.md) | Build binaries/bundles, verify ProGuard/R8/bundling, release checks | Build / Deploy |
-| `/fixbugs`, `/bugs`, `/fix`, `/crashlytics` | [fixbugs](skills/fixbugs/SKILL.md) | Standard bug-fixing with Paired Executable Oracle (RED→GREEN) & Crashlytics/ANR triage | Repro / Fix / Verification |
+| `/qc`, `/check` | [qc](skills/qc/SKILL.md) | Detect the build tool, run tests/lint; Metalava & translation gates on Android/Gradle | Test / Build Gates |
+| `/deploy`, `/build` | [deploy](skills/deploy/SKILL.md) | Android/Gradle only: APK/AAB builds, ProGuard/R8, signing, release checks | Build / Deploy |
+| `/fixbugs`, `/fix` | [fixbugs](skills/fixbugs/SKILL.md) | Standard bug-fixing with Paired Executable Oracle (RED→GREEN) & Crashlytics/ANR triage | Repro / Fix / Verification |
 | `/plan` | [spec-driven-development](skills/spec-driven-development/SKILL.md) | Spec-driven plan for changes ≥3 files or ≥2 modules | Spec / Plan / Tasks |
 | `/scan` | [security-checklist](skills/security-checklist/SKILL.md) | Security audit: Input validation, URI/Permissions, Secrets, Auth | Security Gate |
 | `/tdd` | [tdd-workflow](skills/tdd-workflow/SKILL.md) | TDD Workflow: Write failing RED test before implementation logic | Test-First |
-| `/verify` | [verification-before-completion](skills/verification-before-completion/SKILL.md) | Verification gate before declaring task completion | Verification Gate |
+| `/verify`, `/done` | [verification-before-completion](skills/verification-before-completion/SKILL.md) | Verification gate before declaring task completion | Verification Gate |
 | `/conflict` | [merge-conflict-resolver](skills/merge-conflict-resolver/SKILL.md) | Resolve Git merge / rebase / cherry-pick / stash conflicts | Git 3-way merge |
 | `/handoff` | [session-handoff](skills/session-handoff/SKILL.md) | Transfer work-in-progress context across sessions | Session Handoff |
 | `/graph`, `/codebase-memory` | [codebase-memory](skills/codebase-memory/SKILL.md) | Explore codebase, trace call flow, blast radius, AST knowledge graph & Cypher | Codebase Navigation & Graph |
-| `/review`, `/qa-review` | [qa-review](skills/qa-review/SKILL.md) | Audit diff before PR, acceptance criteria, test scenario matrix | Code / PR Review |
-| `/ocr`, `/open-code-review` | [open-code-review](skills/open-code-review/SKILL.md) | Alibaba OpenCodeReview: Deterministic line resolver, file bundling, code audit | Automated Diff Review |
+| `/plan-tests`, `/qa-review` | [qa-review](skills/qa-review/SKILL.md) | Audit diff before PR, acceptance criteria, test scenario matrix | Code / PR Review |
+| `/review-code`, `/ocr`, `/open-code-review` | [open-code-review](skills/open-code-review/SKILL.md) | Alibaba OpenCodeReview: Deterministic line resolver, file bundling, code audit | Automated Diff Review |
 | `/visual`, `/qa-visual` | [qa-visual](skills/qa-visual/SKILL.md) | Automated screenshot capture and DOM layout audit | Visual UI QA |
-| `/audit-gate`, `/postfix-gate` | [audit-gate](commands/audit-gate.md) | Post-fix 5-layer audit, anti-laziness, DESIGN.md a11y, and TIA checklist | Post-Fix Quality Shield |
+| `/audit-gate`, `/postfix-gate` | [audit-gate](commands/audit-gate.md) | Post-fix static diff gate (secrets, placeholders, perf, swallowed errors, raw logs) + matrix regression tests | Post-Fix Gate |
+
+**QA ladder:** `/plan-tests` → `/review-code` → `/check` → `/done` + `/audit-gate`. Deprecated stubs (removed in 1.2.0): `/review` → `/plan-tests`, `/qa` & `/test` → `/check`, `/bugs` & `/crashlytics` → `/fix`.
 
 ---
 
@@ -79,7 +81,7 @@ Required order: plan → reviewer approves the *plan* → gaps found → revise 
   (a) Approval boundary (auth policy, billing, destructive migrations, global architecture);
   (b) Attack surface narrowly defined by security gates;
   (c) Irreversible external action (commit/push/PR, release/publish, deleting shared device/server state);
-  (d) Meta-tooling or rule files (`AGENTS.md`, `scripts/qa`).
+  (d) Meta-tooling or rule files (`AGENTS.md`, `rules/`, `hooks/`, the project's own QA scripts).
   Inside this scope, Gate 2 is a full STOP. Outside this scope, issue the verdict and carry on.
 
 ---
@@ -142,7 +144,7 @@ Whenever the user asks to fix a bug, refactor code, or change behavior in a comp
 > **Modular Domain Profiles:**
 > Domain-specific and project-specific rules (such as Automotive Hardware, FlymeAuto, or CAN Bus specifics) are kept isolated in `profiles/` (e.g. `profiles/automotive/`) to keep the DevKit core 100% universal and domain-agnostic.
 
-### 8.2 Autonomous Skill Routing Matrix (Bảng Điều Phối Tự Động Toàn Bộ 23 Kỹ Năng - Zero Manual Effort)
+### 8.2 Autonomous Skill Routing Matrix (Bảng Điều Phối Tự Động Toàn Bộ 25 Kỹ Năng - Zero Manual Effort)
 AI Agent BẮT BUỘC PHẢI TỰ ĐỘNG nhận diện ngữ cảnh và kích hoạt các kỹ năng sau ĐỘC LẬP TỰ ĐỘNG, TUYỆT ĐỐI KHÔNG bắt người dùng phải gõ lệnh slash command hay chạy bằng tay. Người dùng (Senior Dev) chỉ cần đưa ra yêu cầu tự nhiên, hệ thống tự động điều phối toàn bộ:
 
 | Giai Đoạn Vòng Đời | Kỹ Năng Tự Động Kích Hoạt | Ngữ Cảnh / Tình Huống Kỹ Thuật Tự Động Kích Hoạt | Hành Động Tự Động Của Agent |
@@ -168,14 +170,14 @@ AI Agent BẮT BUỘC PHẢI TỰ ĐỘNG nhận diện ngữ cảnh và kích h
 | **4. Device & Visual QA** | `qa-visual` | Kiểm tra giao diện, audit layout, chống vỡ màn hình | Tự động audit tràn khung, lệch align, touch target >= 48dp, upload screenshot lên R2. |
 | **4. Device & Visual QA** | `qa-review` | Chuẩn bị trước khi tạo PR / bàn giao Tech Lead | Tự động chất vấn diff, tạo acceptance criteria kiểm chứng được và dựng ma trận test scenario. |
 | **5. Acceptance & Delivery** | `merge-conflict-resolver` | Xung đột git khi merge, rebase, cherry-pick | Tự động phân tích AST và ngữ cảnh để giải quyết xung đột mà không làm mất mát logic. |
-| **5. Acceptance & Delivery** | `qc` | Chạy bộ kiểm thử tự động, lint check (ktlint), unit test | Tự động thực thi toàn bộ test runner, Translation gate, và Metalava API check. |
+| **5. Acceptance & Delivery** | `qc` | Chạy bộ kiểm thử tự động, lint check, unit test | Phát hiện build tool rồi chạy test runner tương ứng; Translation gate và Metalava API check cho Android/Gradle. |
 | **5. Acceptance & Delivery** | `open-code-review` | Soát mã nguồn tự động trước khi bàn giao | Tự động chạy phân tích hunk tất định (Alibaba OCR), quét rò rỉ bộ nhớ và code lười biếng. |
-| **5. Acceptance & Delivery** | `verification-before-completion` | Trước khi tuyên bố Xong / Pass / Hoàn tất | Tự động chạy cổng kiểm toán `postfix-gate` 8 lớp, kiểm tra máy thật và SHA-256 visual proof. |
-| **5. Acceptance & Delivery** | `deploy` | Đóng gói APK/AAB, kiểm tra signing, xuất bản release | Tự động kiểm tra chứng chỉ ký (signing key), version bump và sẵn sàng phát hành. |
+| **5. Acceptance & Delivery** | `verification-before-completion` | Trước khi tuyên bố Xong / Pass / Hoàn tất | Tự động chạy `postfix-gate --run-tests` (diff tĩnh + test hồi quy) và đối chiếu bằng chứng; UI/thiết bị/RED→GREEN phải kiểm riêng vì gate không xác minh chúng. |
+| **5. Acceptance & Delivery** | `deploy` | Đóng gói APK/AAB, kiểm tra signing, xuất bản release (chỉ Android/Gradle) | Tự động kiểm tra chứng chỉ ký (signing key), version bump và sẵn sàng phát hành. |
 
 
-### 8.3 The 10 Quality Audit Councils (50 Specialized Agents)
-The DevKit provides a multi-lens audit council organized in `agents/councils/`:
+### 8.3 The 10 Review Councils
+The DevKit provides 10 council subagent prompts in `agents/councils/` (5 focus areas each); a profile's `active_councils` selects the ones that apply:
 - **Council 1 — Subsystem & Shared Flow Isolation (5 Agents):** Shared flow surgical isolation, legacy platform guards preservation, shared resource & session arbitration, hardware event & interrupt throttling, multi-window & responsive boundary.
 - **Council 2 — Architecture & Blast Radius (5 Agents):** AST inbound caller tracing, circular dependency detection, clean layered architecture, API contract breaking, dead code zombie scanning.
 - **Council 3 — Zero-Defect & TDD (5 Agents):** Paired executable oracle enforcement, regression matrix orchestration, assertion integrity, flaky test hunting, mutation coverage.
@@ -194,7 +196,7 @@ The DevKit provides a multi-lens audit council organized in `agents/councils/`:
 - **Anti-Laziness & File Integrity:** Strictly prohibit `// ... existing code ...` or placeholder omissions; enforce full contiguous block replacement and backward compatibility.
 - **Compiler AST Self-Healing:** Parse compiler diagnostic logs to extract exact `file:line:col`, error codes, and caller blast radius to fix build issues methodically.
 
-Health Diagnostic Command:
+Health Diagnostic Command (configuration only; add `--run-tests` to run the suites):
 ```bash
-./bin/agent-health.py
+agent-kit health
 ```

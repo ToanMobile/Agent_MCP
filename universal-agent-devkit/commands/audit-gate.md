@@ -40,7 +40,18 @@ Exit code:
   - matrix chưa commit hoặc bị sửa;
   - test đã có bị sửa;
   - không test hồi quy nào khớp (thêm `--allow-no-tests` nếu chấp nhận);
+  - có file code thay đổi mà chưa test hồi quy nào theo dõi (`⚠️ UNCOVERED` trong checklist — thêm vào matrix hoặc `regression_checklist.py link`);
   - `--diff` không hợp lệ.
 - `3`: không có thay đổi để kiểm. Các link và state do DevKit cài không tính là thay đổi.
 
 `--record-lesson` chỉ ghi vào `.agents/instincts.md` khi verdict là PASS.
+
+### Regression checklist (tự động, xuyên suốt các task)
+Mỗi lần gate chạy, nó cập nhật `.agents/regression_checklist.md` (bảng để đọc) và `.agents/regression_status.json` (dữ liệu gốc):
+- Mỗi test trong `regression_matrix.json` là một dòng: ✅ PASS / ❌ FAIL / ⏳ chưa chạy, kèm thời điểm, task (`--task T0001-...`), commit và 10 lần chạy gần nhất.
+- **PASS/FAIL chỉ ghi khi gate chạy test thật (`--run-tests`)** — dry-run không đổi kết quả; không có lệnh nào để tự đánh dấu PASS.
+- File code thay đổi mà không rule nào của matrix bao phủ ⇒ dòng `⚠️ UNCOVERED:<file>`. Gắn vào test thật: `python3 bin/regression_checklist.py link UNCOVERED:<file> <TEST-ID>`.
+- `--record-lesson` trên một lần gate PASS ⇒ thêm dòng `BUG-…` link tới các test vừa pass; dòng bug luôn hiện kết quả thật của test đó.
+- Commit hai file này để cả team thấy trạng thái. `--no-checklist` để tắt.
+- Stop hook `regression_gate.sh` tự chạy gate này (`--run-tests`) mỗi khi agent định kết thúc với thay đổi chưa commit, và chặn nếu test liên quan fail hoặc có file UNCOVERED (chỉ với matrix riêng của project; `REGRESSION_GATE=0` để tắt).
+

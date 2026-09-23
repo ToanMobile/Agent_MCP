@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "project": "Web Application (Frontend / Full-Stack JS)",
+  "description": "Ma trận hồi quy cho dự án web. Lệnh test tự chọn runner theo lockfile (pnpm/yarn/bun/npm); thiếu package.json thì FAIL chứ không coi là PASS.",
+  "rules": [
+    {
+      "component": "WebApplication",
+      "watch_files": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs",
+        "**/*.vue",
+        "**/*.svelte",
+        "**/*.css",
+        "**/*.scss",
+        "**/*.html",
+        "package.json",
+        "tsconfig.json"
+      ],
+      "immutable_guards": [
+        "PublicRouteContract",
+        "AuthSessionHandling",
+        "AccessibilityTouchTarget44px"
+      ],
+      "mandatory_regression_tests": [
+        {
+          "id": "REG-WEB-01",
+          "name": "Unit/integration tests (package.json test script)",
+          "command": "if [ ! -f package.json ]; then echo 'REG-WEB: no package.json in the project root' >&2; exit 1; fi; if [ -f pnpm-lock.yaml ]; then pnpm test; elif [ -f yarn.lock ]; then yarn test; elif [ -f bun.lockb ] || [ -f bun.lock ]; then bun test; else npm test; fi"
+        },
+        {
+          "id": "REG-WEB-02",
+          "name": "TypeScript type-check (tsc --noEmit) when tsconfig.json exists",
+          "command": "if [ -f tsconfig.json ]; then npx --no-install tsc --noEmit; else echo 'REG-WEB-02: no tsconfig.json — plain JavaScript project, nothing to type-check'; fi"
+        }
+      ]
+    }
+  ]
+}

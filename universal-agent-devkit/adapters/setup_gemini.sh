@@ -45,6 +45,10 @@ for skill in "$DEVKIT_ROOT/skills"/*; do
   [ -e "$skill" ] || continue
   skill_name="$(basename "$skill")"
   target_skill_path="$TARGET_DIR/.agents/skills/$skill_name"
+  if ! devkit_skill_allowed "$skill_name"; then
+    devkit_remove_filtered "$target_skill_path"  # not part of the active profile
+    continue
+  fi
   if [ "$SKIP_EXISTING" = "1" ] && [ -e "$target_skill_path" ] && [ ! -L "$target_skill_path" ]; then
     echo "  - Preserved custom skill: $skill_name (--skip-existing active)"
     continue

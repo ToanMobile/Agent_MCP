@@ -130,9 +130,17 @@ PY
 PY_RC=$?
 
 echo "F5. hook contract harness is green"
-HARNESS_OUT="$(bash "${HERE}/hook_contract_test.sh" 2>&1)"
-HARNESS_RC=$?
-CP_LINE="$(printf '%s\n' "${HARNESS_OUT}" | grep 'contract points:' | tail -1)"
+if [ "${CONTRACT_FACTS_SKIP_HARNESS:-0}" = "1" ]; then
+  # `agent-kit test` runs hook_contract_test.sh itself right before this script;
+  # skip the second (identical) run there.
+  echo "  skip hook_contract_test.sh (CONTRACT_FACTS_SKIP_HARNESS=1 — run by the caller)"
+  HARNESS_RC=0
+  CP_LINE="skipped"
+else
+  HARNESS_OUT="$(bash "${HERE}/hook_contract_test.sh" 2>&1)"
+  HARNESS_RC=$?
+  CP_LINE="$(printf '%s\n' "${HARNESS_OUT}" | grep 'contract points:' | tail -1)"
+fi
 if [ "${HARNESS_RC}" -eq 0 ] && [ -n "${CP_LINE}" ]; then
   echo "  ok   hook_contract_test.sh                                        ${CP_LINE}"
   H_FAIL=0

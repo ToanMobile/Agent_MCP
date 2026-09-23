@@ -72,6 +72,10 @@ for cmd in "$DEVKIT_ROOT/commands"/*; do
   [ -e "$cmd" ] || continue
   cmd_name="$(basename "$cmd")"
   target_cmd="$TARGET_DIR/.claude/commands/$cmd_name"
+  if ! devkit_command_allowed "$cmd"; then
+    devkit_remove_filtered "$target_cmd"  # skill not part of the active profile
+    continue
+  fi
   if [ "$SKIP_EXISTING" = "1" ] && [ -e "$target_cmd" ] && [ ! -L "$target_cmd" ]; then
     echo "  - Preserved custom command: $cmd_name (--skip-existing active)"
     continue

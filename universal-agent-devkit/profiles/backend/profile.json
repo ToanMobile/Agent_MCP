@@ -1,0 +1,30 @@
+{
+  "id": "backend",
+  "name": "🗄️ Backend (API / Services / Python · Go · Rust · Node)",
+  "description": "Cấu hình cho dịch vụ backend: hợp đồng API ổn định, idempotency, migration an toàn, timeout/retry có giới hạn, log có cấu trúc không lộ PII, test runner phát hiện theo go.mod/Cargo.toml/pyproject.toml/package.json.",
+  "description_en": "Backend services: stable API contracts, idempotency, safe migrations, bounded timeouts/retries, structured logs without PII, test runner detected from go.mod/Cargo.toml/pyproject.toml/package.json.",
+  "essential_mcps": [
+    "codebase-memory-mcp",
+    "context7"
+  ],
+  "active_councils": [
+    "01-subsystem-shared-flow.md",
+    "02-architecture-blast-radius.md",
+    "03-zero-defect-tdd.md",
+    "04-deterministic-ocr-review.md",
+    "05-security-vulnerability.md",
+    "07-performance-anr.md",
+    "08-tiered-memory-governance.md",
+    "09-solo-dev-workflow.md",
+    "10-standards-compliance-delivery.md"
+  ],
+  "regression_matrix": "profiles/backend/regression_matrix.json",
+  "rules_file": "profiles/backend/rules/backend-rules.md",
+  "exclude_skills": [
+    "android-real-device-qa",
+    "compose-recomp-audit",
+    "deploy",
+    "qa-visual",
+    "unity-gc-audit"
+  ]
+}

@@ -24,9 +24,6 @@ done
 
 # 2. Setup Aliases
 ALIASES=(
-  "test:qc"
-  "qa:qc"
-  "bugs:fixbugs"
   "fix:fixbugs"
   "build:deploy"
   "plan:spec-driven-development"
@@ -35,13 +32,42 @@ ALIASES=(
   "verify:verification-before-completion"
   "conflict:merge-conflict-resolver"
   "handoff:session-handoff"
-  "crashlytics:fixbugs"
   "graph:codebase-memory"
-  "review:qa-review"
   "visual:qa-visual"
   "ocr:open-code-review"
   "recomp-audit:compose-recomp-audit"
   "gc-audit:unity-gc-audit"
+  "adr:documentation-and-adrs"
+  "android-qa:android-real-device-qa"
+  "deprecate:deprecation-migration"
+  "enrich:context-enricher"
+  "grill:grill-plan"
+  "logging:observability-instrumentation"
+  "module-design:deep-module-design"
+  "skill-author:writing-skills"
+  "step:incremental-implementation"
+  # QA ladder (1.1.0): plan-tests -> review-code -> check -> done (+ /audit-gate)
+  "plan-tests:qa-review"
+  "review-code:open-code-review"
+  "check:qc"
+  "done:verification-before-completion"
+)
+
+# Deprecated aliases (1.1.0), kept ONE release as stub commands that point to the new name,
+# then removed in 1.2.0. /review collided with the agent's built-in /review; the others
+# duplicated an existing alias of the same skill. Format: "old:new-command:skill".
+DEPRECATED_ALIASES=(
+  "review:plan-tests:qa-review"
+  "qa:check:qc"
+  "test:check:qc"
+  "bugs:fix:fixbugs"
+  "crashlytics:fix:fixbugs"
+)
+DEPRECATED_MARKER="<!-- devkit:deprecated-alias -->"
+
+# Aliases of hand-written commands (commands/<target>.md, not a skill).
+COMMAND_ALIASES=(
+  "postfix-gate:audit-gate"
 )
 
 # Clean broken symlinks in commands/
@@ -60,6 +86,46 @@ for mapping in "${ALIASES[@]}"; do
     fi
     ln -sfn "../skills/${target_skill}/SKILL.md" "$alias_path"
   fi
+done
+
+for mapping in "${COMMAND_ALIASES[@]}"; do
+  alias_name="${mapping%%:*}"
+  target_cmd="${mapping##*:}"
+  alias_path="$COMMANDS_DIR/${alias_name}.md"
+  [ -f "$COMMANDS_DIR/${target_cmd}.md" ] || continue
+  if [ -e "$alias_path" ] && [ ! -L "$alias_path" ]; then
+    echo "⚠ commands/${alias_name}.md is a hand-written command — alias /${alias_name} -> /${target_cmd} NOT created." >&2
+    continue
+  fi
+  ln -sfn "${target_cmd}.md" "$alias_path"
+done
+
+for mapping in "${DEPRECATED_ALIASES[@]}"; do
+  old_name="${mapping%%:*}"
+  rest="${mapping#*:}"
+  new_name="${rest%%:*}"
+  target_skill="${rest##*:}"
+  stub_path="$COMMANDS_DIR/${old_name}.md"
+  [ -f "$SKILLS_DIR/$target_skill/SKILL.md" ] || continue
+  if [ -e "$stub_path" ] && [ ! -L "$stub_path" ] && ! grep -qF "$DEPRECATED_MARKER" "$stub_path"; then
+    echo "⚠ commands/${old_name}.md is a hand-written command — deprecated stub /${old_name} NOT written." >&2
+    continue
+  fi
+  rm -f "$stub_path"
+  cat > "$stub_path" <<EOF
+---
+description: "Deprecated alias: /${old_name} was renamed to /${new_name} (skill ${target_skill}); removed in DevKit 1.2.0."
+---
+${DEPRECATED_MARKER}
+# /${old_name} → /${new_name}
+
+\`/${old_name}\` is a deprecated DevKit alias. Use \`/${new_name}\` (skill \`${target_skill}\`) from now on.
+
+Run the \`${target_skill}\` skill now: read \`skills/${target_skill}/SKILL.md\` (in an installed
+project: \`.agents/skills/${target_skill}/SKILL.md\`) and follow it for: \$ARGUMENTS
+
+Tell the user once, in one line, that \`/${old_name}\` is deprecated and \`/${new_name}\` replaces it.
+EOF
 done
 
 # If .claude/commands exists, synchronize commands there as well

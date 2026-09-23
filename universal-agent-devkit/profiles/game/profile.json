@@ -2,11 +2,16 @@
   "id": "game",
   "name": "🎮 Game (Unity 6 / Blender 3D / Mesh & Asset Optimization)",
   "description": "Cấu hình chuyên sâu cho phát triển Game 3D: kiểm toán rò rỉ bộ nhớ MonoBehaviour/C# delegates, triệt tiêu GC allocations trong Update(), tối ưu DrawCall batching, kiểm soát topology/polygon count trong Blender 4.x và kết nối MCP Unity/Blender.",
+  "description_en": "3D game development: MonoBehaviour/C# delegate leak audits, zero GC allocations in Update(), DrawCall batching, Blender 4.x topology/polygon budgets and Unity/Blender MCP integration.",
   "essential_mcps": [
-    "unity",
-    "blender",
-    "codebase-memory-mcp"
+    "codebase-memory-mcp",
+    "context7"
   ],
+  "external_mcps": [
+    "unity",
+    "blender"
+  ],
+  "external_mcps_note": "Unity/Blender MCP servers are not shipped in mcp/; install and register them yourself. They are not checked by agent-kit health.",
   "active_councils": [
     "06-game-unity-blender.md",
     "02-architecture-blast-radius.md",
@@ -18,5 +23,10 @@
     "10-standards-compliance-delivery.md"
   ],
   "regression_matrix": "profiles/game/regression_matrix.json",
-  "rules_file": "profiles/game/rules/game-rules.md"
+  "rules_file": "profiles/game/rules/game-rules.md",
+  "exclude_skills": [
+    "android-real-device-qa",
+    "compose-recomp-audit",
+    "deploy"
+  ]
 }
