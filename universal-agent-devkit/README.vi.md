@@ -653,6 +653,9 @@ agent-kit commands
 agent-kit list-old
 agent-kit restore-old [--apply]
 
+# 8b. Gỡ DevKit khỏi dự án (chạy thử nếu không có --apply):
+agent-kit uninstall [path] [--apply]
+
 # 9. Đồng bộ hóa Skills & Slash Commands:
 agent-kit sync
 ```
@@ -661,7 +664,7 @@ agent-kit sync
 - `hooks/tests/hook_contract_test.sh` — contract point cho mọi hook được wire (ca chặn/cho qua, thử lách, thiếu python3).
 - `hooks/tests/contract_facts_test.sh` — 3 registry hook khớp nhau, không có hook mồ côi, mọi hook gọi qua `bash`.
 - `node --test workflows/*.test.mjs` — test của workflow engine.
-- `tests/test_*.sh` — CLI & an toàn installer, idempotency, cách ly X_old, merge JSON/Markdown, post-fix gate, đổi profile, health, linter, `restore-old`, và test nhất quán của repo.
+- `tests/test_*.sh` — CLI & an toàn installer, idempotency, cách ly X_old, merge JSON/Markdown, post-fix gate, đổi profile, health, linter, `restore-old`, `uninstall`, và test nhất quán của repo.
 
 Mỗi suite tự in số lượng; tài liệu cố ý không ghi cứng con số.
 
@@ -676,10 +679,12 @@ Mỗi suite tự in số lượng; tài liệu cố ý không ghi cứng con s�
 
 ## 🧹 Gỡ Cài Đặt / Khôi Phục Bản `*_old`
 
-1. `agent-kit list-old` — xem installer đã giữ lại những gì.
-2. Gỡ link DevKit: `find . -type l -lname '*universal-agent-devkit*' -not -path './.git/*'` liệt kê chúng (symlink mode); ở copy mode, file đã cài được ghi trong `.devkit-files` của từng thư mục.
-3. Xóa các mục hook DevKit trong `.claude/settings.json` và khối `<!-- universal-agent-devkit:start --> … end -->` trong `CLAUDE.md` / `.cursorrules`.
-4. `agent-kit restore-old` (chạy thử) rồi `agent-kit restore-old --apply` — đưa mọi bản `*_old` đã ghi nhận về chỗ cũ khi vị trí đó chỉ còn nội dung của DevKit; trường hợp khác được báo để merge tay. Hiện chưa có lệnh `uninstall` tự động.
+1. `agent-kit uninstall [path]` (chạy thử) liệt kê những gì sẽ gỡ; `agent-kit uninstall [path] --apply` gỡ thật. Chỉ nội dung của DevKit bị gỡ:
+   - symlink trỏ vào DevKit, và file/thư mục copy-mode còn giống hệt lúc cài (`.devkit-files`, `.devkit-copy`) — cái đã bị sửa được giữ lại và báo ra;
+   - các mục hook DevKit trong `.claude/settings.json` (hook và thiết lập riêng của bạn được giữ) và MCP server DevKit trong `.mcp.json` / `mcp_config.json` còn nguyên giá trị — mỗi file JSON được sao lưu thành `*_old.uninstall-<time>.json` trước khi sửa;
+   - khối đánh dấu `universal-agent-devkit` trong `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `CODEX.md`, `.cursorrules`, `.gitignore`, cùng `DESIGN.md`, `.agents/instincts.md`, `.active-profile.json` và ma trận hồi quy chưa bị sửa.
+2. `agent-kit restore-old` (chạy thử) rồi `agent-kit restore-old --apply` — đưa mọi bản `*_old` đã ghi nhận về chỗ cũ khi vị trí đó chỉ còn nội dung của DevKit; trường hợp khác được báo để merge tay.
+3. `agent-kit list-old` — xem những gì còn lại (các bản lưu để bạn xem rồi xóa).
 
 ## 🩺 Xử Lý Sự Cố
 

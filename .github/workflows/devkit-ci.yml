@@ -38,22 +38,35 @@ jobs:
           python-version: "3.12"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          # Node 20 reached end-of-life in April 2026; 22 is the maintained LTS.
+          # workflows/*.test.mjs pass on both (134/134 locally on 20.20.2 and 22.23.2).
+          node-version: "22"
+
+      # tests/test_repo_consistency.sh checks skill/agent YAML frontmatter strictly with
+      # ruby when present (GitHub's ubuntu and macos images ship it) and falls back to a
+      # line-based check otherwise; print which one this runner gets.
+      - name: Tool versions
+        run: |
+          python3 --version
+          node --version
+          bash --version | head -1
+          if command -v ruby >/dev/null 2>&1; then ruby --version; else echo "ruby: not installed (frontmatter check uses the fallback parser)"; fi
 
       - name: Syntax & Compilation Check
         run: |
-          python3 -m py_compile bin/agent-config.py bin/agent-health.py bin/post-fix-gate.py
-          bash -n bin/install.sh bin/quick-install.sh adapters/*.sh
+          shopt -s nullglob
+          py_files=(bin/*.py scripts/*.py)
+          python3 -m py_compile "${py_files[@]}"
+          for f in bin/agent-kit bin/install.sh bin/quick-install.sh hooks/*.sh hooks/tests/*.sh scripts/*.sh adapters/*.sh tests/*.sh; do
+            bash -n "$f" || { echo "bash -n failed: $f"; exit 1; }
+          done
 
-      - name: Run X_old Conflict Isolation Suite (3/3 Tests)
-        run: bash tests/test_x_old_conflict_isolation.sh
-
-      - name: Run Agent Health & 50-Agent Councils Diagnostic (12/12 Checks)
+      - name: Agent Health (configuration checks)
         run: python3 bin/agent-health.py
 
       # post-fix-gate.py is not run bare here: on a clean checkout it has nothing to
       # audit and exits 3 by design. Its behaviour is covered by tests/test_postfix_gate.sh.
-      - name: Run Hook Contract, Workflow Engine, Installer & Gate Test Suites
+      - name: Run all test suites (agent-kit test)
         run: bash bin/agent-kit test

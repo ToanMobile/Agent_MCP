@@ -9,7 +9,8 @@
 #       (= directory name for skills), `description` <= 1024 chars, no duplicate names
 #   R5  every `/command` quoted in README.md, README.vi.md, AGENTS.md exists in commands/,
 #       every commands/*.md is linked (relative) from .claude/commands/
-#   R6  every profile's active_councils and essential_mcps exist
+#   R6  every profile's active_councils and essential_mcps exist; every profile
+#       regression_matrix.json uses the rules/watch_files schema post-fix-gate reads
 #   R7  counts written in the docs (skills, profiles, councils, hooks) equal the real
 #       counts, and retired claims ("8-layer", "AST linter", "50 agents", fixed test
 #       totals) are gone
@@ -221,6 +222,35 @@ for pid in profiles:
         if meta.get(k) and not os.path.isfile(os.path.join(ROOT, meta[k])):
             prof_problems.append(f"{pid}: {k} {meta[k]} missing")
 check(not prof_problems, "R6 profile councils, MCPs, rules and matrices exist", "; ".join(prof_problems[:6]))
+
+# Every profile matrix uses the schema post-fix-gate reads (bin/post-fix-gate.py TIA
+# layer: matrix["rules"][*].component / watch_files / mandatory_regression_tests[*].id,
+# .command). Any other shape (e.g. a "checklist" list) is silently ignored by the gate.
+matrix_problems = []
+for mf in sorted(glob.glob(os.path.join(ROOT, "profiles", "*", "regression_matrix.json"))):
+    rel = os.path.relpath(mf, ROOT)
+    try:
+        m = json.load(open(mf))
+    except Exception as e:
+        matrix_problems.append(f"{rel}: {e}"); continue
+    rules = m.get("rules")
+    if not isinstance(rules, list) or not rules:
+        matrix_problems.append(f"{rel}: no non-empty 'rules' list (keys: {sorted(m)})"); continue
+    for i, r in enumerate(rules):
+        if not r.get("component"):
+            matrix_problems.append(f"{rel}: rules[{i}] has no component")
+        if not (isinstance(r.get("watch_files"), list) and r["watch_files"]):
+            matrix_problems.append(f"{rel}: rules[{i}] has no watch_files")
+        tests_ = r.get("mandatory_regression_tests")
+        if not (isinstance(tests_, list) and tests_):
+            matrix_problems.append(f"{rel}: rules[{i}] has no mandatory_regression_tests"); continue
+        for t in tests_:
+            if not (t.get("id") and t.get("command")):
+                matrix_problems.append(f"{rel}: rules[{i}] test without id/command")
+            elif re.search(r"\|\|\s*true\s*$", t["command"]):
+                matrix_problems.append(f"{rel}: {t['id']} ends in '|| true' (can never fail)")
+check(not matrix_problems, "R6 every profile regression_matrix.json has the schema the gate reads",
+      "; ".join(matrix_problems[:6]))
 
 # ── R7 documented counts ───────────────────────────────────────────────────────
 n_skills = len(skill_files)

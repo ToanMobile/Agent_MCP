@@ -653,6 +653,9 @@ agent-kit commands
 agent-kit list-old
 agent-kit restore-old [--apply]
 
+# 8b. Remove the DevKit from a project again (dry-run unless --apply):
+agent-kit uninstall [path] [--apply]
+
 # 9. Resynchronize skills, slash commands, and aliases:
 agent-kit sync
 ```
@@ -661,7 +664,7 @@ agent-kit sync
 - `hooks/tests/hook_contract_test.sh` — contract points for every wired hook (block/allow cases, bypass attempts, missing python3).
 - `hooks/tests/contract_facts_test.sh` — the three hook registries agree, no orphan hooks, every hook runs via `bash`.
 - `node --test workflows/*.test.mjs` — workflow engine tests.
-- `tests/test_*.sh` — installer CLI & safety, idempotency, X_old isolation, JSON/Markdown merge, post-fix gate, profile switching, health, linters, `restore-old`, and the repository consistency test.
+- `tests/test_*.sh` — installer CLI & safety, idempotency, X_old isolation, JSON/Markdown merge, post-fix gate, profile switching, health, linters, `restore-old`, `uninstall`, and the repository consistency test.
 
 Counts are printed by each suite; the docs deliberately do not hard-code them.
 
@@ -676,10 +679,12 @@ Counts are printed by each suite; the docs deliberately do not hard-code them.
 
 ## 🧹 Uninstall / Restoring `*_old` Backups
 
-1. `agent-kit list-old` — see what the installer preserved.
-2. Remove DevKit links: `find . -type l -lname '*universal-agent-devkit*' -not -path './.git/*'` lists them (symlink mode); in copy mode the installed files are listed in each directory's `.devkit-files`.
-3. Remove the DevKit hook entries from `.claude/settings.json` and the `<!-- universal-agent-devkit:start --> … end -->` blocks from `CLAUDE.md` / `.cursorrules`.
-4. `agent-kit restore-old` (dry-run) then `agent-kit restore-old --apply` — puts every recorded `*_old` back when its original location holds only DevKit content; anything else is reported for a manual merge. There is no automatic `uninstall` command yet.
+1. `agent-kit uninstall [path]` (dry-run) lists what would go; `agent-kit uninstall [path] --apply` removes it. Only DevKit content is removed:
+   - symlinks into the DevKit, and copy-mode files/directories still identical to what the installer recorded (`.devkit-files`, `.devkit-copy`) — edited ones are kept and reported;
+   - DevKit hook entries in `.claude/settings.json` (your own hooks and settings stay) and DevKit MCP servers in `.mcp.json` / `mcp_config.json` whose value is unchanged — each JSON file is backed up as `*_old.uninstall-<time>.json` before it changes;
+   - the `universal-agent-devkit` marker blocks in `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `CODEX.md`, `.cursorrules`, `.gitignore`, plus an unmodified `DESIGN.md`, `.agents/instincts.md`, `.active-profile.json` and regression matrix.
+2. `agent-kit restore-old` (dry-run) then `agent-kit restore-old --apply` — puts every recorded `*_old` back when its original location holds only DevKit content; anything else is reported for a manual merge.
+3. `agent-kit list-old` — what is left over (backups you can review and delete).
 
 ## 🩺 Troubleshooting
 

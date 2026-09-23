@@ -34,7 +34,12 @@ between what the docs claimed and what the code did. This release fixes them.
   clobber each other; `.gitignore` entries are added to git projects; symlink mode warns in git repos.
 - `make install` / `agent-kit install-global` also install `postfix-gate`.
 - New `agent-kit restore-old [path] [--apply]` puts recorded `*_old` backups back (dry-run by default,
-  never overwrites content that is not the DevKit's).
+  never overwrites content that is not the DevKit's; recreates install dirs `uninstall` removed).
+- New `agent-kit uninstall [path] [--apply]` (`scripts/devkit_uninstall.py`, dry-run by default) removes
+  only DevKit content: links into the DevKit, copies still matching `.devkit-files`/`.devkit-copy`,
+  DevKit hook entries in `.claude/settings.json`, unchanged DevKit MCP servers, marker blocks, and
+  unmodified template files. JSON files are backed up (`*_old.uninstall-<time>`) and written atomically.
+  `tests/test_uninstall.sh`: install + uninstall + restore-old gives back the original project.
 
 ### Profiles / health / scripts
 - `agent-kit profile` writes to the git root of the current directory (refuses the DevKit itself), backs
@@ -58,6 +63,16 @@ between what the docs claimed and what the code did. This release fixes them.
   uncommitted matrix byte-identical to a DevKit profile matrix is trusted, an edited one is UNVERIFIED.
 - `hooks/regression_gate.sh` and `bin/regression_checklist.py` (regression checklist gate) were added in
   a parallel change during this release.
+- `profiles/ios/regression_matrix.json` moved from a `checklist` list (silently ignored by the gate) to
+  the `rules`/`watch_files`/`mandatory_regression_tests` schema; REG-MEM-01 ran `… || true` and could never
+  fail — it now runs `swift test --filter RetainCycleTests`. `test_repo_consistency.sh` checks every
+  profile matrix has the schema the gate reads and no test command ends in `|| true`.
+
+### CI (`.github/workflows/devkit-ci.yml` in the monorepo)
+- Step names no longer carry fixed counts or retired claims; `actions/setup-node` pinned to a commit SHA
+  (v4.4.0); Node 22 (Node 20 is end-of-life; `workflows/*.test.mjs` pass on 20.20.2 and 22.23.2).
+- `py_compile` covers `bin/*.py` and `scripts/*.py`; `bash -n` covers `bin`, `hooks`, `hooks/tests`,
+  `scripts`, `adapters` and `tests`; a step prints whether ruby (strict YAML frontmatter check) exists.
 
 ### Catalog / docs
 - 10 documented aliases now exist (`/adr /android-qa /deprecate /enrich /grill /logging /module-design

@@ -1,10 +1,22 @@
 {
+  "version": "1.1.0",
   "project": "iOS Native Application / SwiftUI / Swift Concurrency Platform",
-  "version": "1.0.0",
-  "checklist": [
+  "description": "Ma trận hồi quy cho dự án iOS (schema rules/watch_files/mandatory_regression_tests mà post-fix-gate đọc được). Các lệnh giả định test target tương ứng tồn tại; thiếu target thì lệnh FAIL chứ không coi là PASS.",
+  "rules": [
     {
-      "category": "Core Stability & Unit Tests",
-      "cases": [
+      "component": "CoreStabilityAndUnitTests",
+      "watch_files": [
+        "**/*.swift",
+        "**/Domain/**",
+        "**/ViewModel*/**",
+        "**/*ViewModel.swift",
+        "Package.swift"
+      ],
+      "immutable_guards": [
+        "MainActorIsolation",
+        "SendableConformance"
+      ],
+      "mandatory_regression_tests": [
         {
           "id": "REG-IOS-01",
           "name": "XCTest Core Domain Logic & ViewModel State Machine",
@@ -18,12 +30,20 @@
       ]
     },
     {
-      "category": "Memory Leaks & Retain Cycle Defense",
-      "cases": [
+      "component": "MemoryLeaksAndRetainCycles",
+      "watch_files": [
+        "**/*.swift",
+        "**/Assets.xcassets/**"
+      ],
+      "immutable_guards": [
+        "WeakSelfInEscapingClosures",
+        "HeavyAssetDeallocation"
+      ],
+      "mandatory_regression_tests": [
         {
           "id": "REG-MEM-01",
-          "name": "Memory Retention & Zero Retain Cycle Check (leaks CLI)",
-          "command": "which leaks >/dev/null 2>&1 && leaks --version >/dev/null 2>&1 || true"
+          "name": "Retain Cycle Regression Tests (weak/unowned capture)",
+          "command": "swift test --filter RetainCycleTests"
         },
         {
           "id": "REG-MEM-02",
@@ -33,8 +53,18 @@
       ]
     },
     {
-      "category": "UI Touch Targets & Anti-Spam",
-      "cases": [
+      "component": "UITouchTargetsAndAntiSpam",
+      "watch_files": [
+        "**/View*/**",
+        "**/*View.swift",
+        "**/*Button*.swift",
+        "**/UI/**"
+      ],
+      "immutable_guards": [
+        "TouchTarget44pt",
+        "ButtonDebounce"
+      ],
+      "mandatory_regression_tests": [
         {
           "id": "REG-UI-01",
           "name": "SwiftUI Touch Target Minimum Boundary (>= 44pt HIG)",

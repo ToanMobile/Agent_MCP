@@ -456,7 +456,9 @@ restore_old_backups() {
       elif [ -d "$target" ]; then
         rm -rf "$target"
       fi
-      if mv "$backup" "$target"; then
+      # `agent-kit uninstall` removes install dirs left empty (.claude/commands, ...):
+      # recreate the parent so the backup can go back.
+      if mkdir -p "$(dirname "$target")" && mv "$backup" "$target"; then
         echo "  restored ${backup#$root_p/} -> ${target#$root_p/}"
         restored=$((restored + 1))
       else

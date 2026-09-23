@@ -110,6 +110,11 @@ case "$CMD" in
     done
     DEVKIT_ROOT="$DEVKIT_ROOT" bash "$DEVKIT_ROOT/scripts/backup_conflict.sh" restore "$R_TARGET" $R_APPLY
     ;;
+  uninstall|remove)
+    # uninstall [path] [--apply] — dry-run unless --apply; see scripts/devkit_uninstall.py
+    shift || true
+    python3 "$DEVKIT_ROOT/scripts/devkit_uninstall.py" "$@"
+    ;;
   help|*)
     cat << HELP_EOF
 Universal Agent DevKit CLI (agent-kit)
@@ -134,6 +139,10 @@ Commands:
   restore-old [path] [--apply]
                       Put *_old backups recorded by the installer back in place
                       (dry-run unless --apply; never overwrites non-DevKit content)
+  uninstall [path] [--apply]
+                      Remove what the installer added (DevKit links, unmodified copies,
+                      DevKit hooks/MCP entries, marker blocks); your own files and edits
+                      stay. Dry-run unless --apply; then run restore-old --apply
   help                Show this help message
 
 Examples:
@@ -141,6 +150,7 @@ Examples:
   agent-kit init ../my-app -y      # Non-interactive setup of another project
   agent-kit list-old               # Inspect preserved *_old folders and files
   agent-kit restore-old --apply    # Restore recorded *_old backups (see restore-old)
+  agent-kit uninstall --apply && agent-kit restore-old --apply   # Remove the DevKit again
   agent-kit profile automotive     # Switch domain profile to Automotive (AAOS/CAN)
   agent-kit profile web            # Web front-end profile (Android/Unity skills left out)
   DEVKIT_LANG=en agent-kit health  # English output (order: --lang > DEVKIT_LANG > .active-profile.json > vi)
