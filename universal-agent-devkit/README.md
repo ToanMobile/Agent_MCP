@@ -1,15 +1,15 @@
 <div align="center">
 
 # 🚀 Universal AI Agent DevKit & Quality Protocol
-### *A unified, production-grade framework providing Zero-Defect protocols, automated safety gates, 16 curated canonical skills, dynamic domain profiles, 50 audit agents, and MCP tools across Claude Code, OpenAI Codex, Google Gemini/Antigravity, and Cursor.*
+### *A unified, production-grade framework providing Zero-Defect protocols, automated safety gates, 25 curated skills, 5 dynamic domain profiles, 50 audit agents, X_old conflict isolation protection, and an 8-layer Post-Fix Audit Gate across Claude Code, OpenAI Codex, Google Gemini/Antigravity, and Cursor.*
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-ToanMobile%2Funiversal--agent--devkit-blue.svg?style=for-the-badge&logo=github)](https://github.com/ToanMobile/universal-agent-devkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Tests Passing](https://img.shields.io/badge/Tests-294%20PASS%20(100%25)-success.svg?style=for-the-badge)](./hooks/tests)
 [![Supported Agents](https://img.shields.io/badge/Agents-4%20Core%20Platforms-orange.svg?style=for-the-badge)](#-universal-multi-agent-matrix)
 [![Rulebook](https://img.shields.io/badge/Rules-AGENTS.md%20(SSOT)-red.svg?style=for-the-badge)](#-complete-rulebook--engineering-standards-single-source-of-truth)
-[![Skills Catalog](https://img.shields.io/badge/Skills-16%20Curated-purple.svg?style=for-the-badge)](#-16-curated-engineering-skills-catalog)
-[![Domain Profiles](https://img.shields.io/badge/Profiles-4%20Domains-cyan.svg?style=for-the-badge)](#-dynamic-domain-profiles-system)
+[![Skills Catalog](https://img.shields.io/badge/Skills-25%20Curated-purple.svg?style=for-the-badge)](#-25-curated-engineering-skills-catalog)
+[![Domain Profiles](https://img.shields.io/badge/Profiles-5%20Domains-cyan.svg?style=for-the-badge)](#-dynamic-domain-profiles-system)
 [![Audit Councils](https://img.shields.io/badge/Audits-10%20Councils%20(50%20Agents)-yellow.svg?style=for-the-badge)](#-10-quality-audit-councils-50-specialized-agents)
 [![MCP Servers](https://img.shields.io/badge/MCP-6%20Integrated-brightgreen.svg?style=for-the-badge)](#-mcp-model-context-protocol-hub)
 
@@ -21,7 +21,7 @@
   <b>One DevKit to rule them all:</b> Elevate your AI coding assistants from conversational LLMs into rigorous, disciplined, and evidence-backed <b>Principal Pair Programmers</b>.
 </p>
 
-[Quick Start](#-quick-start--installation) • [Architecture](#-system-architecture) • [Workflows](#-production-engineering-workflows) • [Domain Profiles](#-dynamic-domain-profiles-system) • [Post-Fix Shield](#-post-fix-quality-shield--5-layer-audit-gate) • [50-Agent Councils](#-10-quality-audit-councils-50-specialized-agents) • [Multi-Agent Matrix](#-universal-multi-agent-matrix) • [Rulebook SSOT](#-complete-rulebook--engineering-standards-single-source-of-truth) • [Skills Catalog](#-16-curated-engineering-skills-catalog) • [MCP Hub](#-mcp-model-context-protocol-hub) • [Verification](#-verification--devkit-cli-agent-kit)
+[Quick Start](#-quick-start--installation) • [Architecture](#-system-architecture) • [Workflows](#-production-engineering-workflows) • [Domain Profiles](#-dynamic-domain-profiles-system) • [Post-Fix Shield](#-post-fix-quality-shield--8-layer-audit-gate) • [50-Agent Councils](#-10-quality-audit-councils-50-specialized-agents) • [Multi-Agent Matrix](#-universal-multi-agent-matrix) • [Rulebook SSOT](#-complete-rulebook--engineering-standards-single-source-of-truth) • [Skills Catalog](#-25-curated-engineering-skills-catalog) • [MCP Hub](#-mcp-model-context-protocol-hub) • [Verification](#-verification--devkit-cli-agent-kit)
 
 ---
 
@@ -34,12 +34,14 @@
 It delivers a complete, closed-loop software engineering ecosystem:
 1. **Supreme Engineering Protocols:** Zero-Defect Protocol, Paired Executable Oracle (RED→GREEN), and No-Fabrication Engine (C1–C9 Decision Table).
 2. **Single Source of Truth Rulebook (`AGENTS.md`):** Eliminates rule sprawl and conflicting chapters by unifying all engineering standards, architecture rules, pre-code gates, and quality protocols into a single, authoritative master rule file (`AGENTS.md` / `Agent.md`).
-3. **Dynamic Domain Profiles:** Instant project domain switching between **Automotive** (AAOS/CAN), **Android** (Compose/Vitals), **Game** (Unity/ECS), and **Universal** software engineering via `agent-kit profile`.
-4. **Post-Fix Quality Shield (5-Layer Audit Gate):** Automated multi-tier verification (`/audit-gate`, `agent-kit gate`) executing structural diff checks, RED→GREEN oracle confirmation, 50-agent council review, TIA regression matrix validation, and non-destructive secret scanning.
+3. **Dynamic Domain Profiles:** Instant project domain switching between **Automotive** (AAOS/CAN), **Android** (Compose/Vitals/Tombstones), **Game** (Unity 6/Zero-GC), **Voice Assistant** (AAOS Audio Focus/Mic Safety), and **Universal** clean architecture via `agent-kit profile`.
+4. **Post-Fix Quality Shield (8-Layer Audit Gate):** Automated multi-tier verification (`/audit-gate`, `agent-kit gate`, `postfix-gate`) executing structural AST diff checks, DESIGN.md/a11y baseline verification, RED→GREEN oracle confirmation (with `deliberate_red` bypass), 50-agent council review, TIA regression matrix validation with immutable guards, non-destructive secret scanning, error resilience checks, and Alibaba OpenCodeReview diff analysis.
 5. **10 Quality Audit Councils (50 Specialized Agents):** Comprehensive governance engine scrutinizing Architecture, Security, Concurrency, Performance, Error Resilience, Memory Leaks, Test Integrity, Adversarial Chaos, Zero-Regression, and State Continuity.
-6. **16 Curated Engineering Skills:** Standardized `SKILL.md` packages across 4 functional suites, including direct integration with **Alibaba OpenCodeReview v1.12.9 (`ocr`)** for deterministic AST diff review.
-7. **Design System & Proactive Failure Memory:** Strict UI/UX token baselines (`DESIGN.md`, Touch Target $\ge 48\text{dp}$, WCAG AA) paired with persistent repository failure lessons (`.agents/instincts.md`).
-8. **Universal MCP Hub:** Pre-configured with 6 Model Context Protocol servers for AST Knowledge Graph discovery, real-time documentation lookup, Android ADB control, and Play Store automation.
+6. **25 Curated Engineering Skills:** Standardized `SKILL.md` packages across 5 functional suites, including 23 canonical skills + 2 senior domain performance skills (`compose-recomp-audit` and `unity-gc-audit`), alongside direct integration with **Alibaba OpenCodeReview v1.12.9 (`ocr`)** for deterministic AST diff review.
+7. **X_old Conflict Isolation Protection:** Non-destructive installation for existing repositories. Automatically detects colliding user files (`skills`, `rules`, `commands`, `CLAUDE.md`, `AGENTS.md`, `.cursorrules`) and safely preserves them as `*_old` instead of overwriting, allowing users to seamlessly merge custom code via `agent-kit list-old`.
+8. **Design System & Proactive Failure Memory:** Strict UI/UX token baselines (`DESIGN.md`, Touch Target $\ge 48\text{dp}$, WCAG AA, Debounced buttons) paired with persistent repository failure lessons (`.agents/instincts.md`).
+9. **Android Native Crash Diagnostics:** Automated C/C++ tombstone triage tool (`profiles/android/scripts/qa/tombstone-triage.sh`) decoding signals (`SIGSEGV`, `SIGABRT`) and stack traces with `ndk-stack`.
+10. **Universal MCP Hub:** Pre-configured with 8 Model Context Protocol servers for AST Knowledge Graph discovery, real-time documentation lookup, Android ADB control, Blender, Unity, and Play Store automation.
 
 ---
 
@@ -57,7 +59,7 @@ It delivers a complete, closed-loop software engineering ecosystem:
 │ 8-Layer Audit Gate         │ Automotive, Android,       │ 50 Specialized Agents        │
 │ (/audit-gate / agent-kit)  │ Game, Universal            │ 100% Zero-Regression Audit   │
 ├────────────────────────────┴────────────────────────────┴──────────────────────────────┤
-│ 🧰 16 Curated Skills (Incl. Alibaba OpenCodeReview) • 📜 AGENTS.md Single SSOT         │
+│ 🧰 25 Curated Skills (Incl. 2 Senior Domain Skills) • 🛡️ X_old Conflict Protection     │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,8 +92,12 @@ It delivers a complete, closed-loop software engineering ecosystem:
 - **Multi-Lens Auditing:** Analyzes diffs and codebases across 10 rigorous councils with 50 specialized automated agents.
 - **Fail-Closed Receipts:** Requires deterministic cryptographically signed or content-hashed execution receipts before promoting any change to PASS.
 
-### 7. 🧰 16 Curated Canonical Skills
-- **Complete Software Lifecycle:** TDD, Bug Fixing, Spec-Kit Lite Planning, Visual QA, Crashlytics Triage, Conflict Resolution, Knowledge Graph discovery, and Alibaba OpenCodeReview (`ocr`).
+### 7. 🧰 25 Curated Engineering Skills
+- **Complete Software Lifecycle:** 23 Canonical foundation skills + 2 Senior Domain Performance Skills (`compose-recomp-audit` and `unity-gc-audit`), covering TDD, Bug Fixing, Spec-Kit Lite Planning, Visual QA, Crashlytics Triage, Conflict Resolution, Knowledge Graph discovery, and Alibaba OpenCodeReview (`ocr`).
+
+### 8. 🛡️ X_old Conflict Isolation & P0 Security Hardening
+- **Zero-Loss Installation:** When initializing DevKit in an existing project, all user-authored skills, rules, commands, and agent prompts are non-destructively preserved with `*_old` suffixes.
+- **Python Stdin Hardening:** Safety gates eliminate bash quote injection vulnerabilities by reading directly via `python3 -c` and piped stdin.
 
 </details>
 
@@ -103,11 +109,11 @@ It delivers a complete, closed-loop software engineering ecosystem:
 graph TD
     subgraph DevKit_Core ["📦 Universal Agent DevKit Core"]
         Rulebook["Single Source of Truth (AGENTS.md)"]
-        Profiles["📱 Dynamic Profiles<br/>(Automotive / Android / Game / Universal)"]
-        PostFixGate["⚡ Post-Fix Quality Shield<br/>(5-Layer Audit Gate / post-fix-gate.py)"]
+        Profiles["📱 5 Dynamic Profiles<br/>(Automotive / Android / Game / Universal / Voice)"]
+        PostFixGate["⚡ Post-Fix Quality Shield<br/>(8-Layer Audit Gate / post-fix-gate.py)"]
         AuditCouncils["🏛️ 10 Audit Councils<br/>(50 Specialized Governance Agents)"]
         Gates["🔒 160+ Safety Gates & Lifecycle Hooks"]
-        SkillsCatalog["🧰 16 Curated Canonical Skills"]
+        SkillsCatalog["🧰 25 Curated Skills<br/>(23 Canonical + 2 Senior Performance)"]
         DesignMemory["🎨 DESIGN.md & Failure Memory (.agents/instincts.md)"]
         MCPHub["🔌 6-Server MCP Hub (100+ Schemas)"]
     end
@@ -239,10 +245,11 @@ Universal Agent DevKit features a dynamic domain configuration system that activ
 
 ```
 profiles/
-├── android/        # Mobile App: Jetpack Compose, Coroutines, M3, Android Vitals
-├── automotive/     # AAOS: CAN Bus, Vehicle HAL, CarPropertyManager, ASIL-B, HMI Safety
-├── game/           # Game Dev: Unity/Unreal, ECS, Frame Budget (60/120 FPS), Draw calls
-└── universal/      # Cross-platform: Clean Architecture, REST/gRPC, Core Standards
+├── android/          # Mobile App: Jetpack Compose, Coroutines, M3, Android Vitals, Tombstones
+├── automotive/       # AAOS: CAN Bus, Vehicle HAL, CarPropertyManager, ASIL-B, HMI Safety
+├── game/             # Game Dev: Unity 6, Zero-GC C#, unity-test.sh, unity-compile-check.sh
+├── universal/        # Cross-platform: Clean Architecture, REST/gRPC, Multi-Tenant Platform
+└── voice-assistant/  # Voice Assistant: AAOS Assistant, Audio Focus, Microphone Safety
 ```
 
 ### Profile Switching CLI
@@ -262,6 +269,9 @@ agent-kit profile game
 
 # Switch to Universal profile (Standard Cross-platform Clean Architecture):
 agent-kit profile universal
+
+# Switch to Voice Assistant profile (Android Automotive / AAOS / Custom Assistant):
+agent-kit profile voice-assistant
 ```
 
 > **Slash Command:** You can also switch profiles inside chat via `/profile [name]`.
@@ -357,9 +367,9 @@ No fragmented rule files or conflicting directories exist. Key protocols enforce
 
 ---
 
-## 🧰 16 Curated Engineering Skills Catalog
+## 🧰 25 Curated Engineering Skills Catalog
 
-Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclosure) across **4 functional suites**:
+Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclosure) across **5 functional suites** (23 canonical foundation skills + 2 senior domain performance skills):
 
 ### 1. 🧪 Testing & Zero-Defect QA (6 Skills)
 | Skill | Slash Command | Description & Purpose |
@@ -408,6 +418,14 @@ Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclos
 
 ---
 
+### 5. ⚡ Senior Domain Performance Skills (2 Skills)
+| Skill | Slash Command | Description & Purpose |
+|---|---|---|
+| **`compose-recomp-audit`** | `/compose-recomp-audit`, `/recomp-audit` | **Jetpack Compose 120 FPS Recomposition Audit:** Audits recomposition hot-paths, Layout Inspector metrics, stability annotations (`@Immutable`, `@Stable`), `derivedStateOf`, deferred state reads, and Skia frame budget pacing. |
+| **`unity-gc-audit`** | `/unity-gc-audit`, `/gc-audit` | **Unity 6 C# Zero-GC Allocation Audit:** Triangulates heap allocations inside `Update()`, `FixedUpdate()`, and frame loops; enforces NonAlloc physics queries (`RaycastNonAlloc`), struct caching, delegate caching, and zero GC spikes. |
+
+---
+
 ## ⌨️ Complete Slash Commands Catalog
 
 All 23 skills, domain profiles, and safety gates are bound to auto-discovered slash commands with convenient shorthand aliases:
@@ -437,6 +455,8 @@ All 23 skills, domain profiles, and safety gates are bound to auto-discovered sl
 | `/security-checklist` | `/scan` | `skills/security-checklist` | Mobile & platform security checklist inspection. |
 | `/observability-instrumentation` | `/logging` | `skills/observability-instrumentation` | Structured logging, telemetry, and PII masking. |
 | `/writing-skills` | `/skill-author` | `skills/writing-skills` | Authors and audits DevKit skills and rules. |
+| `/compose-recomp-audit` | `/recomp-audit` | `skills/compose-recomp-audit` | Jetpack Compose 120 FPS recomposition auditing & stability analysis. |
+| `/unity-gc-audit` | `/gc-audit` | `skills/unity-gc-audit` | Unity 6 C# Zero-GC allocation auditing in frame update loops. |
 | `/audit-gate` | `/postfix-gate` | `commands/audit-gate.md` | Executes 8-layer post-fix quality gate and TIA regression check. |
 | `/profile` | — | `commands/profile.md` | Inspects or switches active domain profile. |
 
@@ -553,15 +573,21 @@ agent-kit list
 # 7. List all available slash commands:
 agent-kit commands
 
-# 8. Resynchronize skills, slash commands, and aliases:
+# 8. List and inspect preserved user custom assets (*_old):
+agent-kit list-old
+
+# 9. Resynchronize skills, slash commands, and aliases:
 agent-kit sync
 ```
 
 ### 📊 Verified Test Evidence:
 - **Hook Contract Tests:** `160 / 160 PASS (100%)` ✅
 - **Workflow Engine Tests:** `134 / 134 PASS (100%)` ✅
+- **Total Test Points:** `294 / 294 PASS (100%)` ✅
+- **Post-Fix Quality Gate:** `8 / 8 Layers PASS (100%)` ✅
 - **50-Agent Audit Councils:** `50 / 50 PASS (100%)` ✅
-- **Health Diagnostic Score:** `100 / 100 HEALTHY` ✅
+- **Health Diagnostic Score:** `12 / 12 Checks (100/100 HEALTHY)` ✅
+- **X_old Conflict Isolation:** `3 / 3 Scenarios PASS` ✅
 - **Multi-Agent Sandbox Matrix:** `4 / 4 Core Ecosystems Verified` ✅
 
 ---
@@ -574,10 +600,11 @@ universal-agent-devkit/
 ├── bin/                         # CLI entrypoints (agent-kit, agent-config.py, agent-health.py, post-fix-gate.py)
 ├── AGENTS.md                    # Universal Master Rules & SSOT (Sole Root Rulebook)
 ├── DESIGN.md                    # Universal Design System & UI/UX Accessibility Baseline
-├── profiles/                    # Dynamic Domain Profiles (automotive, android, game, universal)
+├── profiles/                    # 5 Dynamic Domain Profiles (automotive, android, game, universal, voice-assistant)
+│   └── android/scripts/qa/      # Native crash triage tools (tombstone-triage.sh)
 ├── rules/                       # Core rules & dynamic profile rules symlinks
-├── skills/                      # 16 Curated Canonical Skills (SKILL.md format)
-├── commands/                    # Auto-discovered Slash Commands & Aliases (34 commands)
+├── skills/                      # 25 Curated Skills (23 Canonical + 2 Senior Domain Performance)
+├── commands/                    # Auto-discovered Slash Commands & Aliases (36 commands)
 ├── agents/                      # Specialized Subagents (.md)
 ├── hooks/                       # 9+ Lifecycle Safety Gates & 160+ Contract Tests
 ├── workflows/                   # Audit & Test Engines (134+ JS/MJS Tests)

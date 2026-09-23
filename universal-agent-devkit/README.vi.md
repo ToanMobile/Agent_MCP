@@ -1,14 +1,14 @@
 <div align="center">
 
 # 🚀 Universal AI Agent DevKit & Quality Protocol
-### *Framework chuẩn hóa toàn diện cung cấp Zero-Defect Protocol, 160+ Safety Gates, 16 Curated Canonical Skills, Dynamic Domain Profiles, Hội đồng 50 Audit Agents và Hệ sinh thái MCP cho 4 nền tảng AI Coding Agent.*
+### *Framework chuẩn hóa toàn diện cung cấp Zero-Defect Protocol, 160+ Safety Gates, 25 Curated Skills, 5 Dynamic Domain Profiles, Hội đồng 50 Audit Agents, cơ chế bảo vệ cách ly X_old và Cổng kiểm toán hậu sửa lỗi 8 tầng cho 4 nền tảng AI Coding Agent.*
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-ToanMobile%2Funiversal--agent--devkit-blue.svg?style=for-the-badge&logo=github)](https://github.com/ToanMobile/universal-agent-devkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Tests Passing](https://img.shields.io/badge/Tests-294%20PASS%20(100%25)-success.svg?style=for-the-badge)](./hooks/tests)
 [![Supported Agents](https://img.shields.io/badge/Agents-4%20N%E1%BB%81n%20T%E1%BA%A3ng-orange.svg?style=for-the-badge)](#-universal-multi-agent-matrix)
 [![Rulebook](https://img.shields.io/badge/Rules-AGENTS.md%20(SSOT)-red.svg?style=for-the-badge)](#-quy-chuẩn-kỹ-thuật-tập-trung-single-source-of-truth)
-[![Skills Catalog](https://img.shields.io/badge/Skills-16%20Curated-purple.svg?style=for-the-badge)](#-16-curated-engineering-skills-catalog)
+[![Skills Catalog](https://img.shields.io/badge/Skills-25%20Curated-purple.svg?style=for-the-badge)](#-25-curated-engineering-skills-catalog)
 [![Domain Profiles](https://img.shields.io/badge/Profiles-4%20Domains-cyan.svg?style=for-the-badge)](#-hệ-thống-dynamic-domain-profiles)
 [![Audit Councils](https://img.shields.io/badge/Audits-10%20H%E1%BB%99i%20%C4%90%E1%BB%93ng%20(50%20Agents)-yellow.svg?style=for-the-badge)](#-10-hội-đồng-kiểm-toán-chất-lượng-50-specialized-agents)
 [![MCP Servers](https://img.shields.io/badge/MCP-6%20Integrated-brightgreen.svg?style=for-the-badge)](#-mcp-model-context-protocol-hub)
@@ -21,7 +21,7 @@
   <b>One DevKit to rule them all:</b> Nâng tầm AI Coding Assistant từ mô hình đối thoại thông thường trở thành một <b>Principal Pair Programmer</b> kỷ luật, thực chứng và chuẩn mực.
 </p>
 
-[Cài Đặt Nhanh](#-quick-start--installation) • [Kiến Trúc](#-system-architecture) • [Quy Trình Workflows](#-quy-trình-kỹ-thuật-thực-chiến-production-workflows) • [Domain Profiles](#-hệ-thống-dynamic-domain-profiles) • [Cổng Kiểm Toán Hậu Sửa Lỗi](#-tấm-khiên-hậu-kiểm-post-fix-quality-shield--cổng-kiểm-toán-5-tầng) • [Hội Đồng 50 Agents](#-10-hội-đồng-kiểm-toán-chất-lượng-50-specialized-agents) • [Ma Trận Đa Nền Tảng](#-universal-multi-agent-matrix) • [Quy Chuẩn Rulebook](#-quy-chuẩn-kỹ-thuật-tập-trung-single-source-of-truth) • [Danh Mục Skills](#-16-curated-engineering-skills-catalog) • [MCP Hub](#-mcp-model-context-protocol-hub) • [Kiểm Thử](#-verification--devkit-cli-agent-kit)
+[Cài Đặt Nhanh](#-quick-start--installation) • [Kiến Trúc](#-system-architecture) • [Quy Trình Workflows](#-quy-trình-kỹ-thuật-thực-chiến-production-workflows) • [Domain Profiles](#-hệ-thống-dynamic-domain-profiles) • [Cổng Kiểm Toán Hậu Sửa Lỗi](#-tấm-khiên-hậu-kiểm-post-fix-quality-shield--cổng-kiểm-toán-8-tầng) • [Hội Đồng 50 Agents](#-10-hội-đồng-kiểm-toán-chất-lượng-50-specialized-agents) • [Ma Trận Đa Nền Tảng](#-universal-multi-agent-matrix) • [Quy Chuẩn Rulebook](#-quy-chuẩn-kỹ-thuật-tập-trung-single-source-of-truth) • [Danh Mục Skills](#-25-curated-engineering-skills-catalog) • [MCP Hub](#-mcp-model-context-protocol-hub) • [Kiểm Thử](#-verification--devkit-cli-agent-kit)
 
 ---
 
@@ -34,12 +34,14 @@
 DevKit cung cấp một hệ sinh thái khép kín:
 1. **Quy chuẩn lập trình tối thượng:** Zero-Defect Protocol, Paired Executable Oracle (Bắt buộc RED→GREEN), và No-Fabrication Engine (Bảng quyết định C1–C9).
 2. **Bộ Rulebook Độc Tôn (`AGENTS.md` / `Agent.md`):** Khử bỏ hoàn toàn tình trạng phân mảnh rulebook; hợp nhất 100% quy chuẩn kiến trúc, an ninh, kiểm thử và Pre-Code Gates vào một file quy chuẩn tối cao duy nhất tại thư mục gốc.
-3. **Hệ thống Dynamic Domain Profiles:** Chuyển đổi linh hoạt giữa các chuyên ngành **Automotive** (AAOS/CAN Bus), **Android** (Compose/Vitals), **Game** (Unity/ECS), và **Universal** thông qua câu lệnh `agent-kit profile`.
-4. **Tấm khiên hậu kiểm Post-Fix Quality Shield (5-Layer Audit Gate):** Cơ chế kiểm toán 5 tầng tự động (`/audit-gate`, `agent-kit gate`) kiểm tra vệ sinh diff, chứng thực oracle RED→GREEN, thẩm định qua 50 audit agents, ma trận TIA regression và quét rò rỉ secret.
+3. **Hệ thống Dynamic Domain Profiles:** Chuyển đổi linh hoạt giữa 5 chuyên ngành **Automotive** (AAOS/CAN Bus), **Android** (Compose/Vitals/Tombstones), **Game** (Unity 6/Zero-GC), **Voice Assistant** (AAOS Audio Focus/Mic Safety), và **Universal** kiến trúc sạch thông qua câu lệnh `agent-kit profile`.
+4. **Tấm khiên hậu kiểm Post-Fix Quality Shield (8-Layer Audit Gate):** Cơ chế kiểm toán 8 tầng tự động (`/audit-gate`, `agent-kit gate`, `postfix-gate`) rà soát diff AST phẫu thuật, quy chuẩn DESIGN.md/a11y, chứng thực oracle RED→GREEN (hỗ trợ bypass `deliberate_red`), thẩm định 50 audit agents, ma trận TIA regression với immutable guards, quét sạch secret, kiểm tra khả năng phục hồi lỗi và review diff qua Alibaba OpenCodeReview.
 5. **10 Hội đồng Kiểm toán Chất lượng (50 Specialized Agents):** Đội ngũ 50 agent kiểm toán độc lập đánh giá chuyên sâu về Kiến trúc, Bảo mật, Đa luồng, Hiệu năng, Khả năng phục hồi, Thất thoát bộ nhớ, Chất lượng kiểm thử, Tấn công biên hỗn loạn (Chaos), Chống hồi quy lỗi và Tính liên tục của phiên làm việc.
-6. **Kho 16 Kỹ Năng Tinh Gọn (Curated Engineering Skills):** Chuẩn hóa theo định dạng `SKILL.md`, tích hợp trực tiếp engine **Alibaba OpenCodeReview v1.12.9 (`ocr`)** giúp định vị dòng AST chính xác tuyệt đối (`resolver.go`) và tiết kiệm 8/9 lượng token.
-7. **Hệ thống Thiết kế & Ký ức Thất bại:** Chuẩn hóa Design Tokens giao diện (`DESIGN.md`, Touch Target $\ge 48\text{dp}$, WCAG AA, Debounce nút bấm) kết hợp cùng kinh nghiệm phòng ngừa bẫy mã nguồn lịch sử (`.agents/instincts.md`).
-8. **Hệ sinh thái MCP Hub:** Tích hợp sẵn 6 MCP servers mạnh mẽ nhất cho AST Knowledge Graph discovery, Tra cứu Docs thực tế, Điều khiển thiết bị qua ADB, và Google Play Console.
+6. **Kho 25 Kỹ Năng Tinh Gọn (Curated Engineering Skills):** Chuẩn hóa theo định dạng `SKILL.md` gồm 23 kỹ năng nền tảng + 2 kỹ năng kỹ sư cấp cao (`compose-recomp-audit` và `unity-gc-audit`), tích hợp trực tiếp engine **Alibaba OpenCodeReview v1.12.9 (`ocr`)** định vị dòng AST chính xác và tiết kiệm 8/9 token.
+7. **Cơ Chế Bảo Vệ Cách Ly X_old (X_old Conflict Isolation):** Cài đặt an toàn không ghi đè vào các dự án cũ. Tự động nhận diện xung đột file (`skills`, `rules`, `commands`, `CLAUDE.md`, `AGENTS.md`, `.cursorrules`) và đổi tên thành `*_old` để lập trình viên tự chủ động merge mã nguồn cá nhân, kiểm tra dễ dàng qua lệnh `agent-kit list-old`.
+8. **Hệ thống Thiết kế & Ký ức Thất bại:** Chuẩn hóa Design Tokens giao diện (`DESIGN.md`, Touch Target $\ge 48\text{dp}$, WCAG AA, Debounce nút bấm) kết hợp cùng kinh nghiệm phòng ngừa bẫy mã nguồn lịch sử (`.agents/instincts.md`).
+9. **Chẩn Đoán Sập Native C/C++ Android (`tombstone-triage.sh`):** Công cụ tự động phân tích crash tombstone (/data/tombstones/) trên thiết bị Android thật, bóc tách tín hiệu (`SIGSEGV`, `SIGABRT`) và dịch ngược stack frame qua `ndk-stack`.
+10. **Hệ sinh thái MCP Hub:** Tích hợp sẵn 8 MCP servers cho AST Knowledge Graph discovery, Tra cứu Docs thực tế, Điều khiển thiết bị qua ADB, Blender, Unity và Google Play Console.
 
 ---
 
@@ -57,7 +59,7 @@ DevKit cung cấp một hệ sinh thái khép kín:
 │ Cổng kiểm toán 8 tầng      │ Automotive, Android,       │ 50 Specialized Agents        │
 │ (/audit-gate / agent-kit)  │ Game, Universal            │ 100% Zero-Regression Audit   │
 ├────────────────────────────┴────────────────────────────┴──────────────────────────────┤
-│ 🧰 16 Curated Skills (Gồm Alibaba OpenCodeReview) • 📜 AGENTS.md Single SSOT           │
+│ 🧰 25 Curated Skills (Gồm 2 Senior Domain Skills) • 🛡️ Cơ Chế Bảo Vệ X_old             │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,8 +92,12 @@ DevKit cung cấp một hệ sinh thái khép kín:
 - **Đánh giá đa lăng kính:** Kiểm tra mã nguồn qua 50 agent độc lập chuyên môn hóa cao.
 - **Biên nhận thực thi đóng (Fail-Closed Receipts):** Bắt buộc có biên nhận hàm băm thực thi thật trước khi công nhận trạng thái PASS.
 
-### 7. 🧰 Kho 16 Kỹ Năng Kỹ Thuật Tinh Gọn
-- **Bao quát trọn vòng đời phát triển:** TDD, Sửa lỗi, Lập kế hoạch Spec-Kit Lite, Visual QA, Triage Crashlytics, Giải quyết conflict Git, Khám phá AST Knowledge Graph và Review mã nguồn qua Alibaba OpenCodeReview (`ocr`).
+### 7. 🧰 Kho 25 Kỹ Năng Kỹ Thuật Tinh Gọn
+- **Bao quát trọn vòng đời phát triển:** 23 Kỹ năng nền tảng + 2 Kỹ năng Kỹ sư Cấp cao (`compose-recomp-audit` và `unity-gc-audit`), bao phủ TDD, Sửa lỗi, Lập kế hoạch Spec-Kit Lite, Visual QA, Triage Crashlytics, Giải quyết conflict Git, Khám phá AST Knowledge Graph và Review mã nguồn qua Alibaba OpenCodeReview (`ocr`).
+
+### 8. 🛡️ Cơ Chế Bảo Vệ Cách Ly X_old & An Ninh P0 Tuyệt Đối
+- **Cài đặt không mất mã nguồn:** Khi cài đặt DevKit trên dự án cũ, toàn bộ kỹ năng, quy tắc, lệnh riêng của người dùng được bảo toàn nguyên vẹn với hậu tố `*_old` thay vì bị ghi đè.
+- **Triệt tiêu lỗ hổng Shell Injection:** Các cổng kiểm soát an ninh loại bỏ hoàn toàn việc truyền biến bash heredoc, chuyển sang thực thi `python3 -c` và đọc piped stdin an toàn tuyệt đối.
 
 </details>
 
@@ -103,11 +109,11 @@ DevKit cung cấp một hệ sinh thái khép kín:
 graph TD
     subgraph DevKit_Core ["📦 Universal Agent DevKit Core"]
         Rulebook["Single Source of Truth (AGENTS.md)"]
-        Profiles["📱 Dynamic Profiles<br/>(Automotive / Android / Game / Universal)"]
+        Profiles["📱 5 Dynamic Profiles<br/>(Automotive / Android / Game / Universal / Voice)"]
         PostFixGate["⚡ Post-Fix Quality Shield<br/>(Cổng kiểm toán 5 tầng / post-fix-gate.py)"]
         AuditCouncils["🏛️ 10 Hội Đồng Kiểm Toán<br/>(50 Specialized Governance Agents)"]
         Gates["🔒 160+ Safety Gates & Lifecycle Hooks"]
-        SkillsCatalog["🧰 16 Curated Canonical Skills"]
+        SkillsCatalog["🧰 25 Curated Skills<br/>(23 Canonical + 2 Senior Performance)"]
         DesignMemory["🎨 DESIGN.md & Ký Ức Thất Bại (.agents/instincts.md)"]
         MCPHub["🔌 6-Server MCP Hub (100+ Schemas)"]
     end
@@ -357,9 +363,9 @@ Không còn các thư mục rulebook phân mảnh gây xung đột hay phình to
 
 ---
 
-## 🧰 16 Curated Engineering Skills Catalog
+## 🧰 25 Curated Engineering Skills Catalog
 
-Kho 16 kỹ năng chuẩn hóa theo định dạng `SKILL.md` (YAML frontmatter + Progressive Disclosure), chia thành **4 nhóm chức năng thực chiến**:
+Kho 25 kỹ năng chuẩn hóa theo định dạng `SKILL.md` (YAML frontmatter + Progressive Disclosure), chia thành **5 nhóm chức năng thực chiến** (23 kỹ năng nền tảng + 2 kỹ năng kỹ sư cấp cao):
 
 ### 1. 🧪 Testing & Zero-Defect QA (6 Skills)
 | Skill | Slash Command | Chức Năng & Mục Đích Sử Dụng |
@@ -408,6 +414,14 @@ Kho 16 kỹ năng chuẩn hóa theo định dạng `SKILL.md` (YAML frontmatter 
 
 ---
 
+### 5. ⚡ Kỹ Năng Kỹ Sư Cấp Cao - Tối Ưu Hiệu Năng Domain (2 Skills)
+| Skill | Slash Command | Chức Năng & Mục Đích Sử Dụng |
+|---|---|---|
+| **`compose-recomp-audit`** | `/compose-recomp-audit`, `/recomp-audit` | **Kiểm toán Recomposition Jetpack Compose 120 FPS:** Phân tích đường nóng recomposition, số liệu Layout Inspector, gắn nhãn `@Immutable`/`@Stable`, `derivedStateOf`, đọc state trễ và tối ưu ngân sách frame Skia. |
+| **`unity-gc-audit`** | `/unity-gc-audit`, `/gc-audit` | **Kiểm toán Triệt Tiêu Garbage Collection Unity 6 C# (Zero-GC):** Định vị cấp phát heap trong `Update()`, `FixedUpdate()`, và frame loops; ép buộc dùng API NonAlloc (`RaycastNonAlloc`), cache struct/delegate, loại bỏ giật lag GC. |
+
+---
+
 ## ⌨️ Danh Mục Đầy Đủ Slash Commands
 
 Toàn bộ 23 skills, domain profiles và các cổng kiểm toán an toàn đều được ánh xạ thành các lệnh gõ tắt tiện lợi:
@@ -437,6 +451,8 @@ Toàn bộ 23 skills, domain profiles và các cổng kiểm toán an toàn đ�
 | `/security-checklist` | `/scan` | `skills/security-checklist` | Kiểm tra checklist bảo mật ứng dụng di động và nền tảng. |
 | `/observability-instrumentation` | `/logging` | `skills/observability-instrumentation` | Chuẩn hóa structured logging, telemetry và mask PII. |
 | `/writing-skills` | `/skill-author` | `skills/writing-skills` | Chuẩn hóa và sáng tạo skills mới cho DevKit. |
+| `/compose-recomp-audit` | `/recomp-audit` | `skills/compose-recomp-audit` | Kiểm toán recomposition Jetpack Compose 120 FPS & phân tích độ ổn định. |
+| `/unity-gc-audit` | `/gc-audit` | `skills/unity-gc-audit` | Kiểm toán triệt tiêu cấp phát bộ nhớ rác Zero-GC trong vòng lặp game Unity 6. |
 | `/audit-gate` | `/postfix-gate` | `commands/audit-gate.md` | Chạy cổng kiểm toán chất lượng hậu sửa lỗi 8 tầng và kiểm tra TIA. |
 | `/profile` | — | `commands/profile.md` | Xem hoặc chuyển đổi profile chuyên ngành đang kích hoạt. |
 

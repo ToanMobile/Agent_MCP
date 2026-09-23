@@ -7,7 +7,7 @@ Monorepo gom các công cụ MCP / agent của ToanMobile. Mỗi thư mục là 
 | --- | --- | --- |
 | [`play-store-mcp/`](play-store-mcp/) | MCP server làm việc với Google Play Console (APK, release, review…) | Python (uv) |
 | [`antigravity-pm-mcp/`](antigravity-pm-mcp/) | Claude Code làm PM điều phối Google Antigravity: giao task, phản biện plan, audit/review, cổng nghiệm thu cưỡng chế | Node ESM |
-| [`universal-agent-devkit/`](universal-agent-devkit/) | Bộ luật, skill, lệnh dùng chung cho các agent (Claude Code, Antigravity, Cursor…) | Markdown + shell |
+| [`universal-agent-devkit/`](universal-agent-devkit/) | Bộ chuẩn hóa kỹ thuật & chất lượng Zero-Defect: 25 skills, 5 domain profiles, bảo vệ xung đột X_old, 8-layer Post-Fix Gate cho 4 nền tảng AI Agent (Claude Code, OpenAI Codex, Antigravity, Cursor) | Shell + Python + Node |
 
 ## Lịch sử
 
