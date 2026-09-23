@@ -7,13 +7,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadConfig } from '../src/config.js';
-import { createTask, recordProof, gate, contractPaths, loadTask, anhTrung, hashFile } from '../src/tasks.js';
+import { createTask, recordProof, recordDispatch, gate, contractPaths, loadTask, anhTrung, hashFile, taskFile } from '../src/tasks.js';
 import { fileCamDung, fileRacGocRepo } from '../src/policy.js';
 import { tachTrichDan, kiemTrichDan, kiemBaoCao } from '../src/cite-check.js';
 import { phanTichDiff, soiLamMem, soiThayDoi } from '../src/lint-diff.js';
 import { buildPlanCritiquePrompt, buildImplementMessage } from '../src/prompt.js';
 import { TOOLS_BY_NAME } from '../src/tools.js';
-import { tmpProject, cleanup, writeFile, sampleTaskArgs, PNG_1PX } from './helpers.js';
+import { tmpProject, cleanup, writeFile, sampleTaskArgs, PNG_1PX, tick } from './helpers.js';
 
 const call = async (name, args) => {
   const out = await TOOLS_BY_NAME.get(name).handler(args);
@@ -57,6 +57,8 @@ test('U1 tang tool: audit-agent.json co trich dan BIA => pm_verdict audit pass B
   const taskId = /T\d{4}-[a-z0-9-]+/.exec(created.text)[0];
   const cfg = loadConfig(dir);
   const p = contractPaths(cfg, loadTask(cfg, taskId));
+  recordDispatch(cfg, loadTask(cfg, taskId), { kind: 'implement', conversationId: 'c-test' });
+  tick();
   writeFile(path.join(p.dir, 'audit-agent.json'), JSON.stringify({ verdict: 'pass', findings: [
     { severity: 'minor', file: 'Game.cs:72', snippet: '// TODO', problem: 'con TODO' },
   ], dod_check: [] }));
@@ -82,7 +84,7 @@ test('U1 tang tool: audit-agent.json co trich dan BIA => pm_verdict audit pass B
   fs.utimesSync(path.join(p.dir, 'audit-agent.json'), old, old);
   const t = loadTask(cfg, taskId);
   t.lastReworkAt = new Date().toISOString();
-  fs.writeFileSync(path.join(p.dir, 'task.json'), JSON.stringify(t));
+  fs.writeFileSync(taskFile(cfg, t.id), JSON.stringify(t));
   const ok3 = await call('pm_verdict', { project: dir, taskId, kind: 'audit', verdict: 'pass' });
   assert.ok(ok3.text.includes('audit-agent.json cu hon'), ok3.text);
   // Prompt phan bien + audit doi snippet va bao truoc se kiem bang may.

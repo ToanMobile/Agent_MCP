@@ -8,7 +8,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadConfig } from '../src/config.js';
 import {
-  createTask, recordVerdict, recordRun, recordProof, recordDispatch, gate, accept, contractPaths, loadTask, isGreenRun,
+  createTask, recordVerdict, recordRun, recordProof, recordDispatch, gate, accept, contractPaths, loadTask, isGreenRun, taskFile,
 } from '../src/tasks.js';
 import {
   checkOracle, fileRacGocRepo, cungFile, kiemChongLan, phamViTask, dangChay, checkTestChange, mustHaveOf,
@@ -355,7 +355,7 @@ test('#3 tang tool: dispatch implement BI CHAN khi task khac dang chay cung dung
   // T1 dang IMPLEMENT, agent khai dang sua shared/.
   const task1 = loadTask(cfg, t1);
   task1.phase = 'IMPLEMENT';
-  fs.writeFileSync(path.join(contractPaths(cfg, task1).dir, 'task.json'), JSON.stringify(task1));
+  fs.writeFileSync(taskFile(cfg, task1.id), JSON.stringify(task1));
   writeFile(contractPaths(cfg, task1).result, JSON.stringify({ phase: 'IMPLEMENT', files_changed: ['shared/CarProtocol.kt'] }));
   // T2: plan chot, pham vi cung shared/.
   const plan = await call('pm_plan', { project: dir, taskId: t2, content: '# x\n1. sua shared\n2. test', files: ['shared/RelayProtocol.kt'] });
@@ -550,7 +550,9 @@ test('BG3 tang tool: pm_run kind=oracle ghi run record + log, cong nghiem thu do
   writeFile(path.join(dir, 'fix.txt'), 'fixed');
   writeFile(path.join(dir, 'tests', 'a.test.sh'), '# test');
   writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', files_changed: ['fix.txt', 'tests/a.test.sh'], oracle: { command: 'sh run-test.sh', before: '1 failed', after: 'ok' } }));
-  const out = await call('pm_run', { project: dir, taskId, kind: 'oracle' });
+  // Lenh oracle cua agent KHONG tu chay: PM phai doc va truyen lai (re-audit 23/09).
+  await assert.rejects(call('pm_run', { project: dir, taskId, kind: 'oracle' }), /sh run-test\.sh/);
+  const out = await call('pm_run', { project: dir, taskId, kind: 'oracle', command: 'sh run-test.sh' });
   assert.ok(out.text.includes('ORACLE DAT'), out.text);
   assert.ok(out.text.includes('tests/a.test.sh'));
   const task = loadTask(cfg, taskId);

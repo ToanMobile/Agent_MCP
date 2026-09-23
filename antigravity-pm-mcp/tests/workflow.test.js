@@ -7,8 +7,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { TOOLS_BY_NAME } from '../src/tools.js';
 import { loadConfig } from '../src/config.js';
-import { loadTask, contractPaths } from '../src/tasks.js';
-import { tmpProject, cleanup, writeFile, PNG_1PX } from './helpers.js';
+import { loadTask, contractPaths, recordDispatch } from '../src/tasks.js';
+import { tmpProject, cleanup, writeFile, PNG_1PX, tick } from './helpers.js';
 
 const call = async (name, args) => {
   const out = await TOOLS_BY_NAME.get(name).handler(args);
@@ -61,7 +61,8 @@ test('ca luong: tao task -> duyet plan -> audit/review -> test -> anh -> nghiem 
   assert.ok(st1.text.includes('plan.md: co'));
   assert.ok(st1.text.includes('CHUA DAT'));
 
-  // Gia lap agent sua code + bao cao.
+  // Gia lap PM giao trien khai (khong co Antigravity that trong test) roi agent sua code + bao cao.
+  recordDispatch(cfg, loadTask(cfg, taskId), { kind: 'implement', conversationId: 'c-test' });
   writeFile(path.join(dir, 'src', 'Kinh.kt'), 'fun haKinh() {\n  xacNhan()\n}\n');
   writeFile(path.join(dir, 'src', 'test', 'KinhTest.kt'), '// test cho nhanh xac nhan\n');
   writeFile(path.join(dir, 'src', 'Ngoai.kt'), '// file nam ngoai khai bao\n');
@@ -132,6 +133,8 @@ test('test do that su chan nghiem thu o tang tool (khong nuot exit code)', async
   const p = contractPaths(cfg, task);
   writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'x' }));
   await planDaChot(dir, taskId, cfg, task, '#plan');
+  recordDispatch(cfg, loadTask(cfg, taskId), { kind: 'implement', conversationId: 'c-test' });
+  tick();
   await call('pm_verdict', { project: dir, taskId, kind: 'audit', verdict: 'pass' });
   await call('pm_verdict', { project: dir, taskId, kind: 'review', verdict: 'pass' });
   const r = await call('pm_run', { project: dir, taskId, kind: 'test' });

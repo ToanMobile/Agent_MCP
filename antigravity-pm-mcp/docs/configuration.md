@@ -28,7 +28,7 @@ Thứ tự đè lên nhau: **mặc định → cấu hình chung → cấu hình
 | --- | --- | --- |
 | `projectName` | tên thư mục | Chỉ để báo cáo cho dễ đọc |
 | `defaultModel` | `"pro"` | Model Antigravity: `flash_lite` \| `flash` \| `pro` |
-| `stateDir` | `".antigravity-pm"` | Thư mục lưu hồ sơ task, tính từ gốc project |
+| `stateDir` | `".antigravity-pm"` | Thư mục file hợp đồng của task (brief/plan/result.json/proof/logs), tính từ gốc project. `task.json` của PM **không** nằm ở đây mà ở `~/.antigravity-pm/projects/<tên>-<hash>/tasks/` (biến môi trường `ANTIGRAVITY_PM_STATE_HOME` đổi gốc `~/.antigravity-pm`) |
 | `rulesFiles` | `["AGENTS.md", "CLAUDE.md"]` | File luật **bắt buộc agent đọc**; file không tồn tại thì bị bỏ qua im lặng (không nhét vào prompt) |
 | `testCommand` | `null` | Lệnh test thật. **Chưa khai thì `pm_run kind=test` báo lỗi** ⇒ cổng nghiệm thu không bao giờ đạt |
 | `auditCommands` | `[]` | Các cổng chặn / lint / verify của project, chạy tuần tự bằng `pm_run kind=audit` |

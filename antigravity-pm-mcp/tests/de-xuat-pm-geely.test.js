@@ -7,7 +7,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadConfig } from '../src/config.js';
 import {
-  createTask, recordVerdict, recordRun, recordProof, recordDispatch, markRework, gate, accept, contractPaths, loadTask,
+  createTask, recordVerdict, recordRun, recordProof, recordDispatch, markRework, gate, accept, contractPaths, loadTask, taskFile,
 } from '../src/tasks.js';
 import { kiemKhuonResult, doiChieuKhaiTest, kiemKhuonPlanReview } from '../src/policy.js';
 import { timKhoiLap, dinhNghiaSqlTrung, soiThayDoi } from '../src/lint-diff.js';
@@ -163,7 +163,7 @@ test('DX4a plan_hash: prompt phan bien mang ma ke hoach; review ghi hash khac (p
   await call('pm_plan', { project: dir, taskId, content: '# v2\n1. a\n2. test' });
   const t = loadTask(cfg, taskId);
   t.planHashSent = t.planHash;
-  fs.writeFileSync(path.join(contractPaths(cfg, t).dir, 'task.json'), JSON.stringify(t));
+  fs.writeFileSync(taskFile(cfg, t.id), JSON.stringify(t));
   const rv = path.join(contractPaths(cfg, t).dir, 'plan-review.json');
   writeFile(rv, JSON.stringify({ verdict: 'ok', findings: [], plan_hash: 'ban-cu' }));
   await assert.rejects(call('pm_verdict', { project: dir, taskId, kind: 'plan', verdict: 'pass' }), /plan_hash khong khop/);
@@ -198,14 +198,14 @@ test('DX4d pm_status: giao phan bien qua stallMinutes chua co file => "REVIEW TR
   const cfg = loadConfig(dir);
   const t = loadTask(cfg, taskId);
   t.planReviewDispatchedAt = new Date(Date.now() - 5 * 60000).toISOString();
-  fs.writeFileSync(path.join(contractPaths(cfg, t).dir, 'task.json'), JSON.stringify(t));
+  fs.writeFileSync(taskFile(cfg, t.id), JSON.stringify(t));
   const st = await call('pm_status', { project: dir, taskId });
   assert.ok(st.text.includes('REVIEW TREO'), st.text);
   // Sai khuon + co hoi thoai phan bien: pm_status van tra ve (khong no) du Antigravity dong hay mo —
   // may dong: "khong nhac duoc"; may dang mo Antigravity: "da tu nhac". Test khong duoc phu thuoc moi truong.
   writeFile(path.join(contractPaths(cfg, t).dir, 'plan-review.json'), JSON.stringify({ hasErrors: false, notes: [] }));
   t.planReviewConversationId = 'conv-khong-ton-tai';
-  fs.writeFileSync(path.join(contractPaths(cfg, t).dir, 'task.json'), JSON.stringify(t));
+  fs.writeFileSync(taskFile(cfg, t.id), JSON.stringify(t));
   const st2 = await call('pm_status', { project: dir, taskId });
   assert.ok(st2.text.includes('SAI KHUON'), st2.text);
   assert.ok(/khong nhac duoc|da tu nhac/.test(st2.text), st2.text);

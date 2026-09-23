@@ -1,9 +1,9 @@
 // Bo tool MCP: Claude Code (Leader/PM) dieu phoi Antigravity (Engineer) theo dung quy trinh.
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadConfig, existingRulesFiles, CONFIG_NAME } from './config.js';
+import { loadConfig, existingRulesFiles, CONFIG_NAME, withGateSnapshot } from './config.js';
 import {
-  createTask, loadTask, listTasks, save, setPhase, recordVerdict, recordRun, recordProof,
+  createTask, loadTask, listTasks, save, updateTask, setPhase, recordVerdict, recordRun, recordProof,
   recordDispatch, markRework, accept, gate, freshness, contractPaths, addHistory, PHASES, TASK_TYPES,
   discardProofs, anhTrung, hashFile, ackWarning, locCanhBaoDaXem } from './tasks.js';
 import {
@@ -27,7 +27,7 @@ import { soiThayDoi } from './lint-diff.js';
 import { gitSnapshot, changedFilesOf, baseCommitOf, gateCtx, dongBangCay, goWorktree } from './worktree.js';
 import { hashOf, deltaKeHoach, tinhTrangPhanBien, projectIdFor } from './plan-review.js';
 import { cacTaskDangChayKhac, canhBaoTruocKhiGiao } from './dispatch-guard.js';
-import { runShell, writeFileAtomic, ensureDir, exists, tail, truncate, nowIso, readJsonIfExists } from './util.js';
+import { run, runShell, writeFileAtomic, ensureDir, exists, tail, truncate, nowIso, readJsonIfExists } from './util.js';
 
 // ---------------------------------------------------------------- kiem tra tham so
 
@@ -71,9 +71,17 @@ function ctx(args) {
 }
 
 function withTask(args) {
-  const cfg = ctx(args);
-  const task = loadTask(cfg, args.taskId);
-  return { cfg, task };
+  const live = ctx(args);
+  const task = loadTask(live, args.taskId);
+  // Moi thao tac tren task dung BAN CHUP cau hinh cong luc tao task (agent sua .antigravity-pm.json khong co tac dung).
+  return { cfg: withGateSnapshot(live, task), task };
+}
+
+/** pathspec cua pm_diff -> argv ['--', ...]: chuoi tach theo khoang trang (nhu shell cu) hoac mang. */
+export function pathspecArgs(pathspec) {
+  const parts = (Array.isArray(pathspec) ? pathspec : String(pathspec ?? '').split(/\s+/))
+    .map((x) => String(x).trim()).filter(Boolean);
+  return parts.length ? ['--', ...parts] : [];
 }
 
 /** Cong chan kem bang chung do duoc tu git ngay luc goi. */
@@ -115,7 +123,11 @@ function saveOutgoing(cfg, task, name, text) {
  */
 async function runOracle(cfg, task, args) {
   const fresh = freshness(cfg, task);
-  const command = args.command || fresh.result?.oracle?.command || null;
+  // Lenh oracle do PM truyen (hoac cau hinh) — KHONG lay tu result.json cua agent: PM se CHAY no voi quyen cua PM.
+  const command = args.command || cfg.oracle?.command || null;
+  if (!command && fresh.result?.oracle?.command) {
+    fail(`pm_run kind=oracle can "command" do PM truyen. Agent de xuat: ${JSON.stringify(fresh.result.oracle.command)} — doc ky roi truyen lai neu dong y.`);
+  }
   const changedFiles = await changedFilesOf(cfg, task);
   const base = await baseCommitOf(cfg, task);
   const startedMs = Date.now();
@@ -165,7 +177,7 @@ export const TOOLS = [
       L.push(`Cau hinh project: ${cfg.configFile
         || `(chua co ${CONFIG_NAME} — dang dung ${cfg.globalConfigFile ? 'cau hinh chung' : 'mac dinh'})`}`);
       for (const w of cfg.warnings) L.push(`  ! ${w}`);
-      L.push(`Thu muc trang thai: ${cfg.stateRoot}`);
+      L.push(`Thu muc trang thai: ${cfg.stateRoot} (file hop dong cua agent) · task.json cua PM: ${cfg.pmTasksRoot}`);
       L.push(`Model mac dinh: ${cfg.defaultModel}`);
       L.push(`Lenh test: ${cfg.testCommand || '(CHUA KHAI — pm_run kind=test se bao loi, cong nghiem thu se khong bao gio dat)'}`);
       L.push(`Lenh audit: ${cfg.auditCommands.length ? cfg.auditCommands.join(' ; ') : '(chua khai)'}`);
@@ -472,9 +484,9 @@ export const TOOLS = [
         }
         const pth = contractPaths(cfg, task);
         const planHash = hashOf(fs.readFileSync(pth.plan));
-        task.planHash = planHash;
-        task.planHashSent = planHash;
-        task.planReviewDispatchedAt = nowIso();
+        // Gan tren object de dung prompt; ghi xuong dia qua recordDispatch (set) sau await — khong ghi de ca object cu.
+        const giao = { planHash, planHashSent: planHash, planReviewDispatchedAt: nowIso() };
+        Object.assign(task, giao);
         let delta = null;
         if (args.focus === 'delta') {
           delta = await deltaKeHoach(cfg, task);
@@ -487,17 +499,16 @@ export const TOOLS = [
         const { conversationId } = await newConversation({
           prompt, projectId: pid.id, model: args.model || task.model, title: `[PM] ${task.id} · PHAN BIEN KE HOACH · ${task.title}`,
         });
-        task.planReviewConversationId = conversationId;
-        task.state = 'awaiting_agent';
-        recordDispatch(cfg, task, { kind: 'plan_review', conversationId, model: args.model || task.model, promptFile });
+        recordDispatch(cfg, task, {
+          kind: 'plan_review', conversationId, model: args.model || task.model, promptFile,
+          set: { ...giao, planReviewConversationId: conversationId, state: 'awaiting_agent' },
+        });
         L.push(`Da giao PHAN BIEN KE HOACH cho Antigravity. conversationId=${conversationId}`);
         const check = await ensureWorkspaceMatches(cfg, conversationId);
         if (!check.ok) {
           const msg = `Hoi thoai duoc mo trong workspace "${check.got || '(khong ro)'}" chu KHONG phai "${check.want}".`;
           if (cfg.antigravity.workspaceCheck === 'strict') {
-            task.state = 'blocked';
-            addHistory(task, 'system', 'workspace_mismatch', msg);
-            save(cfg, task);
+            updateTask(cfg, task, (t) => { t.state = 'blocked'; addHistory(t, 'system', 'workspace_mismatch', msg); });
             fail(`${msg}\nAntigravity mo hoi thoai trong project dang mo tren IDE. Hay mo "${check.want}" trong Antigravity roi chay lai pm_dispatch kind=plan_review.\n(Hoi thoai vua tao: ${conversationId} — nen bo/dong trong IDE.)`);
           }
           L.push(`CANH BAO: ${msg}`);
@@ -533,12 +544,13 @@ export const TOOLS = [
           const { conversationId } = await newConversation({
             prompt: msg, projectId: pidI.id, model: args.model || task.model, title: `[PM] ${task.id} · TRIEN KHAI · ${task.title}`,
           });
-          task.conversationId = conversationId;
+          updateTask(cfg, task, (t) => { t.conversationId = conversationId; });
           const checkI = await ensureWorkspaceMatches(cfg, conversationId);
           if (!checkI.ok && cfg.antigravity.workspaceCheck === 'strict') {
-            task.state = 'blocked';
-            addHistory(task, 'system', 'workspace_mismatch', `${checkI.got || '(khong ro)'} != ${checkI.want}`);
-            save(cfg, task);
+            updateTask(cfg, task, (t) => {
+              t.state = 'blocked';
+              addHistory(t, 'system', 'workspace_mismatch', `${checkI.got || '(khong ro)'} != ${checkI.want}`);
+            });
             fail(`Hoi thoai mo trong workspace "${checkI.got || '(khong ro)'}" chu khong phai "${checkI.want}". `
               + `Mo dung project trong Antigravity roi chay lai.\n(Hoi thoai vua tao: ${conversationId} — nen bo/dong trong IDE.)`);
           }
@@ -546,8 +558,7 @@ export const TOOLS = [
           await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
         }
         setPhase(cfg, task, 'IMPLEMENT', 'pm', 'plan da chot');
-        task.state = 'awaiting_agent';
-        recordDispatch(cfg, task, { kind: 'implement', conversationId: task.conversationId, promptFile });
+        recordDispatch(cfg, task, { kind: 'implement', conversationId: task.conversationId, promptFile, set: { state: 'awaiting_agent' } });
         return [
           `Da giao TRIEN KHAI (${task.id})${moiMo ? ` — mo hoi thoai moi ${task.conversationId}` : ''}.`,
           ...guard.lines.map((l) => `CHU Y: ${l}`),
@@ -564,7 +575,7 @@ export const TOOLS = [
         const { conversationId } = await newConversation({
           prompt, projectId: pidA.id, model: args.model || task.model, title: `[PM] ${task.id} · AUDIT doc lap`,
         });
-        task.auditConversationId = conversationId;
+        updateTask(cfg, task, (t) => { t.auditConversationId = conversationId; });
         if (task.phase === 'IMPLEMENT') setPhase(cfg, task, 'AUDIT', 'pm', 'da giao audit doc lap');
         recordDispatch(cfg, task, { kind: 'audit', conversationId, promptFile });
         return [
@@ -613,8 +624,7 @@ export const TOOLS = [
       const cid = args.toAudit ? task.auditConversationId : task.conversationId;
       if (!cid) fail(args.toAudit ? 'Task chua co hoi thoai audit.' : 'Task chua co hoi thoai.');
       await sendMessage({ conversationId: cid, projectId: projectIdFor(cfg), content });
-      addHistory(task, 'pm', 'message', content);
-      save(cfg, task);
+      updateTask(cfg, task, (t) => { addHistory(t, 'pm', 'message', content); });
       return `Da gui tin nhan vao hoi thoai ${cid}.`;
     },
   },
@@ -637,6 +647,10 @@ export const TOOLS = [
     async handler(args) {
       const { cfg, task } = withTask(args);
       validate(this.inputSchema, args);
+      // Ket luan audit/review chi co nghia khi da co viec trien khai de soi (khong nhay coc giai doan).
+      if (['audit', 'review'].includes(args.kind) && !task.implementDispatchedAt) {
+        fail(`Chua giao trien khai (pm_dispatch kind=implement) — chua co gi de ${args.kind}.`);
+      }
       if (args.kind === 'plan' && args.verdict === 'pass') {
         const pp = contractPaths(cfg, task);
         if (!fs.existsSync(pp.plan)) fail('Chua co plan.md — PM viet ke hoach bang pm_plan truoc.');
@@ -757,6 +771,8 @@ export const TOOLS = [
         L.push(`Chay trong worktree dong bang: ${wt.dir} (HEAD + ${wt.applied} file thay doi, ${wt.untracked} file moi)`);
       }
       // Test chay tren cay nao? (de xuat 5c): HEAD + so file dirty, ghi vao dau log.
+      // Vong luc BAT DAU chay: rework chen giua thi cac lan chay nay thuoc vong cu (recordRun dong bo task sau moi lan ghi).
+      const round0 = task.round;
       const headR = await runShell('git rev-parse --short HEAD 2>/dev/null; git status --porcelain=v1 --untracked-files=all 2>/dev/null | wc -l', { cwd: cfg.projectRoot, timeoutMs: 60000 });
       const [headSha = '?', dirtyN = '?'] = headR.stdout.trim().split('\n').map((x) => x.trim());
       try {
@@ -766,7 +782,7 @@ export const TOOLS = [
           cwd: cwdRun,
           timeoutMs: args.timeoutMs || cfg.runTimeoutMs,
         });
-        const logFile = path.join(ensureDir(p.logsDir), `${args.kind}-r${task.round}-${Date.now()}.log`);
+        const logFile = path.join(ensureDir(p.logsDir), `${args.kind}-r${round0}-${Date.now()}.log`);
         writeFileAtomic(logFile, `$ ${cmd}\n(cwd ${cfg.projectRoot} · HEAD ${headSha} · ${dirtyN} file dirty · startedAt ${new Date(startedMs).toISOString()})\nexit=${r.code} timedOut=${r.timedOut}\n\n--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}\n`);
         // exit 0 chua phai xanh: T0023 r1 (14/09/2026) `| tail` nuot exit => exit=0 nhung "1 failed" + BUILD FAILED.
         // Bang chung (src/evidence.js): XML JUnit moi hon luc bat dau chay, hoac it nhat stdout khong noi "khong chay".
@@ -775,7 +791,7 @@ export const TOOLS = [
           : null;
         recordRun(cfg, task, {
           kind: args.kind, command: cmd, exitCode: r.code, durationMs: r.durationMs, timedOut: r.timedOut, logFile,
-          evidence, startedAt: new Date(startedMs).toISOString(),
+          evidence, round: round0, startedAt: new Date(startedMs).toISOString(),
           stage: args.stage || null, skipReason: args.stage ? String(args.skipReason).trim() : null,
         });
         if (args.stage) L.push(`CHI CHAY STAGE "${args.stage}" — bo phan con lai vi: ${args.skipReason}`);
@@ -816,12 +832,15 @@ export const TOOLS = [
       },
     },
     async handler(args) {
-      const cfg = ctx(args);
+      const live = ctx(args);
+      // Co taskId: dung ban chup (stateDir cua config dang doc co the da bi doi de an thay doi khoi diff).
+      const cfg = args?.taskId ? withGateSnapshot(live, loadTask(live, args.taskId)) : live;
       const patch = args?.mode === 'patch';
       const max = args?.maxBytes || 20000;
-      const ps = args?.pathspec ? ` -- ${args.pathspec}` : '';
+      // pathspec di thang vao argv cua git (khong qua shell) — sau '--' nen khong thanh tuy chon duoc.
+      const ps = pathspecArgs(args?.pathspec);
       const snap = await gitSnapshot(cfg);
-      const stat = await runShell(`git --no-pager diff --stat${ps}`, { cwd: cfg.projectRoot, timeoutMs: 120000 });
+      const stat = await run('git', ['--no-pager', 'diff', '--stat', ...ps], { cwd: cfg.projectRoot, timeoutMs: 120000 });
       const L = [];
       L.push(`Project: ${cfg.projectRoot}`);
       L.push('--- git status ---');
@@ -851,8 +870,10 @@ export const TOOLS = [
       L.push('--- git diff --stat ---');
       L.push(truncate(stat.stdout || '(khong co thay doi)', 6000));
       if (patch) {
-        const diff = await runShell(`git --no-pager diff${ps}`, { cwd: cfg.projectRoot, timeoutMs: 180000, maxBytes: max + 1000 });
+        // Khong dat maxBytes = max: run() giu DUOI khi vuot tran, con doc patch can phan DAU (truncate ben duoi cat dau).
+        const diff = await run('git', ['--no-pager', 'diff', ...ps], { cwd: cfg.projectRoot, timeoutMs: 180000 });
         L.push('--- git diff ---');
+        if (diff.truncated) L.push('CHU Y: diff qua lon — output chi con PHAN CUOI (mat phan dau). Thu hep pathspec roi goi lai.');
         L.push(truncate(diff.stdout || '(khong co thay doi)', max));
       } else {
         L.push('(chua doc patch — goi lai voi mode="patch" va pathspec cua file can review)');
@@ -861,7 +882,7 @@ export const TOOLS = [
         const tk0 = loadTask(cfg, args.taskId);
         const base0 = tk0 ? await baseCommitOf(cfg, tk0) : null;
         if (base0) {
-          const cm = await runShell(`git --no-pager diff --stat ${base0}..HEAD${ps}`, { cwd: cfg.projectRoot, timeoutMs: 120000 });
+          const cm = await run('git', ['--no-pager', 'diff', '--stat', `${base0}..HEAD`, ...ps], { cwd: cfg.projectRoot, timeoutMs: 120000 });
           L.push(`--- da commit ke tu commit goc cua task (${base0.slice(0, 8)}..HEAD) ---`);
           L.push(truncate(cm.stdout || '(chua co commit nao sau commit goc)', 6000));
         }
@@ -968,13 +989,16 @@ export const TOOLS = [
       const blockedCu = freshness(cfg, task).result?.blocked;
       const tuChoiViLon = blockedCu && /phuc tap|phức tạp|qua lon|quá lớn|complex|too (?:big|large|many)|out of scope/i.test(
         typeof blockedCu === 'string' ? blockedCu : JSON.stringify(blockedCu));
-      markRework(cfg, task, `${findings.length} phat hien: ${findings[0]}`, findings);
-      const msg = buildReworkMessage(cfg, task, { findings, notes: args.notes || '', failedRuns });
-      const promptFile = saveOutgoing(cfg, task, `prompt-rework-r${task.round}`, msg);
+      // GUI TRUOC, ghi trang thai SAU: gui loi (mang, Antigravity dong) thi task giu nguyen vong => goi lai an toan,
+      // khong tang vong hai lan va khong co vong "da tra viec" ma agent chua he nhan (re-audit 23/09).
+      const nextRound = (task.round || 0) + 1;
+      const msg = buildReworkMessage(cfg, { ...task, round: nextRound }, { findings, notes: args.notes || '', failedRuns });
+      const promptFile = saveOutgoing(cfg, task, `prompt-rework-r${nextRound}`, msg);
       if (task.conversationId) {
         await sendMessage({ conversationId: task.conversationId, projectId: projectIdFor(cfg), content: msg });
-        recordDispatch(cfg, task, { kind: 'rework', promptFile });
       }
+      markRework(cfg, task, `${findings.length} phat hien: ${findings[0]}`, findings);
+      if (task.conversationId) recordDispatch(cfg, task, { kind: 'rework', promptFile });
       return [
         `Da tra viec ${task.id} (nay la vong ${task.round}).`,
         'Da huy ket luan audit + review cua vong truoc; test/anh cu khong con tinh nua.',

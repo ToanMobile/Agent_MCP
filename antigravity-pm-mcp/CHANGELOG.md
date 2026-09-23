@@ -9,6 +9,31 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **`task.json` ra khỏi repo** (23/09/2026): lưu ở `~/.antigravity-pm/projects/<tên>-<hash gốc>/tasks/<id>/task.json`
+  (`cfg.pmTasksRoot`). Trước đây nằm cạnh `result.json` của agent trong `.antigravity-pm/` (bị `pm_diff` ẩn) nên
+  agent sửa được verdicts / `runs[].evidence.ok` / round / baseCommit. Task cũ: chuyển **đúng một lần** cho mỗi project
+  (sentinel `migrated.json`, bản trong repo đổi tên `task.json.migrated`); sau đó bản trong repo không bao giờ được đọc lại.
+  `task.json` hỏng ⇒ báo lỗi (không coi là "không có task"). Ghi có khoá file `O_EXCL` + `rev` (an toàn giữa hai tiến trình).
+- **Bản chụp cấu hình cổng theo task** (re-audit 23/09): lúc `pm_task_create` chụp `testCommand`, `testStages`,
+  `auditCommands`, `proof`, `mustHave`, `oracle`, `stateDir`… vào `task.json`. Mọi tool thao tác trên task (kể cả lệnh
+  PM tự chạy) dùng bản chụp — agent sửa `.antigravity-pm.json` (vd `testCommand: "true"`, `proof.require: 0`,
+  `stateDir: "src"` để ẩn thay đổi) không còn tác dụng; `pm_status` cảnh báo khi cấu hình đã lệch.
+- **Cổng nghiệm thu chặt hơn**: bắt buộc có lượt `pm_dispatch kind=implement`; `pm_verdict audit/review` bị từ chối trước
+  lượt đó; lần chạy xanh bằng lệnh tự chọn (`pm_run command=...`) chỉ được tính khi có JUnit XML; `result.json` có mtime
+  ở tương lai không được tính là mới; oracle RED "weak" (không XML) được cảnh báo.
+- **Lệnh oracle không lấy từ `result.json` của agent**: `pm_run kind=oracle` bắt PM truyền `command` (lệnh agent đề xuất
+  chỉ hiện ra để PM đọc).
+- **Hết chèn chuỗi vào shell** ở `plan-review.js` (diff kế hoạch), `proof.js` (adb serial/đường dẫn, url Playwright),
+  `worktree.js` (worktree add/remove, git apply): tất cả qua argv/biến môi trường. `JSON.stringify` không chặn được `$(...)`.
+- **Tiến trình con không mồ côi**: SIGTERM/SIGINT/SIGHUP giết cả nhóm tiến trình con đang chạy trước khi server thoát.
+- **`pm_rework` gửi trước, ghi sau**: gửi lỗi thì vòng không tăng — gọi lại an toàn.
+- `taskId` chấp nhận `T` + ≥4 chữ số (agent tạo thư mục `T9999-x` trong repo không làm hỏng việc đánh số).
+- **Không còn chèn chuỗi vào shell khi gọi git**: `pm_diff` (pathspec), `changedFilesOf`/`baseCommitOf`
+  (baseCommit, createdAt) gọi `git` qua argv; baseCommit phải khớp `/^[0-9a-f]{7,40}$/`, sai khuôn ⇒ CHƯA XÁC MINH.
+- **taskId phải khớp khuôn `T####-slug`** trước mọi `path.join` (chặn `../`).
+
 ### Added
 
 - **Chín bài học điều phối đêm 13–14/09/2026 (Geely EX2) + bàn giao OfficeReader, vào thẳng công cụ** (14/09/2026):
@@ -170,6 +195,13 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   11 phút (động tĩnh trở lại sau ~1,6 giây), nên không cần bước "nhắc" nào trong quy trình.
 
 ### Fixed
+
+- **Quá hạn giết cả nhóm tiến trình** (`run`): con chạy `detached`, hết giờ `kill(-pid, SIGKILL)` + đóng pipe,
+  trả kết quả ngay khi con thoát — cháu (gradle/java) giữ pipe không còn làm treo `pm_run`. Vượt trần output thì
+  giữ **đuôi** (lỗi nằm cuối log) và trả `truncated: true`.
+- **Ghi task không còn đè thao tác chen giữa**: `task.json` có `rev` (compare-and-swap); `record*`/`setPhase`/
+  `markRework`/`accept` đọc lại bản mới nhất và chỉ áp phần thay đổi (`updateTask`). Vd `pm_run` chờ test 3 phút
+  trong lúc `pm_rework` tăng vòng: lần chạy ghi vào vòng cũ, vòng/finding/huỷ verdict của rework giữ nguyên.
 
 - **Đường bác kế hoạch dẫn agent đi code sớm**: `pm_verdict kind=plan verdict=fail` chỉ nhắc dùng `pm_rework`,
   mà `pm_rework` lại đặt giai đoạn thành `IMPLEMENT` và gửi tin nhắn đòi `result.json` phase `IMPLEMENT` —

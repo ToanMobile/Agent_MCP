@@ -7,7 +7,7 @@ import { loadConfig } from '../src/config.js';
 import {
   createTask, recordVerdict, recordRun, recordProof, recordDispatch, markRework, gate, accept, contractPaths, loadTask,
 } from '../src/tasks.js';
-import { tmpProject, cleanup, writeFile, sampleTaskArgs, PNG_1PX } from './helpers.js';
+import { tmpProject, cleanup, writeFile, sampleTaskArgs, PNG_1PX, tick } from './helpers.js';
 
 // Luat bat buoc: thay doi phai kem file test. Moi test "phai dat" deu phai dua ctx nay vao.
 const CO_FILE_TEST = { changedFiles: ['src/Kinh.kt', 'src/test/java/KinhTest.kt'] };
@@ -28,6 +28,8 @@ function makeEverythingGreen(cfg, task) {
   const p = contractPaths(cfg, task);
   writeFile(p.plan, '# Ke hoach\n- Buoc 1');
   recordVerdict(cfg, task, { kind: 'plan', verdict: 'pass' });
+  recordDispatch(cfg, task, { kind: 'implement', conversationId: 'c-test' });
+  tick();
   writeFile(p.result, JSON.stringify({ phase: 'IMPLEMENT', summary: 'da lam', files_changed: KHAI_DU }));
   recordVerdict(cfg, task, { kind: 'audit', verdict: 'pass' });
   recordVerdict(cfg, task, { kind: 'review', verdict: 'pass' });

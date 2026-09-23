@@ -16,6 +16,7 @@ import {
   fileCamDungTheoTask,
 } from './policy.js';
 import { createHash } from 'node:crypto';
+import { gateSnapshot } from './config.js';
 
 export const PHASES = ['PLAN', 'IMPLEMENT', 'AUDIT', 'REVIEW', 'TEST', 'PROOF', 'ACCEPTED'];
 export const VERDICT_KINDS = ['plan', 'audit', 'review'];
@@ -26,19 +27,67 @@ export function phaseIndex(p) {
   return PHASES.indexOf(p);
 }
 
-export function taskDir(cfg, id) {
-  return path.join(cfg.tasksRoot, id);
+// Khuon id do createTask sinh ra (T + 4 so + slug <= 48). Chan '../' truoc moi path.join.
+export const TASK_ID_RE = /^T\d{4,}-[a-z0-9-]{1,48}$/;
+
+function checkTaskId(id) {
+  if (!TASK_ID_RE.test(String(id ?? ''))) throw new Error(`taskId khong hop le: "${id}" (dang T0001-ten-task)`);
+  return id;
 }
 
+/** Thu muc file hop dong cua task TRONG repo (brief/plan/result.json/proof/logs) — agent doc/ghi o day. */
+export function taskDir(cfg, id) {
+  return path.join(cfg.tasksRoot, checkTaskId(id));
+}
+
+/** task.json cua PM — NGOAI repo (cfg.pmTasksRoot o HOME), agent khong duoc huong dan cham vao. */
 export function taskFile(cfg, id) {
+  return path.join(cfg.pmTasksRoot || cfg.tasksRoot, checkTaskId(id), 'task.json');
+}
+
+/** Vi tri cu (ban truoc): task.json nam chung thu muc voi result.json cua agent. Chi doc de chuyen nha. */
+function legacyTaskFile(cfg, id) {
   return path.join(taskDir(cfg, id), 'task.json');
 }
 
+/** Ten thu muc task hop le trong mot goc (bo qua rac / thu muc la). */
+function taskIdsIn(root) {
+  if (!root || !exists(root)) return [];
+  return fs.readdirSync(root).filter((n) => TASK_ID_RE.test(n));
+}
+
+/**
+ * Chuyen nha task.json tu repo sang HOME DUNG MOT LAN cho moi project, ghi sentinel `migrated.json`.
+ * Sau sentinel, ban trong repo KHONG BAO GIO duoc doc lai (agent tao/sua task.json trong repo = vo hieu).
+ * Vi sao (re-audit 23/09): ban dau doc ban repo moi khi ban HOME thieu/hong => agent cay task.json gia
+ * (verdict pass, phase ACCEPTED) roi xoa/lam hong ban HOME la duoc import lai.
+ */
+function migrateLegacyOnce(cfg) {
+  if (!cfg.pmTasksRoot || cfg.pmTasksRoot === cfg.tasksRoot) return;
+  const sentinel = path.join(cfg.pmStateRoot || path.dirname(cfg.pmTasksRoot), 'migrated.json');
+  if (exists(sentinel)) return;
+  const moved = [];
+  for (const id of taskIdsIn(cfg.tasksRoot)) {
+    const legacy = legacyTaskFile(cfg, id);
+    if (!exists(legacy) || exists(taskFile(cfg, id))) continue;
+    const cu = readJsonIfExists(legacy);
+    if (!cu || cu.id !== id) continue;
+    writeJsonAtomic(taskFile(cfg, id), cu);
+    try { fs.renameSync(legacy, `${legacy}.migrated`); } catch { /* read-only repo: sentinel still stops re-reads */ }
+    moved.push(id);
+  }
+  writeJsonAtomic(sentinel, { migratedAt: nowIso(), ids: moved });
+}
+
+function allTaskIds(cfg) {
+  migrateLegacyOnce(cfg);
+  return taskIdsIn(cfg.pmTasksRoot || cfg.tasksRoot);
+}
+
 function nextTaskNumber(cfg) {
-  if (!exists(cfg.tasksRoot)) return 1;
   let max = 0;
-  for (const name of fs.readdirSync(cfg.tasksRoot)) {
-    const m = /^T(\d{4})-/.exec(name);
+  for (const name of allTaskIds(cfg)) {
+    const m = /^T(\d+)-/.exec(name);
     if (m) max = Math.max(max, Number(m[1]));
   }
   return max + 1;
@@ -88,6 +137,8 @@ export function createTask(cfg, { title, brief, definitionOfDone = [], model, ta
     // sach => cong "phai kem file test" bao 0 file dù test co that. Do theo commit goc thi khong lot.
     baseCommit: headCommitOf(cfg.projectRoot),
     createdAt: nowIso(),
+    // Ban chup cau hinh cong (testCommand, proof, mustHave, stateDir...) — agent sua .antigravity-pm.json sau nay khong co tac dung.
+    gateConfig: gateSnapshot(cfg),
     updatedAt: nowIso(),
     acceptedAt: null,
   };
@@ -110,24 +161,113 @@ function renderBrief(task) {
   ].join('\n');
 }
 
+/**
+ * Ghi task.json kem so phien ban `rev` (compare-and-swap): ban tren dia da bi tool khac ghi sau khi nguoi goi
+ * nap => TU CHOI thay vi ghi de ca object cu (mat rework / ket luan chen giua). Sua theo phan thay doi: updateTask.
+ */
 export function save(cfg, task) {
+  const file = taskFile(cfg, task.id);
+  ensureDir(path.dirname(file));
+  // Khoa file (O_EXCL) de doc-so-ghi nguyen tu ca giua HAI tien trinh MCP (hai phien Claude cung repo).
+  return withFileLock(`${file}.lock`, () => writeChecked(file, task));
+}
+
+function writeChecked(file, task) {
+  const disk = readJsonIfExists(file);
+  if (disk && (disk.rev || 0) !== (task.rev || 0)) {
+    throw new Error(`Task ${task.id} vua bi thao tac khac ghi (rev ${disk.rev || 0} != ${task.rev || 0}) — khong ghi de ban cu. Goi lai lenh.`);
+  }
+  task.rev = (task.rev || 0) + 1;
   task.updatedAt = nowIso();
-  writeJsonAtomic(taskFile(cfg, task.id), task);
+  writeJsonAtomic(file, task);
   return task;
 }
 
+const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4));
+
+/** Khoa dong bo bang file tao O_EXCL; khoa bo roi > 30s (tien trinh chet) thi coi la cu va lay lai. */
+function withFileLock(lockFile, fn) {
+  const deadline = Date.now() + 5000;
+  let fd;
+  for (;;) {
+    try {
+      fd = fs.openSync(lockFile, 'wx');
+      break;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      try {
+        if (Date.now() - fs.statSync(lockFile).mtimeMs > 30000) { fs.rmSync(lockFile, { force: true }); continue; }
+      } catch { continue; }
+      if (Date.now() > deadline) throw new Error(`Khong lay duoc khoa ${lockFile} sau 5s — tien trinh khac dang ghi task`);
+      Atomics.wait(SLEEP_CELL, 0, 0, 20);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    fs.closeSync(fd);
+    fs.rmSync(lockFile, { force: true });
+  }
+}
+
+/**
+ * Doc task.json: vi tri moi (HOME); chua co thi doc vi tri cu trong repo MOT LAN roi chuyen sang HOME.
+ * Da co ban o HOME thi ban trong repo bi bo qua (agent sua no cung khong anh huong).
+ */
+function readTask(cfg, id) {
+  migrateLegacyOnce(cfg);
+  const file = taskFile(cfg, id);
+  if (!exists(file)) return null;
+  let t;
+  try {
+    t = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    // Hong thi BAO, khong coi la "khong co task" (va tuyet doi khong lay ban khac thay the).
+    throw new Error(`task.json cua ${id} bi hong (${file}): ${e.message} — khoi phuc tu ban sao luu hoac tao task moi`);
+  }
+  if (!t || t.id !== id) throw new Error(`task.json cua ${id} khong khop id (${file})`);
+  return t;
+}
+
 export function loadTask(cfg, id) {
-  const t = readJsonIfExists(taskFile(cfg, id));
-  if (!t) throw new Error(`Khong thay task "${id}" trong ${cfg.tasksRoot}`);
+  const t = readTask(cfg, id);
+  if (!t) throw new Error(`Khong thay task "${id}" trong ${cfg.pmTasksRoot || cfg.tasksRoot}`);
   return t;
 }
 
 export function listTasks(cfg) {
-  if (!exists(cfg.tasksRoot)) return [];
-  return fs.readdirSync(cfg.tasksRoot)
-    .map((id) => readJsonIfExists(taskFile(cfg, id)))
+  return allTaskIds(cfg)
+    .map((id) => { try { return readTask(cfg, id); } catch { return null; } })
     .filter(Boolean)
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+/**
+ * Sua task AN TOAN khi co tool khac chay xen giua. Ban tren dia cung `rev` voi object nguoi goi => ap `fn` len
+ * chinh object do (giu cac truong nguoi goi vua gan). Khac `rev` (co thao tac chen giua, vd pm_rework trong luc
+ * pm_run doi test) => ap `fn` (chi phan thay doi) len ban MOI NHAT tren dia roi dong bo nguoc vao object nguoi goi.
+ * Doc-sua-ghi la DONG BO (khong co await) nen trong mot tien trinh Node khong gi chen giua duoc — day chinh la
+ * doan gang (critical section), khong can mutex async.
+ * Vi sao (audit 23/09): pm_run nap task, doi test 3 phut, recordRun ghi de CA object cu => pm_rework chen giua
+ * bi xoa (vong lui ve, finding mat, ket luan audit cu song lai). `fn` tra ve false = khong ghi.
+ */
+export function updateTask(cfg, task, fn) {
+  const file = taskFile(cfg, task.id);
+  ensureDir(path.dirname(file));
+  let cur;
+  const skipped = withFileLock(`${file}.lock`, () => {
+    const disk = readTask(cfg, task.id);
+    cur = disk && (disk.rev || 0) !== (task.rev || 0) ? disk : task;
+    if (fn(cur) === false) return true;
+    writeChecked(file, cur);
+    return false;
+  });
+  if (skipped) return task;
+  if (cur !== task) {
+    for (const k of Object.keys(task)) if (!(k in cur)) delete task[k];
+    Object.assign(task, cur);
+  }
+  return task;
 }
 
 export function addHistory(task, actor, event, detail = '') {
@@ -174,7 +314,8 @@ export function freshness(cfg, task) {
     resultExists: resultMs > 0,
     // Phai ghi SAU lan rework. So sanh bang Math.floor vi mtime co phan le mili-giay,
     // con moc rework chi luu tron mili-giay => nghieng ve phia "coi la cu" cho an toan.
-    resultFresh: resultMs > 0 && Math.floor(resultMs) > cut,
+    // mtime o TUONG LAI (agent `touch -t`) khong duoc tinh la moi.
+    resultFresh: resultMs > 0 && Math.floor(resultMs) > cut && resultMs <= Date.now() + 2000,
     resultMtime: resultMs ? new Date(resultMs).toISOString() : null,
     cutAt: cut ? new Date(cut).toISOString() : null,
     result: readJsonIfExists(p.result),
@@ -185,19 +326,22 @@ export function freshness(cfg, task) {
 export function recordVerdict(cfg, task, { kind, verdict, findings = [], notes = '', reviewer = 'pm' }) {
   if (!VERDICT_KINDS.includes(kind)) throw new Error(`kind phai thuoc ${VERDICT_KINDS.join('|')}`);
   if (!['pass', 'fail'].includes(verdict)) throw new Error('verdict phai la pass hoac fail');
-  task.verdicts = task.verdicts || {};
-  task.verdicts[kind] = {
-    verdict,
-    round: task.round,
-    findings: findings.map((f) => String(f)).slice(0, 200),
-    notes: String(notes || '').slice(0, 8000),
-    reviewer,
-    at: nowIso(),
-  };
-  // Review dat cua vong nay => danh sach finding chua dong coi nhu da xu ly.
-  if (kind === 'review' && verdict === 'pass') task.openFindings = [];
-  addHistory(task, reviewer, `verdict_${kind}`, `${verdict}${findings.length ? ` (${findings.length} phat hien)` : ''}`);
-  return save(cfg, task);
+  // Vong cua ket luan = vong PM DA XEM (ban nguoi goi dang cam), khong phai vong moi hon neu co rework chen giua.
+  const round = task.round;
+  return updateTask(cfg, task, (t) => {
+    t.verdicts = t.verdicts || {};
+    t.verdicts[kind] = {
+      verdict,
+      round,
+      findings: findings.map((f) => String(f)).slice(0, 200),
+      notes: String(notes || '').slice(0, 8000),
+      reviewer,
+      at: nowIso(),
+    };
+    // Review dat cua vong nay => danh sach finding chua dong coi nhu da xu ly.
+    if (kind === 'review' && verdict === 'pass' && t.round === round) t.openFindings = [];
+    addHistory(t, reviewer, `verdict_${kind}`, `${verdict}${findings.length ? ` (${findings.length} phat hien)` : ''}`);
+  });
 }
 
 /**
@@ -208,9 +352,26 @@ export function isGreenRun(r) {
   return Boolean(r) && r.exitCode === 0 && !r.timedOut && r.evidence?.ok === true;
 }
 
+/** Lenh test chinh thuc (theo ban chup cau hinh): testCommand + cac stage. */
+function lenhTestChinhThuc(cfg) {
+  return new Set([cfg.testCommand, ...Object.values(cfg.testStages || {})].filter(Boolean));
+}
+
+/**
+ * Lan chay xanh co DUOC TINH khong: lenh chinh thuc => co; lenh PM tu go (pm_run command=...) => chi khi co
+ * bang chung manh (JUnit XML moi). Vi sao (re-audit 23/09): `command: 'true'` stdout rong => evidence.ok => xanh gia.
+ */
+function greenRunCounts(cfg, r) {
+  return lenhTestChinhThuc(cfg).has(r.command) || r.evidence?.source === 'xml';
+}
+
 export function recordRun(cfg, task, rec) {
-  task.runs = task.runs || [];
-  task.runs.push({
+  // Vong cua lan chay = vong luc BAT DAU chay (rec.round, hoac ban task nguoi goi da nap truoc khi doi test).
+  // Rework chen giua thi lan chay nay thuoc vong cu — khong duoc tinh xanh cho vong moi.
+  const round = rec.round ?? task.round;
+  return updateTask(cfg, task, (t) => {
+  t.runs = t.runs || [];
+  t.runs.push({
     kind: rec.kind,
     command: rec.command,
     exitCode: rec.exitCode,
@@ -225,26 +386,30 @@ export function recordRun(cfg, task, rec) {
     skipReason: rec.skipReason || null,
     startedAt: rec.startedAt || null,
     logFile: rec.logFile || null,
-    round: task.round,
+    round,
     at: nowIso(),
   });
-  addHistory(task, 'pm', `run_${rec.kind}`, `exit=${rec.exitCode}${rec.evidence && !rec.evidence.ok ? ' CHUA-TINH' : ''} ${rec.command}`);
-  return save(cfg, task);
+  addHistory(t, 'pm', `run_${rec.kind}`, `exit=${rec.exitCode}${rec.evidence && !rec.evidence.ok ? ' CHUA-TINH' : ''} ${rec.command}`);
+  });
 }
 
 /** Bo anh hong khoi ho so vong nay (theo label), xoa file. Tra ve so anh da bo. */
 export function discardProofs(cfg, task, label) {
   const round = task.round || 0;
-  const keep = [];
   let n = 0;
-  for (const p of task.proofs || []) {
-    if (p.round === round && p.label === label) {
-      n += 1;
-      try { fs.rmSync(p.file, { force: true }); } catch { /* file da mat */ }
-    } else keep.push(p);
-  }
-  task.proofs = keep;
-  if (n) { addHistory(task, 'pm', 'proof_discarded', `${n} anh "${label}" vong ${round}`); save(cfg, task); }
+  updateTask(cfg, task, (t) => {
+    const keep = [];
+    for (const p of t.proofs || []) {
+      if (p.round === round && p.label === label) {
+        n += 1;
+        try { fs.rmSync(p.file, { force: true }); } catch { /* file da mat */ }
+      } else keep.push(p);
+    }
+    if (!n) return false;
+    t.proofs = keep;
+    addHistory(t, 'pm', 'proof_discarded', `${n} anh "${label}" vong ${round}`);
+    return true;
+  });
   return n;
 }
 
@@ -264,12 +429,14 @@ export function locCanhBaoDaXem(task, warnings) {
 /** PM danh dau da xem mot canh bao (theo khoa, theo vong, bat buoc co ghi chu vi sao chap nhan). */
 export function ackWarning(cfg, task, keys, note) {
   if (!String(note || '').trim()) throw new Error('note rong — ghi vi sao canh bao nay chap nhan duoc (de nguoi sau doc)');
-  task.ackWarnings = task.ackWarnings || {};
   const ks = (Array.isArray(keys) ? keys : [keys]).map(String).map((k) => k.trim()).filter(Boolean);
   if (!ks.length) throw new Error('keys rong');
-  for (const k of ks) task.ackWarnings[k] = { round: task.round || 0, at: nowIso(), note: String(note).slice(0, 1000) };
-  addHistory(task, 'pm', 'ack_warning', `${ks.join(', ')} — ${note}`);
-  return save(cfg, task);
+  const round = task.round || 0;
+  return updateTask(cfg, task, (t) => {
+    t.ackWarnings = t.ackWarnings || {};
+    for (const k of ks) t.ackWarnings[k] = { round, at: nowIso(), note: String(note).slice(0, 1000) };
+    addHistory(t, 'pm', 'ack_warning', `${ks.join(', ')} — ${note}`);
+  });
 }
 
 /** SHA-256 cua file anh (null neu khong doc duoc) — de phat hien anh trung byte voi task/vong khac. */
@@ -290,59 +457,68 @@ export function anhTrung(cfg, task, sha256) {
 }
 
 export function recordProof(cfg, task, rec) {
-  task.proofs = task.proofs || [];
-  task.proofs.push({
+  // Vong cua anh = vong luc bat dau chup (ban nguoi goi), khong phai vong moi hon neu rework chen giua.
+  const round = rec.round ?? task.round;
+  return updateTask(cfg, task, (t) => {
+  t.proofs = t.proofs || [];
+  t.proofs.push({
     label: rec.label,
     provider: rec.provider,
     file: rec.file,
     bytes: rec.bytes,
     sha256: rec.sha256 || hashFile(rec.file),
     width: rec.width || null,
-    round: task.round,
+    round,
     at: nowIso(),
   });
-  addHistory(task, 'pm', 'proof_captured', `${rec.provider}: ${rec.label}`);
-  return save(cfg, task);
+  addHistory(t, 'pm', 'proof_captured', `${rec.provider}: ${rec.label}`);
+  });
 }
 
 /** Ghi nhan 1 lan giao viec / nhac viec cho agent. */
+/** rec.set: cac truong gan cung luc (conversationId, state...) — ap tren ban moi nhat, khong ghi de ca object cu. */
 export function recordDispatch(cfg, task, rec) {
-  task.dispatches = task.dispatches || [];
-  // Moc nay la mot phan cua cong nghiem thu: bang chung phai co SAU khi giao trien khai.
-  if (rec.kind === 'implement' || rec.kind === 'rework') task.implementDispatchedAt = nowIso();
-  task.dispatches.push({
-    kind: rec.kind,
-    conversationId: rec.conversationId || task.conversationId,
-    model: rec.model || task.model,
-    round: task.round,
-    promptFile: rec.promptFile || null,
-    at: nowIso(),
+  const round = task.round;
+  return updateTask(cfg, task, (t) => {
+    if (rec.set) Object.assign(t, rec.set);
+    t.dispatches = t.dispatches || [];
+    // Moc nay la mot phan cua cong nghiem thu: bang chung phai co SAU khi giao trien khai.
+    if (rec.kind === 'implement' || rec.kind === 'rework') t.implementDispatchedAt = nowIso();
+    t.dispatches.push({
+      kind: rec.kind,
+      conversationId: rec.conversationId || t.conversationId,
+      model: rec.model || t.model,
+      round,
+      promptFile: rec.promptFile || null,
+      at: nowIso(),
+    });
+    addHistory(t, 'pm', `dispatch_${rec.kind}`, rec.conversationId || '');
   });
-  addHistory(task, 'pm', `dispatch_${rec.kind}`, rec.conversationId || '');
-  return save(cfg, task);
 }
 
 export function setPhase(cfg, task, phase, actor = 'pm', detail = '') {
   if (!PHASES.includes(phase)) throw new Error(`phase khong hop le: ${phase}`);
-  const from = task.phase;
-  task.phase = phase;
-  addHistory(task, actor, 'phase', `${from} -> ${phase}${detail ? ` (${detail})` : ''}`);
-  return save(cfg, task);
+  return updateTask(cfg, task, (t) => {
+    const from = t.phase;
+    t.phase = phase;
+    addHistory(t, actor, 'phase', `${from} -> ${phase}${detail ? ` (${detail})` : ''}`);
+  });
 }
 
 export function markRework(cfg, task, feedback, findings = []) {
   if (!feedback || !String(feedback).trim()) throw new Error('feedback rong — rework phai noi ro sai cho nao');
-  task.round = (task.round || 0) + 1;
-  task.lastReworkAt = nowIso();
-  // Finding chua dong: PM va agent cung nhin mot danh sach (T0025 r1: agent sua 1/9 roi bao xong).
-  task.openFindings = Array.isArray(findings) && findings.length ? findings.map(String) : [String(feedback)];
-  // Huy bang chung thuoc ban code da bi sua. Giu nguyen lich su de truy nguoc.
-  delete task.verdicts?.audit;
-  delete task.verdicts?.review;
-  task.phase = 'IMPLEMENT';
-  task.state = 'awaiting_agent';
-  addHistory(task, 'pm', 'rework', String(feedback).slice(0, 4000));
-  return save(cfg, task);
+  return updateTask(cfg, task, (t) => {
+    t.round = (t.round || 0) + 1;
+    t.lastReworkAt = nowIso();
+    // Finding chua dong: PM va agent cung nhin mot danh sach (T0025 r1: agent sua 1/9 roi bao xong).
+    t.openFindings = Array.isArray(findings) && findings.length ? findings.map(String) : [String(feedback)];
+    // Huy bang chung thuoc ban code da bi sua. Giu nguyen lich su de truy nguoc.
+    delete t.verdicts?.audit;
+    delete t.verdicts?.review;
+    t.phase = 'IMPLEMENT';
+    t.state = 'awaiting_agent';
+    addHistory(t, 'pm', 'rework', String(feedback).slice(0, 4000));
+  });
 }
 
 /**
@@ -358,6 +534,9 @@ export function gate(cfg, task, ctx = {}) {
   const round = task.round || 0;
   const missing = [];
   const warnings = [];
+
+  if (cfg.gateConfigDrift) warnings.push('Cau hinh cong da doi sau khi tao task — gate dung ban chup luc tao task');
+  if (!task.implementDispatchedAt) missing.push('Chua giao trien khai (pm_dispatch kind=implement) — khong co moc de xet ket qua cua agent');
 
   const planVerdict = task.verdicts?.plan;
   if (!fresh.planExists) missing.push('Thieu plan.md — PM chua viet ke hoach (pm_plan)');
@@ -397,7 +576,11 @@ export function gate(cfg, task, ctx = {}) {
   const khaiSai = fresh.resultExists ? doiChieuKhaiTest(fresh.result, lastXml?.evidence) : null;
   if (khaiSai) missing.push(khaiSai);
   // exit 0 chua du: phai co bang chung test da chay that (isGreenRun). T0023 r1 (14/09/2026): exit 0 nhung 1 failed.
-  const greenRuns = testsThisRound.filter(isGreenRun);
+  const greenAll = testsThisRound.filter(isGreenRun);
+  const greenRuns = greenAll.filter((r) => greenRunCounts(cfg, r));
+  if (greenAll.length && !greenRuns.length) {
+    missing.push(`Test xanh vong ${round} chi chay bang lenh tu chon (${[...new Set(greenAll.map((r) => r.command))].join(' | ')}) khong co JUnit XML — chay lenh test chinh thuc (testCommand) hoac khai testEvidence.resultsGlob`);
+  }
   // DE XUAT 5b: test xanh nhung chi chay mot stage (bo cong ngoai co ly do) => qua duoc nhung KHONG im lang.
   for (const r of greenRuns.filter((x) => x.stage)) warnings.push(`Test xanh vong ${round} chi chay stage "${r.stage}" (ly do bo phan con lai: ${r.skipReason})`);
   if (greenRuns.length === 0) {
@@ -463,6 +646,8 @@ export function gate(cfg, task, ctx = {}) {
   const oracle = checkOracle(cfg, task, fresh.result, oracleRuns);
   if (oracle.required && !oracle.ok) {
     missing.push(`Thieu oracle do -> xanh: ${oracle.reason}`);
+  } else if (oracle.required && oracleRuns.some((r) => r.oracle?.ok) && oracleRuns.filter((r) => r.oracle?.ok).every((r) => r.oracle?.red?.weak)) {
+    warnings.push('Oracle dat nhung RED chi la "weak" (exit != 0, khong co JUnit XML) — khong phan biet duoc test do voi loi build; khai testEvidence.resultsGlob de chac');
   }
 
   // DE XUAT 4 (Unity): cham file plan CAM dung => CHAN cung, khong ban.
@@ -507,17 +692,19 @@ export function gate(cfg, task, ctx = {}) {
 }
 
 export function accept(cfg, task, ctx = {}) {
-  const g = gate(cfg, task, ctx);
-  if (!g.ok) {
-    const err = new Error(`CHUA DU BANG CHUNG de nghiem thu:\n- ${g.missing.join('\n- ')}`);
-    err.gate = g;
-    throw err;
-  }
-  task.phase = 'ACCEPTED';
-  task.state = 'accepted';
-  task.acceptedAt = nowIso();
-  addHistory(task, 'pm', 'accepted', `vong ${task.round}`);
-  return save(cfg, task);
+  // Xet cong tren ban MOI NHAT tren dia (rework chen giua luc do git thi phai tu choi, khong nghiem thu ban cu).
+  return updateTask(cfg, task, (t) => {
+    const g = gate(cfg, t, ctx);
+    if (!g.ok) {
+      const err = new Error(`CHUA DU BANG CHUNG de nghiem thu:\n- ${g.missing.join('\n- ')}`);
+      err.gate = g;
+      throw err;
+    }
+    t.phase = 'ACCEPTED';
+    t.state = 'accepted';
+    t.acceptedAt = nowIso();
+    addHistory(t, 'pm', 'accepted', `vong ${t.round}`);
+  });
 }
 
 /** SHA HEAD cua repo (null neu khong phai git repo) — dong bo, chi goi luc tao task. */

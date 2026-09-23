@@ -167,11 +167,17 @@ Một task đi hết 7 giai đoạn (không có vòng trả việc) tốn khoả
 
 ## 📁 Hồ sơ task
 
-Mỗi task là một thư mục trong project đích — đọc được, dán được, commit được nếu muốn:
+Mỗi task là một thư mục trong project đích (file hợp đồng agent đọc/ghi) — đọc được, dán được, commit được nếu muốn.
+Riêng `task.json` (trạng thái, kết luận, lần chạy test, vòng, ảnh, lịch sử) do PM giữ **ngoài repo**, ở
+`~/.antigravity-pm/projects/<tên>-<hash gốc project>/tasks/<id>/task.json`: agent ghi `result.json` ngay trong thư
+mục task nên nếu `task.json` nằm cạnh đó thì agent sửa được kết luận/lần chạy mà `pm_diff` không thấy. Task cũ có
+`task.json` trong repo được đọc **một lần** rồi chuyển sang HOME; sau đó bản trong repo bị bỏ qua.
 
 ```
+~/.antigravity-pm/projects/<tên>-<hash>/tasks/T0001-them-cong-chan-kinh/
+└── task.json          # trạng thái, kết luận, lần chạy, ảnh, lịch sử (PM giữ, agent không đụng)
+
 <project>/.antigravity-pm/tasks/T0001-them-cong-chan-kinh/
-├── task.json          # trạng thái, kết luận, lần chạy, ảnh, lịch sử
 ├── brief.md           # yêu cầu PM giao + định nghĩa hoàn thành
 ├── plan.md            # agent viết (giai đoạn PLAN)
 ├── result.json        # agent báo cáo theo hợp đồng

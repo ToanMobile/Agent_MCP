@@ -4,13 +4,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { contractPaths, addHistory, save } from './tasks.js';
+import { contractPaths, addHistory, updateTask } from './tasks.js';
 import { kiemKhuonPlanReview } from './policy.js';
 import { kiemBaoCao, dongTomTat } from './cite-check.js';
 import { buildPlanReviewFixMessage } from './prompt.js';
 import { sendMessage } from './agentapi.js';
 import { requireProjectId } from './projects.js';
-import { runShell, truncate, nowIso, readJsonIfExists } from './util.js';
+import { run, truncate, nowIso, readJsonIfExists } from './util.js';
 
 /** Project id de gui kem moi loi goi; khong giai ra duoc thi bo trong (hoi thoai da ton tai). */
 export function projectIdFor(cfg) {
@@ -27,12 +27,14 @@ export async function deltaKeHoach(cfg, task) {
   const v = task.planVersion || 1;
   const prev = path.join(p.logsDir, `plan-v${v - 1}.md`);
   if (v < 2 || !fs.existsSync(prev)) return null;
-  const d = await runShell(`git --no-pager diff --no-index --unified=3 -- ${JSON.stringify(prev)} ${JSON.stringify(p.plan)}`, { cwd: cfg.projectRoot, timeoutMs: 60000, maxBytes: 200000 });
+  // argv, khong qua shell: duong dan tu stateDir (config) co the chua $(...) — JSON.stringify KHONG chan duoc.
+  const d = await run('git', ['--no-pager', 'diff', '--no-index', '--unified=3', '--', prev, p.plan], { cwd: cfg.projectRoot, timeoutMs: 60000, maxBytes: 200000 });
   const prevReview = readJsonIfExists(path.join(p.logsDir, `plan-review-v${v - 1}.json`));
   const previousFindings = Array.isArray(prevReview?.findings)
     ? prevReview.findings.map((f) => `[${f.severity || '?'}] ${f.buoc ? `${f.buoc}: ` : ''}${f.problem || JSON.stringify(f)}`).slice(0, 40)
     : [];
-  return { fromVersion: v - 1, toVersion: v, diff: truncate(d.stdout || '', 8000), previousFindings };
+  const diff = d.truncated ? `[diff qua dai — chi con phan cuoi, thieu header]\n${d.stdout || ''}` : (d.stdout || '');
+  return { fromVersion: v - 1, toVersion: v, diff: truncate(diff, 8000), previousFindings };
 }
 
 /** Dong trang thai phan bien ke hoach: treo / sai khuon (tu nhac 1 lan) / san sang. */
@@ -58,9 +60,10 @@ export async function tinhTrangPhanBien(cfg, task) {
       try {
         const msg = buildPlanReviewFixMessage(cfg, task, loi, task.planHashSent);
         await sendMessage({ conversationId: task.planReviewConversationId, projectId: projectIdFor(cfg), content: msg });
-        task.planReviewNudge = { hash: key, at: nowIso() };
-        addHistory(task, 'pm', 'plan_review_fix_nudge', loi.join('; '));
-        save(cfg, task);
+        updateTask(cfg, task, (t) => {
+          t.planReviewNudge = { hash: key, at: nowIso() };
+          addHistory(t, 'pm', 'plan_review_fix_nudge', loi.join('; '));
+        });
         L.push('  -> da tu nhac agent ghi lai dung khuon (1 lan). Goi lai pm_status sau vai phut.');
       } catch (e) {
         L.push(`  -> khong nhac duoc agent (${String(e.message || e).split('\n')[0].slice(0, 120)}) — Antigravity dang dong? Nhac tay bang pm_message toAudit hoac dispatch lai.`);

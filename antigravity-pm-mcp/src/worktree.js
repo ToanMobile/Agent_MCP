@@ -8,7 +8,10 @@ import { freshness, hopNhatFileThayDoi } from './tasks.js';
 import { mustHaveOf, fileRacGocRepo, cungFile, matchesAny } from './policy.js';
 import { chepVaoWorktree } from './oracle.js';
 import { soiThayDoi } from './lint-diff.js';
-import { runShell } from './util.js';
+import { run } from './util.js';
+
+/** SHA git hop le (hex 7-40). Moi thu khac ("HEAD; rm -rf", "--output=...") khong duoc dua vao git. */
+export const SHA_RE = /^[0-9a-f]{7,40}$/;
 
 /**
  * Danh sach file thay doi cua TASK: cay lam viec (da track + chua track) HOP voi moi file trong
@@ -20,8 +23,10 @@ export async function changedFilesOf(cfg, task) {
   const snap = await gitSnapshot(cfg);
   if (!snap.ok) return undefined;
   const base = await baseCommitOf(cfg, task);
+  // baseCommit co nhung sai khuon (bi sua tay?) => CHUA XAC MINH, khong lui ve "chi cay lam viec".
+  if (!base && task?.baseCommit) return undefined;
   if (!base) return hopNhatFileThayDoi(snap.wt, []);
-  const d = await runShell(`git --no-pager diff --name-only ${base}..HEAD`, { cwd: cfg.projectRoot, timeoutMs: 60000 });
+  const d = await run('git', ['--no-pager', 'diff', '--name-only', `${base}..HEAD`], { cwd: cfg.projectRoot, timeoutMs: 60000 });
   const committed = d.code === 0 ? d.stdout.split('\n').map((l) => l.trim()).filter(Boolean) : [];
   return hopNhatFileThayDoi(snap.wt, committed);
 }
@@ -29,29 +34,38 @@ export async function changedFilesOf(cfg, task) {
 /** Anh chup `git status`: wt = moi file thay doi, untracked = file chua track. ok=false khi khong doc duoc git. */
 export async function gitSnapshot(cfg) {
   // --untracked-files=all: khong gop thu muc moi thanh "src/test/" — phai thay tung file de doi chieu voi files_changed.
-  const r = await runShell('git status --porcelain=v1 --untracked-files=all', { cwd: cfg.projectRoot, timeoutMs: 60000 });
+  // -z: ten file khong bi quote/escape (tieng Viet, dau cach) va rename co 2 truong rieng.
+  const r = await run('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'], { cwd: cfg.projectRoot, timeoutMs: 60000, maxBytes: 16_000_000 });
   if (r.code !== 0) return { ok: false, wt: undefined, untracked: [], raw: r.stdout || '' };
+  // Output bi cat (giu duoi) => dong dau co the la nua duong dan: CHUA XAC MINH thay vi doan.
+  if (r.truncated) return { ok: false, wt: undefined, untracked: [], raw: '', reason: 'git status qua lon (bi cat)' };
   // Thu muc trang thai cua chinh tool (task.json tu ghi moi lan record) khong phai thay doi cua agent.
   const stateDir = `${String(cfg.stateDir || '.antigravity-pm').replace(/^\.\//, '').replace(/\/+$/, '')}/`;
-  const lines = r.stdout.split('\n').filter((l) => l.trim());
-  const clean = (l) => l.slice(3).trim().replace(/^"|"$/g, '');
   const cuaAgent = (f) => f && !f.startsWith(stateDir);
-  const wt = lines
-    .map(clean)
-    .filter(Boolean)
-    .map((l) => (l.includes(' -> ') ? l.split(' -> ')[1] : l))
-    .filter(cuaAgent);
-  const untracked = lines.filter((l) => l.startsWith('??')).map(clean).filter(cuaAgent);
-  return { ok: true, wt, untracked, raw: r.stdout };
+  const fields = r.stdout.split('\0');
+  const wt = [];
+  const untracked = [];
+  for (let i = 0; i < fields.length; i += 1) {
+    const e = fields[i];
+    if (e.length < 4) continue;
+    const xy = e.slice(0, 2);
+    const file = e.slice(3);
+    if (xy.includes('R') || xy.includes('C')) i += 1; // truong ke tiep la ten CU — giu ten moi
+    if (!cuaAgent(file)) continue;
+    wt.push(file);
+    if (xy === '??') untracked.push(file);
+  }
+  return { ok: true, wt, untracked, raw: r.stdout.replaceAll('\0', '\n') };
 }
 
 /** Commit goc cua task: task.baseCommit, hoac (task cu) commit cuoi cung truoc createdAt. */
 export async function baseCommitOf(cfg, task) {
   if (!task) return null;
-  if (task.baseCommit) return task.baseCommit;
-  if (!task.createdAt) return null;
-  const r = await runShell(`git rev-list -1 --before="${task.createdAt}" HEAD`, { cwd: cfg.projectRoot, timeoutMs: 60000 });
-  return r.code === 0 ? (r.stdout.trim() || null) : null;
+  if (task.baseCommit) return SHA_RE.test(String(task.baseCommit)) ? task.baseCommit : null;
+  if (!task.createdAt || Number.isNaN(Date.parse(task.createdAt))) return null;
+  const r = await run('git', ['rev-list', '-1', `--before=${task.createdAt}`, 'HEAD'], { cwd: cfg.projectRoot, timeoutMs: 60000 });
+  const sha = r.code === 0 ? r.stdout.trim() : '';
+  return SHA_RE.test(sha) ? sha : null;
 }
 
 /** Bang chung do tu git + mtime cho gate(): file thay doi, file chua track, thoi diem sua file cuoi (null = khong do duoc). */
@@ -73,15 +87,20 @@ export async function gateCtx(cfg, task) {
 /** Worktree dong bang = HEAD + diff cay lam viec + file moi (tru thu muc trang thai va file rac). */
 export async function dongBangCay(cfg) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agpm-run-'));
-  const add = await runShell(`git worktree add --detach ${JSON.stringify(dir)} HEAD`, { cwd: cfg.projectRoot, timeoutMs: 120000 });
-  if (add.code !== 0) return { error: (add.stderr || add.stdout).trim().slice(0, 400) };
+  const add = await run('git', ['worktree', 'add', '--detach', dir, 'HEAD'], { cwd: cfg.projectRoot, timeoutMs: 120000 });
+  if (add.code !== 0) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* da don */ }
+    return { error: (add.stderr || add.stdout).trim().slice(0, 400) };
+  }
   const snap = await gitSnapshot(cfg);
   let applied = 0;
-  const d = await runShell('git --no-pager diff HEAD --binary', { cwd: cfg.projectRoot, timeoutMs: 120000, maxBytes: 50_000_000 });
+  const d = await run('git', ['--no-pager', 'diff', 'HEAD', '--binary'], { cwd: cfg.projectRoot, timeoutMs: 120000, maxBytes: 50_000_000 });
+  // Patch bi cat (giu duoi) thi khong con la patch hop le — dung lai thay vi dung cay sai.
+  if (d.truncated) { await goWorktree(cfg, dir); return { error: 'git diff vuot 50 MB — khong dung duoc worktree dong bang (patch bi cat)' }; }
   if (d.stdout.trim()) {
     const patch = path.join(dir, '.agpm-wt.patch');
     fs.writeFileSync(patch, d.stdout);
-    const ap = await runShell(`git apply --index ${JSON.stringify(patch)}`, { cwd: dir, timeoutMs: 120000 });
+    const ap = await run('git', ['apply', '--index', patch], { cwd: dir, timeoutMs: 120000 });
     fs.rmSync(patch, { force: true });
     if (ap.code !== 0) { await goWorktree(cfg, dir); return { error: `git apply that bai: ${(ap.stderr || ap.stdout).trim().slice(0, 400)}` }; }
     applied = d.stdout.split('\n').filter((l) => l.startsWith('diff --git')).length;
@@ -102,8 +121,8 @@ export async function dongBangCay(cfg) {
 }
 
 export async function goWorktree(cfg, dir) {
-  await runShell(`git worktree remove --force ${JSON.stringify(dir)}`, { cwd: cfg.projectRoot, timeoutMs: 60000 });
-  await runShell('git worktree prune', { cwd: cfg.projectRoot, timeoutMs: 60000 });
+  await run('git', ['worktree', 'remove', '--force', dir], { cwd: cfg.projectRoot, timeoutMs: 60000 });
+  await run('git', ['worktree', 'prune'], { cwd: cfg.projectRoot, timeoutMs: 60000 });
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* da don */ }
 }
 

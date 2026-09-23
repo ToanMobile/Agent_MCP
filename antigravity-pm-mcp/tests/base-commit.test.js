@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { hopNhatFileThayDoi, headCommitOf, createTask } from '../src/tasks.js';
 import { checkTestChange } from '../src/policy.js';
 import { loadConfig } from '../src/config.js';
+import './helpers.js'; // co lap ANTIGRAVITY_PM_STATE_HOME (task.json khong ghi vao HOME that)
 
 const CFG = { mustHave: { testChange: true, proofFrom: [] } };
 

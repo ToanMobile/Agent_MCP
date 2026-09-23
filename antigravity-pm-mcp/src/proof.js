@@ -55,10 +55,12 @@ async function capture(cfg, provider, outFile, extra = {}) {
   if (type === 'adb') {
     const adb = provider.adb || 'adb';
     const serial = extra.serial || provider.serial;
-    const sel = serial ? `-s ${JSON.stringify(serial)} ` : '';
-    const cmd = `${adb} ${sel}exec-out screencap -p > ${JSON.stringify(outFile)}`;
-    const r = await runShell(cmd, { timeoutMs: provider.timeoutMs || 90000 });
-    return { cmd, r };
+    const args = [...(serial ? ['-s', String(serial)] : []), 'exec-out', 'screencap', '-p'];
+    // Ghi PNG nhi phan qua redirect cua sh, nhung moi gia tri la THAM SO VI TRI ("$0" "$@", "$AGPM_OUT") —
+    // khong noi chuoi vao lenh => serial/duong dan co $(...) khong chay duoc.
+    const r = await run('/bin/sh', ['-c', 'exec "$0" "$@" > "$AGPM_OUT"', adb, ...args],
+      { timeoutMs: provider.timeoutMs || 90000, env: { AGPM_OUT: outFile } });
+    return { cmd: `${adb} ${args.join(' ')} > ${outFile}`, r };
   }
   if (type === 'macos') {
     const args = ['-x', '-t', 'png'];
@@ -101,20 +103,20 @@ async function capture(cfg, provider, outFile, extra = {}) {
 
     let cmd, r;
     if (qaVisualScript && exists(path.join(cfg.projectRoot, 'qa.config.json'))) {
-      cmd = `node ${JSON.stringify(qaVisualScript)} --url ${JSON.stringify(url)}`;
-      r = await runShell(cmd, { timeoutMs: provider.timeoutMs || 90000, cwd: cfg.projectRoot });
+      cmd = `node ${qaVisualScript} --url ${url}`;
+      r = await run(process.execPath, [qaVisualScript, '--url', String(url)], { timeoutMs: provider.timeoutMs || 90000, cwd: cfg.projectRoot });
     } else {
       const script = `import { chromium } from 'playwright';
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: ${width}, height: ${height} } });
 const page = await context.newPage();
-await page.goto(${JSON.stringify(url)}, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.goto(process.env.AGPM_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.waitForTimeout(500);
-await page.screenshot({ path: ${JSON.stringify(outFile)}, fullPage: ${provider.fullPage ? 'true' : 'false'} });
+await page.screenshot({ path: process.env.AGPM_OUT, fullPage: ${provider.fullPage ? 'true' : 'false'} });
 await browser.close();`;
-      const nodeCmd = `node --input-type=module -e ${JSON.stringify(script)}`;
       cmd = `playwright screenshot ${url}`;
-      r = await runShell(nodeCmd, { timeoutMs: provider.timeoutMs || 90000, cwd: cfg.projectRoot });
+      r = await run(process.execPath, ['--input-type=module', '-e', script],
+        { timeoutMs: provider.timeoutMs || 90000, cwd: cfg.projectRoot, env: { AGPM_URL: String(url), AGPM_OUT: outFile } });
     }
     return { cmd, r };
   }

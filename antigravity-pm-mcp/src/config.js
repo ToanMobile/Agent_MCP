@@ -4,6 +4,8 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
+import { homeStateDir, slug } from './util.js';
 
 export const CONFIG_NAME = '.antigravity-pm.json';
 
@@ -14,7 +16,7 @@ export function globalConfigPath() {
 
 /** realpath nhung khong nem loi: duong dan chua ton tai thi tra ve chinh no. */
 function realpathSafe(p) {
-  try { return fs.realpathSync(p); } catch { return path.resolve(p); }
+  try { return fs.realpathSync.native(p); } catch { return path.resolve(p); }
 }
 
 export const DEFAULT_CONFIG = {
@@ -22,7 +24,8 @@ export const DEFAULT_CONFIG = {
   projectName: null,
   // Model Antigravity mac dinh: flash_lite | flash | pro
   defaultModel: 'pro',
-  // Thu muc luu trang thai task, tinh tu goc project.
+  // Thu muc file hop dong cua task (brief/plan/result.json/proof/logs), tinh tu goc project — agent doc/ghi o day.
+  // task.json (ket luan, lan chay test, vong, anh) KHONG nam o day: xem pmStateRoot (HOME), agent khong sua duoc.
   stateDir: '.antigravity-pm',
   // Cac file luat BUOC agent phai doc truoc khi lam (duong dan tuong doi goc project).
   rulesFiles: ['AGENTS.md', 'CLAUDE.md'],
@@ -177,6 +180,11 @@ export function loadConfig(projectInput) {
   cfg.projectName = cfg.projectName || path.basename(root);
   cfg.stateRoot = path.resolve(root, cfg.stateDir);
   cfg.tasksRoot = path.join(cfg.stateRoot, 'tasks');
+  // Trang thai CUA PM (task.json) nam ngoai repo: ~/.antigravity-pm/projects/<ten>-<hash goc project>/tasks/<id>/task.json.
+  // Vi sao: agent ghi result.json ngay canh task.json va gitSnapshot an thu muc trang thai khoi pm_diff =>
+  // agent sua duoc verdicts / runs[].evidence.ok / round / baseCommit ma khong ai thay.
+  cfg.pmStateRoot = path.join(homeStateDir(), 'projects', projectStateKey(root));
+  cfg.pmTasksRoot = path.join(cfg.pmStateRoot, 'tasks');
   cfg.warnings = warnings;
 
   if (!['forbid', 'allow'].includes(cfg.commitPolicy)) {
@@ -187,6 +195,46 @@ export function loadConfig(projectInput) {
   if (!Array.isArray(cfg.auditCommands)) cfg.auditCommands = [];
   if (typeof cfg.proof?.require !== 'number' || cfg.proof.require < 0) cfg.proof.require = 1;
   return cfg;
+}
+
+// Cac khoa quyet dinh cong nghiem thu va lenh PM TU CHAY. `.antigravity-pm.json` nam trong repo => agent sua duoc
+// (doi testCommand thanh `true`, proof.require=0, stateDir="src" de an thay doi khoi pm_diff, provider shell chay
+// lenh tuy y). Vi the chup lai luc TAO TASK vao task.json (HOME) va task do chi dung ban chup (re-audit 23/09).
+export const GATE_KEYS = ['stateDir', 'testCommand', 'testStages', 'auditCommands', 'runTimeoutMs', 'proof', 'mustHave', 'oracle', 'testEvidence'];
+
+function pickGate(cfg) {
+  const out = {};
+  for (const k of GATE_KEYS) if (cfg[k] !== undefined) out[k] = JSON.parse(JSON.stringify(cfg[k]));
+  return out;
+}
+
+export function gateConfigHash(cfg) {
+  return createHash('sha256').update(JSON.stringify(pickGate(cfg))).digest('hex').slice(0, 16);
+}
+
+/** Ban chup cau hinh cong luc tao task (luu trong task.json). */
+export function gateSnapshot(cfg) {
+  return pickGate(cfg);
+}
+
+/** Cau hinh hieu luc cho mot task: ban chup cua task de len cau hinh dang doc (task cu chua co ban chup: giu nguyen). */
+export function withGateSnapshot(cfg, task) {
+  const snap = task?.gateConfig;
+  if (!snap) return cfg;
+  const out = { ...cfg, ...JSON.parse(JSON.stringify(snap)) };
+  out.stateRoot = path.resolve(cfg.projectRoot, out.stateDir);
+  out.tasksRoot = path.join(out.stateRoot, 'tasks');
+  out.gateConfigDrift = gateConfigHash(cfg) !== gateConfigHash(out);
+  if (out.gateConfigDrift) {
+    out.warnings = [...(cfg.warnings || []), `Cau hinh cong trong ${cfg.configFile || '.antigravity-pm.json'} da DOI sau khi tao ${task.id} — task nay van dung ban chup luc tao (doi cau hinh that su => tao task moi)`];
+  }
+  return out;
+}
+
+/** Khoa thu muc trang thai PM cua mot project: ten de doc + sha256 cua realpath goc (hai repo cung ten khong dung nhau). */
+export function projectStateKey(root) {
+  const real = realpathSafe(root);
+  return `${slug(path.basename(real), 32)}-${createHash('sha256').update(real).digest('hex').slice(0, 16)}`;
 }
 
 /** Cac file luat that su ton tai (de nhet vao prompt). */
