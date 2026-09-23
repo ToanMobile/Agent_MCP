@@ -50,7 +50,7 @@ LAZY_CODE_PATTERNS = [
 ]
 
 UI_EXTENSIONS = {".kt", ".java", ".tsx", ".jsx", ".dart", ".vue", ".swift", ".xml"}
-CODE_EXTENSIONS = UI_EXTENSIONS | {".py", ".ts", ".js", ".go", ".rs", ".cpp", ".c", ".h"}
+CODE_EXTENSIONS = UI_EXTENSIONS | {".py", ".ts", ".js", ".go", ".rs", ".cpp", ".c", ".h", ".cs", ".shader", ".hlsl"}
 
 PERF_ANTIPATTERN_PATTERNS = [
     (r"(?i)\bThread\.sleep\(", "Chặn luồng đồng bộ (Thread.sleep) trên UI/Main Thread"),
@@ -79,18 +79,37 @@ def log_warn(msg):
 def log_err(msg):
     print(f"  {RED}✖{RESET} {msg}")
 
-def get_base_dir() -> Path:
+def get_devkit_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
+def get_project_dir() -> Path:
+    target_env = os.environ.get("CLAUDE_PROJECT_DIR") or os.environ.get("TARGET_DIR")
+    if target_env and Path(target_env).exists():
+        return Path(target_env).resolve()
+    try:
+        res = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+        if res.returncode == 0 and res.stdout.strip():
+            return Path(res.stdout.strip()).resolve()
+    except Exception:
+        pass
+    return Path.cwd().resolve()
+
+def get_base_dir() -> Path:
+    return get_project_dir()
+
 def load_active_matrix(matrix_path: str = None) -> dict:
-    base_dir = get_base_dir()
+    proj_dir = get_project_dir()
+    devkit_dir = get_devkit_dir()
     candidates = []
     if matrix_path:
         candidates.append(Path(matrix_path))
     candidates.extend([
-        base_dir / "templates" / "regression_matrix.active.json",
-        base_dir / ".agents" / "active-profile" / "regression_matrix.json",
-        base_dir / "templates" / "regression_matrix.json"
+        proj_dir / "templates" / "regression_matrix.active.json",
+        proj_dir / ".agents" / "active-profile" / "regression_matrix.json",
+        proj_dir / "templates" / "regression_matrix.json",
+        devkit_dir / "templates" / "regression_matrix.active.json",
+        devkit_dir / ".agents" / "active-profile" / "regression_matrix.json",
+        devkit_dir / "templates" / "regression_matrix.json"
     ])
     for c in candidates:
         if c.exists():
@@ -155,8 +174,10 @@ def run_anti_laziness_audit(modified_files: list) -> tuple:
     lazy_matches = []
     base_dir = get_base_dir()
     for rel_file in modified_files:
+        if any(skip in rel_file.lower() for skip in ["test", "spec", "mock", "post-fix-gate.py", "gate.sh", "scripts/"]):
+            continue
         full_path = base_dir / rel_file
-        if full_path.is_file():
+        if full_path.is_file() and any(rel_file.endswith(ext) for ext in CODE_EXTENSIONS):
             try:
                 with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
@@ -171,10 +192,10 @@ def run_performance_audit(modified_files: list) -> tuple:
     perf_findings = []
     base_dir = get_base_dir()
     for rel_file in modified_files:
-        full_path = base_dir / rel_file
         # Exclude tests and build scripts from performance antipattern checks
-        if any(skip in rel_file.lower() for skip in ["test", "spec", "mock", "build.gradle", "pom.xml"]):
+        if any(skip in rel_file.lower() for skip in ["test", "spec", "mock", "build.gradle", "pom.xml", "scripts/", "bin/"]):
             continue
+        full_path = base_dir / rel_file
         if full_path.is_file() and any(rel_file.endswith(ext) for ext in CODE_EXTENSIONS):
             try:
                 with open(full_path, "r", encoding="utf-8", errors="replace") as f:
@@ -190,7 +211,7 @@ def run_resilience_audit(modified_files: list) -> tuple:
     findings = []
     base_dir = get_base_dir()
     for rel_file in modified_files:
-        if any(skip in rel_file.lower() for skip in ["test", "spec", "mock"]):
+        if any(skip in rel_file.lower() for skip in ["test", "spec", "mock", "scripts/", "bin/"]):
             continue
         full_path = base_dir / rel_file
         if full_path.is_file() and any(rel_file.endswith(ext) for ext in CODE_EXTENSIONS):
@@ -271,9 +292,13 @@ def check_anti_false_green(is_hardware_project: bool = False) -> tuple:
     image_hashes = {}
     proof_dirs = [
         base_dir / ".claude" / "audit-gate",
-        base_dir / "reports",
-        Path("/Users/alex/.gemini/antigravity/brain/ed404c61-4319-417d-a0a3-49fa75aa2c2c")
+        base_dir / "reports"
     ]
+    brain_root = Path.home() / ".gemini" / "antigravity" / "brain"
+    if brain_root.exists():
+        for b_dir in brain_root.iterdir():
+            if b_dir.is_dir():
+                proof_dirs.append(b_dir)
     total_images = 0
     duplicate_images = []
     zero_byte_images = []

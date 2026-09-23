@@ -76,9 +76,9 @@ def load_profile_meta(profile_id: str) -> dict:
             return json.load(f)
     return {}
 
-def get_current_profile() -> str:
-    base_dir = get_base_dir()
-    active_file = base_dir / ".active-profile.json"
+def get_current_profile(target_dir_str: str = None) -> str:
+    target_dir = Path(target_dir_str).resolve() if target_dir_str else get_base_dir()
+    active_file = target_dir / ".active-profile.json"
     if active_file.exists():
         try:
             with open(active_file, "r", encoding="utf-8") as f:
@@ -88,9 +88,10 @@ def get_current_profile() -> str:
             return "universal"
     return "universal"
 
-def apply_profile(profile_id: str):
-    base_dir = get_base_dir()
-    profile_dir = base_dir / "profiles" / profile_id
+def apply_profile(profile_id: str, target_dir_str: str = None):
+    devkit_dir = get_base_dir()
+    target_dir = Path(target_dir_str).resolve() if target_dir_str else devkit_dir
+    profile_dir = devkit_dir / "profiles" / profile_id
     if not profile_dir.exists():
         log_err(f"Profile `{profile_id}` không tồn tại trong thư mục profiles/")
         return 1
@@ -100,14 +101,15 @@ def apply_profile(profile_id: str):
 
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════{RESET}")
     print(f"{BOLD}{CYAN}   ⚙️  Kích hoạt Profile Dự án: {profile_name}{RESET}")
+    print(f"{BOLD}{CYAN}       Thư mục đích: {target_dir}{RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════{RESET}\n")
 
     # 1. Ghi tệp trạng thái active
-    active_file = base_dir / ".active-profile.json"
+    active_file = target_dir / ".active-profile.json"
     status_data = {
         "profile": profile_id,
         "name": profile_name,
-        "updated_at": "2026-09-22T21:20:00Z",
+        "updated_at": "2026-09-23T10:00:00Z",
         "description": meta.get("description", ""),
         "essential_mcps": meta.get("essential_mcps", []),
         "active_councils": meta.get("active_councils", []),
@@ -119,7 +121,7 @@ def apply_profile(profile_id: str):
     log_ok(f"Đã lưu trạng thái cấu hình vào `{active_file.name}`")
 
     # 2. Tạo liên kết .agents/active-profile
-    agents_dir = base_dir / ".agents"
+    agents_dir = target_dir / ".agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
     active_link = agents_dir / "active-profile"
     if active_link.is_symlink() or active_link.exists():
@@ -128,17 +130,39 @@ def apply_profile(profile_id: str):
         else:
             active_link.unlink()
     try:
-        active_link.symlink_to(f"../profiles/{profile_id}")
-        log_ok("Đã liên kết `.agents/active-profile` -> `profiles/" + profile_id + "`")
+        if target_dir == devkit_dir:
+            active_link.symlink_to(f"../profiles/{profile_id}")
+        else:
+            active_link.symlink_to(profile_dir.resolve())
+        log_ok(f"Đã liên kết `.agents/active-profile` -> `{profile_dir}`")
     except Exception as e:
         log_warn(f"Không thể tạo symlink `.agents/active-profile`: {e}")
 
     # 3. Kích hoạt Ma trận Kiểm thử Hồi quy tương ứng
     reg_src = profile_dir / "regression_matrix.json"
-    reg_dest = base_dir / "templates" / "regression_matrix.active.json"
+    templates_dir = target_dir / "templates"
+    templates_dir.mkdir(parents=True, exist_ok=True)
+    reg_dest = templates_dir / "regression_matrix.active.json"
     if reg_src.exists():
         shutil.copy2(reg_src, reg_dest)
         log_ok(f"Đã kích hoạt ma trận kiểm thử: `{reg_dest.name}`")
+
+    # 3b. Liên kết các hook chuyên dụng của profile nếu có (ví dụ: validate-assets.sh cho Game)
+    profile_hooks = profile_dir / "hooks"
+    if profile_hooks.exists() and profile_hooks.is_dir():
+        target_hooks_dir = target_dir / ".claude" / "hooks"
+        target_hooks_dir.mkdir(parents=True, exist_ok=True)
+        for h in profile_hooks.iterdir():
+            if h.is_file():
+                dst = target_hooks_dir / h.name
+                try:
+                    if dst.is_symlink() or dst.exists():
+                        dst.unlink()
+                    dst.symlink_to(h.resolve())
+                    log_ok(f"Đã liên kết hook chuyên dụng của profile: `{dst.name}` -> `{h}`")
+                except Exception:
+                    shutil.copy2(h, dst)
+                    log_ok(f"Đã sao chép hook chuyên dụng của profile: `{dst.name}`")
 
     # 4. Kiểm tra sự sẵn sàng của MCP Server chuyên dụng
     print(f"\n{BOLD}Kiểm tra MCP Servers yêu cầu cho profile `{profile_id}`:{RESET}")
@@ -169,12 +193,12 @@ def apply_profile(profile_id: str):
     print(f"{DIM}Mọi yêu cầu tương tác và kiểm tra hồi quy sẽ tự động tuân thủ cấu hình này.{RESET}\n")
     return 0
 
-def show_interactive_menu():
+def show_interactive_menu(target_dir_str: str = None):
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════{RESET}")
     print(f"{BOLD}{CYAN}       🎯 Universal Agent DevKit — Profile Configuration              {RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════{RESET}\n")
 
-    current = get_current_profile()
+    current = get_current_profile(target_dir_str)
     print(f"  {DIM}Profile đang kích hoạt hiện tại:{RESET} {BOLD}{CYAN}{current.upper()}{RESET}\n")
     print(f"  Vui lòng chọn 1 trong các Option cấu hình chuyên biệt:\n")
     print(f"    {BOLD}[1] 🚗 Xe hơi (Automotive){RESET}")
@@ -185,10 +209,12 @@ def show_interactive_menu():
     print(f"        {DIM}Unity 6, Blender 3D, GC memory leak, DrawCall batching, mesh topology.{RESET}\n")
     print(f"    {BOLD}[4] 🌐 Universal (General / Clean Arch){RESET}")
     print(f"        {DIM}Full-Stack, Clean Architecture, TDD Paired Oracle, Zero Secret Leakage.{RESET}\n")
+    print(f"    {BOLD}[5] 🎙️ Trợ lý Giọng nói (Voice Assistant){RESET}")
+    print(f"        {DIM}Edge AI, Speech-to-Text, Audio Processing, AEC/VAD, độ trễ streaming < 300ms.{RESET}\n")
     print(f"    {DIM}[q] Thoát mà không thay đổi{RESET}\n")
 
     try:
-        choice = input(f"{BOLD}Nhập lựa chọn của bạn (1, 2, 3, 4): {RESET}").strip().lower()
+        choice = input(f"{BOLD}Nhập lựa chọn của bạn (1, 2, 3, 4, 5): {RESET}").strip().lower()
     except (EOFError, KeyboardInterrupt):
         print("\nĐã hủy.")
         return 0
@@ -199,20 +225,21 @@ def show_interactive_menu():
 
     if choice in PROFILES:
         target_profile = PROFILES[choice]
-        return apply_profile(target_profile)
+        return apply_profile(target_profile, target_dir_str)
     else:
-        log_err(f"Lựa chọn không hợp lệ: `{choice}`. Vui lòng nhập 1, 2, 3, hoặc 4.")
+        log_err(f"Lựa chọn không hợp lệ: `{choice}`. Vui lòng nhập 1, 2, 3, 4, hoặc 5.")
         return 1
 
 def main():
     parser = argparse.ArgumentParser(description="Universal Agent DevKit Profile Configurator")
     parser.add_argument("-p", "--profile", choices=["automotive", "android", "game", "universal", "voice-assistant", "voice", "audio", "1", "2", "3", "4", "5", "car", "mobile", "unity", "general"],
                         help="Tên hoặc mã số profile cần kích hoạt (1=automotive, 2=android, 3=game, 4=universal, 5=voice-assistant)")
+    parser.add_argument("-t", "--target", help="Đường dẫn thư mục dự án đích (Target directory to apply configuration)")
     parser.add_argument("-s", "--status", action="store_true", help="Hiển thị profile đang kích hoạt")
     args = parser.parse_args()
 
     if args.status:
-        current = get_current_profile()
+        current = get_current_profile(args.target)
         meta = load_profile_meta(current)
         print(f"\n{BOLD}Profile hiện tại:{RESET} {GREEN}{meta.get('name', current)}{RESET}")
         print(f"{DIM}{meta.get('description', '')}{RESET}\n")
@@ -221,12 +248,12 @@ def main():
     if args.profile:
         target = PROFILES.get(args.profile.lower())
         if target:
-            return apply_profile(target)
+            return apply_profile(target, args.target)
         else:
             log_err(f"Profile không hợp lệ: {args.profile}")
             return 1
 
-    return show_interactive_menu()
+    return show_interactive_menu(args.target)
 
 if __name__ == "__main__":
     sys.exit(main())

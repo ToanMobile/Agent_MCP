@@ -172,13 +172,14 @@ if [ "$PROFILE" = "ask" ]; then
   echo "  [2] 📱 Android (Mobile App / Jetpack Compose / Clean Arch)"
   echo "  [3] 🎮 Game (Unity 6 / Blender 3D / Shaders & Assets)"
   echo "  [4] 🌐 Universal / General (Mặc định đa nền tảng)"
+  echo "  [5] 🎙️ Trợ lý Giọng nói (Voice Assistant: Edge AI / Audio / AEC / VAD)"
   echo "-----------------------------------------------------------------"
   user_profile="4"
   if [ -t 0 ]; then
-    read -r -p "Chọn Profile dự án (1=Xe hơi, 2=Android, 3=Game, 4=Universal) [Default: 4]: " input_prof || input_prof=""
+    read -r -p "Chọn Profile dự án (1=Xe hơi, 2=Android, 3=Game, 4=Universal, 5=Voice) [Default: 4]: " input_prof || input_prof=""
     user_profile="${input_prof:-4}"
   elif (exec 3</dev/tty) 2>/dev/null; then
-    read -r -p "Chọn Profile dự án (1=Xe hơi, 2=Android, 3=Game, 4=Universal) [Default: 4]: " input_prof < /dev/tty || input_prof=""
+    read -r -p "Chọn Profile dự án (1=Xe hơi, 2=Android, 3=Game, 4=Universal, 5=Voice) [Default: 4]: " input_prof < /dev/tty || input_prof=""
     user_profile="${input_prof:-4}"
   fi
 
@@ -186,6 +187,7 @@ if [ "$PROFILE" = "ask" ]; then
     1|automotive|car|xehoi) PROFILE="automotive" ;;
     2|android|mobile) PROFILE="android" ;;
     3|game|unity|blender) PROFILE="game" ;;
+    5|voice*|audio) PROFILE="voice-assistant" ;;
     *) PROFILE="universal" ;;
   esac
 fi
@@ -313,7 +315,7 @@ fi
 
 # 6. Kích hoạt Domain Profile nếu có chọn
 if [ -n "$PROFILE" ]; then
-  python3 "$DEVKIT_ROOT/bin/agent-config.py" --profile "$PROFILE" || true
+  python3 "$DEVKIT_ROOT/bin/agent-config.py" --profile "$PROFILE" --target "$TARGET_DIR" || true
 fi
 
 # 7. Hiển thị báo cáo bảo vệ X_old nếu có

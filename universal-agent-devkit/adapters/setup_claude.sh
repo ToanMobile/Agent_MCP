@@ -12,12 +12,6 @@ source "$DEVKIT_ROOT/scripts/backup_conflict.sh"
 
 echo "Configuring Claude Code for: $TARGET_DIR (mode: $MODE, lang: $LANGUAGE, skip_existing: $SKIP_EXISTING)"
 
-if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
-  backup_dir_if_user_content "$TARGET_DIR/.claude/hooks" "$DEVKIT_ROOT"
-  backup_dir_if_user_content "$TARGET_DIR/.claude/commands" "$DEVKIT_ROOT"
-  backup_dir_if_user_content "$TARGET_DIR/.claude/agents" "$DEVKIT_ROOT"
-fi
-
 mkdir -p "$TARGET_DIR/.claude/hooks" "$TARGET_DIR/.claude/commands" "$TARGET_DIR/.claude/agents"
 
 # 1. Non-Destructive Smart Merge for CLAUDE.md and AGENTS.md
@@ -83,6 +77,11 @@ cat << 'SETTINGS_EOF' > "$DEFAULT_SETTINGS"
           {
             "type": "command",
             "command": "\"${CLAUDE_PROJECT_DIR:-$PWD}\"/.claude/hooks/block-dangerous-git.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/hardware_safety_gate.sh\"",
+            "timeout": 10
           }
         ]
       },
@@ -111,19 +110,24 @@ cat << 'SETTINGS_EOF' > "$DEFAULT_SETTINGS"
     ],
     "Stop": [
       {
-        "type": "command",
-        "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/testsourceset_gate.sh\"",
-        "timeout": 60
-      },
-      {
-        "type": "command",
-        "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/test_evidence_gate.sh\"",
-        "timeout": 30
-      },
-      {
-        "type": "command",
-        "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/security_gate.sh\"",
-        "timeout": 15
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/testsourceset_gate.sh\"",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/test_evidence_gate.sh\"",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/security_gate.sh\"",
+            "timeout": 15
+          }
+        ]
       }
     ]
   }

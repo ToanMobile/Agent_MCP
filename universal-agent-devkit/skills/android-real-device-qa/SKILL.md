@@ -44,6 +44,15 @@ Phân tích nguyên nhân đơ máy (Application Not Responding) hoặc crash đ
   - Xác định chính xác luồng gây tắc nghẽn (Main Thread Starvation, Binder Lock Contention, hoặc Database Lock).
   - Trích xuất stack trace có cấu trúc, định vị chính xác `File.kt:Line` gây chặn luồng chính.
 
+### 3b. Chẩn Đoán Sự Cố Sập Native C/C++ & Tombstones (`tombstone-triage.sh`)
+Phân tích tệp `/data/tombstones/` và giải mã stack trace native nhị phân (SIGSEGV, SIGABRT) qua `ndk-stack`:
+```bash
+./profiles/android/scripts/qa/tombstone-triage.sh [package_name] [path_to_symbols_dir]
+```
+- **Tiêu chuẩn nghiệm thu:**
+  - Trích xuất chính xác tín hiệu lỗi hệ thống (`signal 6 SIGABRT`, `signal 11 SIGSEGV`).
+  - Ánh xạ địa chỉ bộ nhớ nhị phân (#00 pc ...) về đúng tệp và dòng code C/C++ bằng `ndk-stack`.
+
 ### 4. Quét Dung Lượng & Giới Hạn Bytecode DEX (`dexscan.py`)
 Phân tích tệp APK/AAB hoặc thư mục build để kiểm tra method count:
 ```bash

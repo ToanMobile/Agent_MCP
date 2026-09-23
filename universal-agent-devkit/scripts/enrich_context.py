@@ -26,7 +26,7 @@ def enrich_prompt(prompt, devkit_root="."):
         try:
             with open(active_profile_file, "r") as f:
                 prof_data = json.load(f)
-                dossier["active_profile"] = prof_data.get("name", "universal")
+                dossier["active_profile"] = prof_data.get("profile", "universal")
         except Exception:
             pass
 

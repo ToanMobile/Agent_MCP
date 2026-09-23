@@ -15,17 +15,19 @@ LOG_DIR="${REPO_ROOT}/.claude/audit-gate"
 mkdir -p "${LOG_DIR}"
 LEDGER="${LOG_DIR}/bash_ledger.jsonl"
 
-INPUT="$(cat)"
-[ -z "${INPUT}" ] && exit 0
-
-python3 <<PY
+LEDGER_PATH="${LEDGER}" python3 -c '
 import sys, json, os, time
 
-raw = """${INPUT}"""
-ledger_path = "${LEDGER}"
+raw = sys.stdin.read()
+if not raw.strip():
+    sys.exit(0)
+
+ledger_path = os.environ.get("LEDGER_PATH", "")
+if not ledger_path:
+    sys.exit(0)
 
 try:
-    data = json.loads(raw) if raw.strip() else {}
+    data = json.loads(raw)
     sid = data.get("session_id") or data.get("sessionId") or "unknown_sid"
     tool = data.get("tool_name") or data.get("name") or "Bash"
     inp = data.get("tool_input") or data.get("input") or {}
@@ -43,6 +45,6 @@ try:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 except Exception:
     pass
-PY
+'
 
 exit 0

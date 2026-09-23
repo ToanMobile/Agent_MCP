@@ -575,10 +575,20 @@ if new_run:
     for t in list(streak):
         if t not in now_failing:
             streak.pop(t, None)          # went green (or not re-run) → reset
+    # ── deliberate_red check: mutation testing should not trigger Anti-Loop ──
+    deliberate_red = bool(re.search(
+        r"deliberate[-_\s]*red|mutation[-_\s]*test|red[-_\s]*check|kiểm[-_\s]*chứng[-_\s]*đỏ|chứng[-_\s]*minh[-_\s]*đỏ|cố[-_\s]*tình[-_\s]*làm[-_\s]*đỏ|thử[-_\s]*nghiệm[-_\s]*đỏ",
+        msg or "",
+        re.I
+    )) or bool(pending_edits)
+
     for t in now_failing:
         streak[t] = streak.get(t, 0) + 1
         if streak[t] >= 2:
-            repeat_failures.append((t, streak[t]))
+            if deliberate_red:
+                logline(f"[{ts}] Anti-Loop bypassed for deliberate red testcase: {t} (streak={streak[t]})")
+            else:
+                repeat_failures.append((t, streak[t]))
 
     # Per-suite red/green history. XML files are OVERWRITTEN by the next run, so
     # a green run erases the red that came before it — the only way to know a

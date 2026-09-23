@@ -139,8 +139,8 @@ Whenever the user asks to fix a bug, refactor code, or change behavior in a comp
 6. **Deterministic Review with OpenCodeReview (`ocr`):**
    - Run `ocr review` or `ocr delegate preview` to audit the diff before declaring completion.
 
-> **Modular Domain Packs:**
-> Domain-specific and project-specific rules (such as Automotive Hardware, FlymeAuto, or CAN Bus specifics) are kept isolated in `domain-packs/` (e.g. `domain-packs/automotive/`) to keep the DevKit core 100% universal and domain-agnostic.
+> **Modular Domain Profiles:**
+> Domain-specific and project-specific rules (such as Automotive Hardware, FlymeAuto, or CAN Bus specifics) are kept isolated in `profiles/` (e.g. `profiles/automotive/`) to keep the DevKit core 100% universal and domain-agnostic.
 
 ### 8.2 Autonomous Skill Routing Matrix (Bảng Điều Phối Tự Động Toàn Bộ 23 Kỹ Năng - Zero Manual Effort)
 AI Agent BẮT BUỘC PHẢI TỰ ĐỘNG nhận diện ngữ cảnh và kích hoạt các kỹ năng sau ĐỘC LẬP TỰ ĐỘNG, TUYỆT ĐỐI KHÔNG bắt người dùng phải gõ lệnh slash command hay chạy bằng tay. Người dùng (Senior Dev) chỉ cần đưa ra yêu cầu tự nhiên, hệ thống tự động điều phối toàn bộ:
@@ -162,7 +162,9 @@ AI Agent BẮT BUỘC PHẢI TỰ ĐỘNG nhận diện ngữ cảnh và kích h
 | **3. Implementation & TDD** | `security-checklist` | Thay đổi Intent, URI, auth, permissions, WebView, secret | Tự động rà soát bề mặt tấn công, nguyên tắc quyền tối thiểu, che giấu credential trần. |
 | **3. Implementation & TDD** | `observability-instrumentation` | Thêm log, metric, trace, chẩn đoán lỗi thiếu dữ liệu | Tự động chuẩn hóa structured logging, phân cấp DEBUG/INFO/ERROR, mask 100% PII. |
 | **3. Implementation & TDD** | `writing-skills` | Tạo mới hoặc chuẩn hóa Skill / Rules cho Agent | Tự động tuân thủ cấu trúc YAML frontmatter, mô tả ngữ cảnh kích hoạt và quy chuẩn kebab-case. |
-| **4. Device & Visual QA** | `android-real-device-qa` | Kiểm thử Android trên thiết bị thật / máy ảo emulator | Tự động đo FPS SurfaceFlinger, dump view hierarchy XML, triage ANR logcat, quét DEX. |
+| **4. Device & Visual QA** | `android-real-device-qa` | Kiểm thử Android trên thiết bị thật / máy ảo emulator | Tự động đo FPS SurfaceFlinger, dump view hierarchy XML, triage ANR logcat, tombstone native crash, quét DEX. |
+| **4. Device & Visual QA** | `compose-recomp-audit` | Tối ưu Compose 120 FPS, loại bỏ Recomposition thừa | Tự động audit tính ổn định tham số (@Stable/@Immutable), derivedStateOf, deferred state reads, LazyColumn keying. |
+| **4. Device & Visual QA** | `unity-gc-audit` | Triệt tiêu GC Alloc trong Unity 6, hướng tới Zero-GC Update loop | Tự động quét LINQ/boxing trong frame loops, NonAlloc physics APIs, cache coroutines, chống rò rỉ C# events khi đổi Scene. |
 | **4. Device & Visual QA** | `qa-visual` | Kiểm tra giao diện, audit layout, chống vỡ màn hình | Tự động audit tràn khung, lệch align, touch target >= 48dp, upload screenshot lên R2. |
 | **4. Device & Visual QA** | `qa-review` | Chuẩn bị trước khi tạo PR / bàn giao Tech Lead | Tự động chất vấn diff, tạo acceptance criteria kiểm chứng được và dựng ma trận test scenario. |
 | **5. Acceptance & Delivery** | `merge-conflict-resolver` | Xung đột git khi merge, rebase, cherry-pick | Tự động phân tích AST và ngữ cảnh để giải quyết xung đột mà không làm mất mát logic. |

@@ -95,7 +95,7 @@ AGENTS_SPEC = [
     (41, "GradleTestRunnerAuditor", "Kiểm toán phân tích cú pháp ./gradlew test và tham số --tests", "workflows/multi-lens-audit.test.mjs", r"Gradle detection cannot be bypassed"),
     (42, "NodeNativeTestAuditor", "Kiểm toán bộ chạy test chuẩn node --test (134 tests tích hợp)", "workflows/fix-evidence-driver.test.mjs", r"node:test"),
     (43, "BashCompatibilityAuditor", "Kiểm toán tương thích shell script trên cả macOS zsh và Linux bash", "bin/install.sh", r"#!/usr/bin/env bash"),
-    (44, "DotnetTestAuditor", "Kiểm toán cấu hình bộ chạy test dotnet test cho Game Unity C#", "profiles/game/regression_matrix.json", r"dotnet test"),
+    (44, "UnityTestRunnerAuditor", "Kiểm toán bộ chạy test Unity 6 và kiểm tra biên dịch (unity-test.sh / unity-compile-check.sh)", "profiles/game/regression_matrix.json", r"unity-test\.sh|unity-compile-check\.sh"),
     (45, "PythonTestAuditor", "Kiểm toán bộ chạy test tiêu chuẩn Python 3 không phụ thuộc bên ngoài", "bin/agent-health.py", r"#!/usr/bin/env python3"),
 
     # Council J: Solo-Dev & Tech Lead Handover Verification

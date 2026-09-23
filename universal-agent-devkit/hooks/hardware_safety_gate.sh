@@ -15,18 +15,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -u
 
-INPUT="$(cat)"
-[ -z "${INPUT}" ] && exit 0
-
 [ "${HARDWARE_SAFETY_GATE:-1}" = "0" ] && exit 0
 [ "${HARDWARE_OVERRIDE:-0}" = "1" ] && exit 0
 
-python3 <<PY
+python3 -c '
 import sys, json, re
 
-raw = """${INPUT}"""
+raw = sys.stdin.read()
+if not raw.strip():
+    sys.exit(0)
+
 try:
-    data = json.loads(raw) if raw.strip() else {}
+    data = json.loads(raw)
     inp = data.get("tool_input") or data.get("input") or {}
     cmd = inp.get("command") or inp.get("CommandLine") or ""
 
@@ -51,4 +51,4 @@ except Exception:
     pass
 
 sys.exit(0)
-PY
+'

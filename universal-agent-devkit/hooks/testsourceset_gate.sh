@@ -32,16 +32,30 @@ mkdir -p "${LOG_DIR}"
 LOG="${LOG_DIR}/testsourceset_gate.log"
 TS="$(date +%Y-%m-%dT%H:%M:%S)"
 
-# Read stdin to isolate session attempt tracking
+# Read stdin to isolate session attempt tracking and file scope
 INPUT="$(cat)"
 SID_RAW=""
+SESSION_FILES=""
 if [ -n "${INPUT}" ]; then
-  SID_RAW="$(printf '%s' "${INPUT}" | python3 -c '
-import sys, json, re
+  eval "$(printf '%s' "${INPUT}" | python3 -c '
+import sys, json, os, re
 try:
     d = json.load(sys.stdin)
     sid = d.get("session_id") or d.get("sessionId") or ""
-    print(re.sub(r"[^a-zA-Z0-9_-]", "_", str(sid)))
+    clean_sid = re.sub(r"[^a-zA-Z0-9_-]", "_", str(sid))
+    print(f"SID_RAW=\"{clean_sid}\"")
+    tp = d.get("transcript_path")
+    files = []
+    if tp and os.path.exists(tp):
+        with open(tp, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+            for m in re.finditer(r"[\w/.-]+\.(?:kt|java)", content):
+                fpath = m.group(0)
+                if "/src/" in fpath and "/build/" not in fpath:
+                    files.append(fpath)
+    if files:
+        joined = " ".join(set(files))
+        print(f"SESSION_FILES=\"{joined}\"")
 except Exception:
     pass
 ' 2>/dev/null || true)"
@@ -69,6 +83,24 @@ CHANGED="$( { git diff --name-only --diff-filter=ACMR 2>/dev/null
               git diff --cached --name-only --diff-filter=ACMR 2>/dev/null
               git ls-files --others --exclude-standard 2>/dev/null
             } | grep -E '\.(kt|java)$' | grep -v '/build/' | sort -u )"
+
+# If transcript specifies files touched in this session, scope to those files
+if [ -n "${SESSION_FILES:-}" ] && [ -n "${CHANGED}" ]; then
+  MATCHED=""
+  for f in ${CHANGED}; do
+    for sf in ${SESSION_FILES}; do
+      if [[ "$sf" == *"$f"* ]] || [[ "$f" == *"$sf"* ]]; then
+        MATCHED="${MATCHED} ${f}"
+        break
+      fi
+    done
+  done
+  MATCHED="$(printf '%s\n' ${MATCHED} 2>/dev/null | grep -v '^$' | sort -u || true)"
+  if [ -n "${MATCHED}" ]; then
+    CHANGED="${MATCHED}"
+    log "Scoped compilation checks to active session (${SID_RAW:-default}): ${CHANGED}"
+  fi
+fi
 
 [ -n "${CHANGED}" ] || { log "PASS — no uncommitted Kotlin/Java changes"; exit 0; }
 
@@ -124,7 +156,7 @@ fi
 # section while `compileDebugUnitTestKotlin` for the same five modules exited 0
 # when re-run by hand.
 # Classify before blaming, and always persist the raw output.
-OUT_FILE="${LOG_DIR}/testsourceset_last_failure.txt"
+OUT_FILE="${LOG_DIR}/testsourceset_last_failure${SID_RAW:+_${SID_RAW}}.txt"
 printf '%s\n' "${OUT}" >"${OUT_FILE}" 2>/dev/null || true
 
 if printf '%s' "${OUT}" | grep -qE '^e: |error:|Compilation error|compileDebugUnitTestKotlin.*FAILED'; then

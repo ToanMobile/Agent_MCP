@@ -19,12 +19,12 @@
         {
           "id": "REG-GAME-01",
           "name": "Zero GC Allocation in Frame Update Loop Audit",
-          "command": "dotnet test --filter 'Category=MemoryProfiler'"
+          "command": "./scripts/unity-test.sh EditMode --filter 'Category=MemoryProfiler'"
         },
         {
           "id": "REG-GAME-02",
           "name": "Scene Load & Unload Memory Leak Regression Test",
-          "command": "dotnet test --filter 'Category=SceneTransition'"
+          "command": "./scripts/unity-test.sh PlayMode --filter 'Category=SceneTransition'"
         }
       ]
     },
@@ -43,7 +43,7 @@
         {
           "id": "REG-RENDER-01",
           "name": "DrawCall Count Under Frame Budget (<= 100 DC)",
-          "command": "dotnet test --filter 'Category=RenderingBenchmark'"
+          "command": "./scripts/unity-compile-check.sh && ./scripts/unity-test.sh PlayMode --filter 'Category=RenderingBenchmark'"
         },
         {
           "id": "REG-ASSET-02",

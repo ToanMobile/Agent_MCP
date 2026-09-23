@@ -1,0 +1,1 @@
+../skills/compose-recomp-audit/SKILL.md

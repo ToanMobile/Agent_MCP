@@ -155,16 +155,16 @@ def run_full_audit() -> int:
     def t06():
         skills_dir = BASE_DIR / "skills"
         skills = [p.name for p in skills_dir.iterdir() if p.is_dir() and (p / "SKILL.md").exists()]
-        ok = len(skills) == 23
-        return ok, f"Thư mục skills/ chứa đúng {len(skills)}/23 kỹ năng tinh nhuệ, zero bloat"
-    auditor.run_agent(2, C2, 6, "CuratedSkillsCountAuditor", "Kiểm tra danh mục skills đạt chuẩn tinh giản đúng 23 kỹ năng", t06)
+        ok = len(skills) in (23, 25)
+        return ok, f"Thư mục skills/ chứa đúng {len(skills)} kỹ năng tinh nhuệ (23 canonical + 2 senior domain skills), zero bloat"
+    auditor.run_agent(2, C2, 6, "CuratedSkillsCountAuditor", "Kiểm tra danh mục skills đạt chuẩn tinh giản đúng 23-25 kỹ năng", t06)
 
     def t07():
         agents_skills = BASE_DIR / ".agents/skills"
         symlinks = [p for p in agents_skills.iterdir() if p.is_symlink()]
         broken = [p for p in symlinks if not p.resolve().exists()]
-        ok = len(symlinks) == 23 and len(broken) == 0
-        return ok, f"Thư mục .agents/skills/ sở hữu 23/23 symlinks toàn vẹn, 0 liên kết chết"
+        ok = len(symlinks) in (23, 25) and len(broken) == 0
+        return ok, f"Thư mục .agents/skills/ sở hữu {len(symlinks)} symlinks toàn vẹn, 0 liên kết chết"
     auditor.run_agent(2, C2, 7, "SymlinkSSOTIntegrityAuditor", "Kiểm tra tính toàn vẹn 1-to-1 của symlinks auto-discovery", t07)
 
     def t08():
