@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/hooks/review_timing_guard.sh
+../../hooks/review_timing_guard.sh

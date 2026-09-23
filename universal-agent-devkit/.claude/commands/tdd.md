@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/commands/tdd.md
+../../commands/tdd.md

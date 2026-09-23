@@ -1,17 +1,46 @@
-# /audit-gate — Post-Fix Audit & TIA Regression Shield Gate
+# /audit-gate — Post-Fix Audit & TIA Regression Gate
 
-Kích hoạt cổng kiểm toán 5 tầng tự động sau khi sửa lỗi, bao gồm:
-1. Git Diff, Hygiene & Quét Secret, Anti-Laziness (chống placeholder).
-2. Hệ thống Thiết kế & Chuẩn tiếp cận (DESIGN.md, Touch target >= 48dp, Debounced buttons).
-3. Paired Executable Oracle (Bằng chứng RED -> GREEN).
-4. Ma trận kiểm thử hồi quy TIA với checklist đánh dấu `[x] PASS`.
-5. Đánh giá mã nguồn tự động qua Alibaba OpenCodeReview (`ocr`).
+Chạy cổng kiểm toán sau khi sửa lỗi trên các file thay đổi của dự án (working tree, hoặc `--diff <ref>`).
 
-## Sử Dụng
+**Chặn thật (quyết định verdict):**
+1. 5 kiểm tra tĩnh bằng regex:
+   - bí mật (key/token/password, tên file cấm như `*.jks`, `*.key`, `.env`)
+   - placeholder lười biếng (`// ... existing code ...`)
+   - anti-pattern hiệu năng
+   - nuốt lỗi (`catch {}`, `except: pass`)
+   - log thô
+2. Test hồi quy TIA với `--run-tests`:
+   - Gate chạy thật các lệnh trong `regression_matrix.json`.
+   - Lệnh được đọc từ bản đã commit (`HEAD`, hoặc ref của `--diff`), không đọc từ working copy.
+   - Nếu matrix hoặc file test đã có bị sửa/xoá trong chính thay đổi, verdict là CHƯA XÁC MINH.
+
+**Chỉ nhắc (gate không xác minh, không ảnh hưởng verdict):**
+- DESIGN.md / a11y: gate chỉ kiểm file tồn tại.
+- Bằng chứng RED → GREEN.
+- Ảnh minh chứng: chỉ tính ảnh trong phiên của chính dự án này.
+- Thiết bị qua `adb`.
+- Immutable Guards.
+- OpenCodeReview (`ocr`).
+
+## Sử dụng
 ```bash
-# Kích hoạt cổng kiểm toán tự động
-postfix-gate
+# Lệnh có sẵn trên PATH sau khi chạy `make install` trong thư mục DevKit
+postfix-gate --run-tests
 
-# Hoặc chạy trực tiếp với Python:
-python3 bin/post-fix-gate.py
+# Nếu chưa có trên PATH: gọi thẳng script trong thư mục DevKit
+python3 <DevKit dir>/bin/post-fix-gate.py --run-tests
 ```
+
+Exit code:
+- `0`: PASS. Chỉ exit `0` mới được coi là đạt.
+- `1`: REJECT.
+- `2`: CHƯA XÁC MINH. Các trường hợp:
+  - dry-run;
+  - file không đọc được;
+  - matrix chưa commit hoặc bị sửa;
+  - test đã có bị sửa;
+  - không test hồi quy nào khớp (thêm `--allow-no-tests` nếu chấp nhận);
+  - `--diff` không hợp lệ.
+- `3`: không có thay đổi để kiểm. Các link và state do DevKit cài không tính là thay đổi.
+
+`--record-lesson` chỉ ghi vào `.agents/instincts.md` khi verdict là PASS.

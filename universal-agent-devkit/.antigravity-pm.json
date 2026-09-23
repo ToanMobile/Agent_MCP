@@ -6,7 +6,7 @@
     "commitPolicy": "forbid",
     "sandbox": true
   },
-  "testCommand": "python3 bin/post-fix-gate.py --dry-run",
+  "testCommand": "bash bin/agent-kit test",
   "auditCommands": [
     "python3 scripts/audit_production_lifecycle_50_agents.py",
     "python3 scripts/audit_workflows_rules_skills_50_agents.py"

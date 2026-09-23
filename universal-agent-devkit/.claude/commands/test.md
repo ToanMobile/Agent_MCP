@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/commands/test.md
+../../commands/test.md

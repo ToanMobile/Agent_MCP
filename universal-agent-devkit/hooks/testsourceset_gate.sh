@@ -29,36 +29,40 @@ set -u
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOG_DIR="${REPO_ROOT}/.claude/audit-gate"
 mkdir -p "${LOG_DIR}"
+[ -f "${LOG_DIR}/.gitignore" ] || printf '*\n' > "${LOG_DIR}/.gitignore" 2>/dev/null || true
 LOG="${LOG_DIR}/testsourceset_gate.log"
 TS="$(date +%Y-%m-%dT%H:%M:%S)"
 
-# Read stdin to isolate session attempt tracking and file scope
+# Read stdin to isolate session attempt tracking and file scope.
+# No `eval` (QA note): python prints the sanitized session id on line 1 and one
+# touched source path per following line; bash reads them as plain data.
 INPUT="$(cat)"
 SID_RAW=""
 SESSION_FILES=""
-if [ -n "${INPUT}" ]; then
-  eval "$(printf '%s' "${INPUT}" | python3 -c '
+if [ -n "${INPUT}" ] && command -v python3 >/dev/null 2>&1; then
+  PARSED="$(printf '%s' "${INPUT}" | python3 -c '
 import sys, json, os, re
 try:
     d = json.load(sys.stdin)
-    sid = d.get("session_id") or d.get("sessionId") or ""
-    clean_sid = re.sub(r"[^a-zA-Z0-9_-]", "_", str(sid))
-    print(f"SID_RAW=\"{clean_sid}\"")
-    tp = d.get("transcript_path")
-    files = []
-    if tp and os.path.exists(tp):
-        with open(tp, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-            for m in re.finditer(r"[\w/.-]+\.(?:kt|java)", content):
-                fpath = m.group(0)
-                if "/src/" in fpath and "/build/" not in fpath:
-                    files.append(fpath)
-    if files:
-        joined = " ".join(set(files))
-        print(f"SESSION_FILES=\"{joined}\"")
 except Exception:
-    pass
+    sys.exit(0)
+sid = d.get("session_id") or d.get("sessionId") or ""
+print(re.sub(r"[^a-zA-Z0-9_-]", "_", str(sid)))
+tp = d.get("transcript_path")
+files = set()
+if tp and os.path.exists(tp):
+    with open(tp, "r", encoding="utf-8", errors="ignore") as f:
+        for m in re.finditer(r"[^\s\"\x27]+\.(?:kt|java)\b", f.read()):
+            fpath = m.group(0)
+            if "/src/" in fpath and "/build/" not in fpath:
+                files.add(fpath)
+for fp in sorted(files):
+    print(fp)
 ' 2>/dev/null || true)"
+  SID_RAW="$(printf '%s\n' "${PARSED}" | sed -n 1p)"
+  SESSION_FILES="$(printf '%s\n' "${PARSED}" | sed -n '2,$p')"
+elif [ -n "${INPUT}" ]; then
+  echo "⚠ testsourceset_gate: python3 không có — không scope được theo phiên." >&2
 fi
 
 if [ -n "${SID_RAW}" ]; then
@@ -84,18 +88,26 @@ CHANGED="$( { git diff --name-only --diff-filter=ACMR 2>/dev/null
               git ls-files --others --exclude-standard 2>/dev/null
             } | grep -E '\.(kt|java)$' | grep -v '/build/' | sort -u )"
 
+# Paths are newline-separated and may contain spaces (QA K-7): iterate on
+# newlines only, with globbing off.
+set -f
+NL='
+'
+OLDIFS="${IFS}"
+IFS="${NL}"
+
 # If transcript specifies files touched in this session, scope to those files
 if [ -n "${SESSION_FILES:-}" ] && [ -n "${CHANGED}" ]; then
   MATCHED=""
   for f in ${CHANGED}; do
     for sf in ${SESSION_FILES}; do
       if [[ "$sf" == *"$f"* ]] || [[ "$f" == *"$sf"* ]]; then
-        MATCHED="${MATCHED} ${f}"
+        MATCHED="${MATCHED}${NL}${f}"
         break
       fi
     done
   done
-  MATCHED="$(printf '%s\n' ${MATCHED} 2>/dev/null | grep -v '^$' | sort -u || true)"
+  MATCHED="$(printf '%s\n' "${MATCHED}" | grep -v '^$' | sort -u || true)"
   if [ -n "${MATCHED}" ]; then
     CHANGED="${MATCHED}"
     log "Scoped compilation checks to active session (${SID_RAW:-default}): ${CHANGED}"
@@ -127,22 +139,43 @@ for m in ${MODULES}; do
   case "${m}" in
     :build-logic*|:gradle*) continue ;;
   esac
-  TASKS="${TASKS} ${m}:compileDebugUnitTestKotlin"
+  TASKS="${TASKS}${NL}${m}:compileDebugUnitTestKotlin"
 done
+TASKS="$(printf '%s\n' "${TASKS}" | grep -v '^$' || true)"
 [ -n "${TASKS}" ] || { log "PASS — no compilable modules"; exit 0; }
 
-OUT="$(./gradlew ${TASKS} --quiet 2>&1)"
-RC=$?
+# A module without the task is not a failure, but it must not hide the others
+# (QA K-8: one "not found in project" used to PASS every module). Drop exactly
+# the modules Gradle names as lacking the task and re-run the rest.
+for _round in 1 2 3; do
+  OUT="$(./gradlew ${TASKS} --quiet 2>&1)"
+  RC=$?
+  [ ${RC} -eq 0 ] && break
+  MISSING="$(printf '%s\n' "${OUT}" | sed -n "s/.*not found in project '\\(:[^']*\\)'.*/\\1/p" | sort -u)"
+  [ -n "${MISSING}" ] || break
+  KEEP=""
+  for t in ${TASKS}; do
+    mod="${t%:compileDebugUnitTestKotlin}"
+    if printf '%s\n' "${MISSING}" | grep -qxF "${mod}"; then
+      log "SKIP ${mod} — lacks compileDebugUnitTestKotlin"
+    else
+      KEEP="${KEEP}${NL}${t}"
+    fi
+  done
+  KEEP="$(printf '%s\n' "${KEEP}" | grep -v '^$' || true)"
+  if [ "${KEEP}" = "${TASKS}" ]; then break; fi
+  TASKS="${KEEP}"
+  if [ -z "${TASKS}" ]; then
+    log "PASS — no touched module has compileDebugUnitTestKotlin"
+    rm -f "${ATTEMPTS_FILE}" 2>/dev/null || true
+    exit 0
+  fi
+done
+IFS="${OLDIFS}"
+TASKS_STR="$(printf '%s ' ${TASKS})"
 
 if [ ${RC} -eq 0 ]; then
-  log "PASS — ${TASKS}"
-  rm -f "${ATTEMPTS_FILE}" 2>/dev/null || true
-  exit 0
-fi
-
-# A module without the task is not a failure — treat "task not found" as skip.
-if printf '%s' "${OUT}" | grep -q "not found in project"; then
-  log "PASS — some modules lack compileDebugUnitTestKotlin; nothing else failed"
+  log "PASS — ${TASKS_STR}"
   rm -f "${ATTEMPTS_FILE}" 2>/dev/null || true
   exit 0
 fi
@@ -193,7 +226,7 @@ fi
 # process merged a stale remote commit into trunk mid-session and this gate blamed signatures.
 UNMERGED="$(git -C "${REPO_ROOT}" diff --name-only --diff-filter=U 2>/dev/null || true)"
 
-log "BLOCK (attempt ${ATTEMPTS}) — ${TASKS}"
+log "BLOCK (attempt ${ATTEMPTS}) — ${TASKS_STR}"
 {
   echo "⛔ TEST-SOURCESET GATE: test source set không compile."
   echo ""
@@ -206,7 +239,7 @@ log "BLOCK (attempt ${ATTEMPTS}) — ${TASKS}"
     echo ""
     printf '%s\n' "${OUT}" | grep -E '^e: |error:' | head -8
     echo ""
-    echo "Giải quyết merge TRƯỚC (hoặc \`git merge --abort\`) rồi chạy lại: ./gradlew${TASKS}"
+    echo "Giải quyết merge TRƯỚC (hoặc \`git merge --abort\`) rồi chạy lại: ./gradlew ${TASKS_STR}"
     echo "CẤM sửa call site để né lỗi này — làm vậy là tự chọn một bên của merge mà không có quyền."
   else
     echo "Module tôi vừa sửa có call site trong src/test đang vỡ. \`assembleDebug\`"
@@ -216,7 +249,7 @@ log "BLOCK (attempt ${ATTEMPTS}) — ${TASKS}"
     printf '%s\n' "${OUT}" | grep -E '^e: |error:' | head -15
     echo ""
     echo "Sửa call site trong src/test (thường do đổi signature: thêm/bớt/đổi thứ tự param),"
-    echo "rồi chạy lại: ./gradlew${TASKS}"
+    echo "rồi chạy lại: ./gradlew ${TASKS_STR}"
   fi
 } >&2
 exit 2

@@ -18,7 +18,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR:-$PWD}\"/.claude/hooks/block-dangerous-git.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/block-dangerous-git.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/hardware_safety_gate.sh\"",
+            "timeout": 10
           }
         ]
       },

@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/commands/merge-conflict-resolver.md
+../../commands/merge-conflict-resolver.md

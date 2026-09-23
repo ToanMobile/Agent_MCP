@@ -45,6 +45,49 @@
 
 ---
 
+### [INSTINCT-G01] Bẫy Lệch Chuẩn API Unity 6 (Unity 6.6 API Drift)
+- **Hiện tượng lỗi:** Sinh code dùng API cũ bị deprecated trong Unity 6 (như `FindObjectsOfType<T>()`, `Renderer.material` gây clone material rò rỉ, CommandBuffer thô thay vì RenderGraph).
+- **Nguyên nhân gốc rễ:** Dữ liệu huấn luyện của LLM bị cutoff trước Unity 6.6.
+- **Quy tắc bắt buộc:** 
+  1. Dùng `Object.FindObjectsByType<T>(FindObjectsSortMode.None)` thay vì `FindObjectsOfType<T>()`.
+  2. Dùng `Renderer.sharedMaterial` hoặc MaterialPropertyBlock khi đổi thuộc tính visual trong runtime, tránh gọi `.material` gây sinh clone instance làm rò rỉ VRAM.
+  3. Tuân thủ chuẩn RenderGraph API khi viết custom render passes trên Universal Render Pipeline (URP).
+
+---
+
+### [INSTINCT-G02] Bẫy `Time.timeScale = 0` Khiến Menu Pause Bị Treo Đơ
+- **Hiện tượng lỗi:** Mở Pause Menu hoặc Game Over Dialog bằng `Time.timeScale = 0;`, nhưng các hiệu ứng tween UI (DOTween / LeanTween) hoặc Coroutine mở popup bị đứng hình bất động, người dùng không thể bấm resume.
+- **Nguyên nhân gốc rễ:** Tween và Coroutine mặc định chạy theo game time bị đóng băng khi `timeScale = 0`.
+- **Quy tắc bắt buộc:** 
+  1. Mọi tween UI chạy trong popup/pause menu bắt buộc phải set `.SetUpdate(true)` (Unscaled Time).
+  2. Mọi Coroutine chạy trong UI pause bắt buộc dùng `yield return new WaitForSecondsRealtime(...)` thay vì `WaitForSeconds(...)`.
+
+---
+
+### [INSTINCT-G03] Bẫy Animator Controller Rỗng & State Không Có Clip
+- **Hiện tượng lỗi:** Gọi `animator.Play("Attack")` hoặc `animator.SetTrigger(...)` nhưng Animator Controller bị gán rỗng (null runtimeAnimatorController) hoặc State không gắn Animation Clip, sinh NullReferenceException hoặc đơ frame nhân vật.
+- **Nguyên nhân gốc rễ:** Prefab cấu hình dang dở hoặc thay đổi runtime mà không null-check controller.
+- **Quy tắc bắt buộc:** Kiểm tra `animator != null && animator.runtimeAnimatorController != null && animator.isActiveAndEnabled` trước khi kích hoạt trigger/state.
+
+---
+
+### [INSTINCT-G04] Bẫy Canvas Rebuild & Tụt FPS Do Trộn Dynamic Với Static UI
+- **Hiện tượng lỗi:** Game bị tụt FPS từ 60/120 xuống 30–40 FPS trên mobile mỗi khi Text hiển thị điểm số, máu (HP), hoặc đồng hồ đếm ngược cập nhật giá trị.
+- **Nguyên nhân gốc rễ:** Đặt Text động chung một Canvas với Background tĩnh hoặc hàng trăm Icon tĩnh. Khi Text thay đổi, Unity đánh dấu cả Canvas là dirty và rebuild toàn bộ Vertex Buffer của Canvas đó.
+- **Quy tắc bắt buộc:** Bắt buộc phân tách UI thành các Sub-Canvas độc lập: Canvas tĩnh (Background, khung viền không đổi) và Canvas động (Text điểm số, thanh máu, coin count).
+
+---
+
+### [INSTINCT-G05] Bẫy Cấp Phát Bộ Nhớ Heap Trong Frame Loop (Physics NonAlloc)
+- **Hiện tượng lỗi:** Game chơi sau 2–3 phút bị giật khựng (Spike lag 50–100ms) lặp đi lặp lại do Garbage Collector thu gom rác thế hệ Gen 0.
+- **Nguyên nhân gốc rễ:** Dùng `Physics.RaycastAll`, `Physics.OverlapSphere`, hoặc `GetComponent<T>()` bên trong `Update()`, `FixedUpdate()`, mỗi frame cấp phát một mảng `Collider[]` hoặc đối tượng mới trên Heap.
+- **Quy tắc bắt buộc:** 
+  1. Bắt buộc dùng `Physics.RaycastNonAlloc` và `Physics.OverlapSphereNonAlloc` với mảng đệm tĩnh/thành viên (preallocated buffer).
+  2. Cache toàn bộ Component references trong `Awake()` / `Start()`.
+  3. Tuyệt đối cấm dùng từ khóa `new ` (List, Dictionary, Object) trong `Update()`.
+
+---
+
 ## 2. Nhật Ký Bẫy Mã Nguồn Bổ Sung (Dành cho Dev / Agent thêm mới)
 
 <!--

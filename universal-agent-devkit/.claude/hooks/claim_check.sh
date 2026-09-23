@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/hooks/claim_check.sh
+../../hooks/claim_check.sh

@@ -1,0 +1,1 @@
+../../hooks/bash_write_ledger.sh

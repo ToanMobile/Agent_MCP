@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/commands/session-handoff.md
+../../commands/session-handoff.md

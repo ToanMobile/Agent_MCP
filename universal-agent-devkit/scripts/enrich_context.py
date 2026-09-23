@@ -6,8 +6,41 @@ import sys
 import os
 import json
 import re
+import subprocess
 
-def enrich_prompt(prompt, devkit_root="."):
+# Mọi dạng ID: INSTINCT-001, INSTINCT-IOS-01, INSTINCT-VOICE-02, INSTINCT-AUTO (do post-fix-gate --record-lesson ghi)
+INSTINCT_BLOCK_RE = re.compile(r"(^### \[(INSTINCT-[A-Za-z0-9_-]+)\].*?)(?=^### \[INSTINCT-|\Z)", re.DOTALL | re.MULTILINE)
+
+
+def find_project_root(start="."):
+    try:
+        res = subprocess.run(["git", "-C", start, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5)
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return os.path.abspath(start)
+
+
+def instinct_sources(devkit_root, project_root):
+    """Dự án trước (bài học thật của dự án), rồi tới DevKit; bỏ trùng theo realpath."""
+    cands = []
+    for root in (project_root, devkit_root):
+        if root:
+            cands.append(os.path.join(root, ".agents", "instincts.md"))
+            cands.append(os.path.join(root, ".agents", "active-profile", "instincts.md"))
+    seen, out = set(), []
+    for c in cands:
+        if os.path.isfile(c):
+            rp = os.path.realpath(c)
+            if rp not in seen:
+                seen.add(rp)
+                out.append(c)
+    return out
+
+
+def enrich_prompt(prompt, devkit_root=".", project_root=None):
     dossier = {
         "dossier_type": "5D_CONTEXT_DOSSIER",
         "user_prompt": prompt,
@@ -21,7 +54,9 @@ def enrich_prompt(prompt, devkit_root="."):
     }
 
     # 1. Read Active Profile
-    active_profile_file = os.path.join(devkit_root, ".active-profile.json")
+    active_profile_file = os.path.join(project_root or devkit_root, ".active-profile.json")
+    if not os.path.exists(active_profile_file):
+        active_profile_file = os.path.join(devkit_root, ".active-profile.json")
     if os.path.exists(active_profile_file):
         try:
             with open(active_profile_file, "r") as f:
@@ -124,13 +159,11 @@ def enrich_prompt(prompt, devkit_root="."):
     dossier["injected_nfrs"].append("Anti-Swallowing: Zero empty catch/except blocks.")
 
     # 3. Match Instincts from instincts.md
-    instincts_file = os.path.join(devkit_root, ".agents/instincts.md")
-    if os.path.exists(instincts_file):
+    for instincts_file in instinct_sources(devkit_root, project_root):
         try:
-            with open(instincts_file, "r") as f:
+            with open(instincts_file, "r", encoding="utf-8") as f:
                 content = f.read()
-            blocks = re.findall(r"(### \[(INSTINCT-\d+)\].*?)(?=### \[INSTINCT-|\Z)", content, re.DOTALL)
-            for full_block, inst_id in blocks:
+            for full_block, inst_id in INSTINCT_BLOCK_RE.findall(content):
                 # check matching keywords
                 block_lower = full_block.lower()
                 for word in p_lower.split():
@@ -138,15 +171,12 @@ def enrich_prompt(prompt, devkit_root="."):
                         header_line = full_block.strip().split("\n")[0].replace("### ", "")
                         if header_line not in dossier["matched_instincts"]:
                             dossier["matched_instincts"].append(header_line)
-        except Exception:
-            pass
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"warning: không đọc được {instincts_file}: {e}", file=sys.stderr)
 
+    # Không khớp gì thì để trống — không bịa danh sách mặc định.
     if not dossier["matched_instincts"]:
-        dossier["matched_instincts"] = [
-            "[INSTINCT-001] Khôi Phục Trạng Thái Khi Thay Đổi Cấu Hình (Configuration Change)",
-            "[INSTINCT-006] Chặn Đứng Luồng Chính (Main Thread) & Không Giải Phóng Tài Nguyên",
-            "[INSTINCT-007] Chống Spam Click Bằng Cơ Chế Debounce Khóa Tức Thì"
-        ]
+        dossier["matched_instincts_note"] = "Không có instinct nào khớp từ khoá của prompt."
 
     # 4. Generate Codebase Graph Search Queries
     tokens = [w for w in re.findall(r"[A-Za-z0-9_]{3,}", prompt) if w.lower() not in ["sửa", "lỗi", "giúp", "tạo", "làm", "cho", "vào", "khi", "bị"]]
@@ -170,5 +200,6 @@ def enrich_prompt(prompt, devkit_root="."):
 if __name__ == "__main__":
     prompt_input = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "sửa nút login bị bấm nhiều lần văng app"
     devkit_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    res = enrich_prompt(prompt_input, devkit_dir)
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or find_project_root(".")
+    res = enrich_prompt(prompt_input, devkit_dir, project_dir)
     print(json.dumps(res, indent=2, ensure_ascii=False))

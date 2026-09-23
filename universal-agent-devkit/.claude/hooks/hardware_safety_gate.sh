@@ -1,0 +1,1 @@
+../../hooks/hardware_safety_gate.sh

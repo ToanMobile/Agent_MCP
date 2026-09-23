@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/agents/android-principal-architect.md
+../../agents/android-principal-architect.md

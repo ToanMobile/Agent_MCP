@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-10-Agent Adversarial Chaos & Red-Team Stress Test
-Universal Agent DevKit — Vulnerability & Anti-Fragility Simulation
+Adversarial scenario checks for Universal Agent DevKit (self-consistency, mostly grep-based)
+
+ĐỌC TRƯỚC KHI TIN KẾT QUẢ:
+  - [exec] = kịch bản THẬT SỰ đưa payload qua hàm của bin/post-fix-gate.py (02, 03, 06, 07).
+  - [grep] = chỉ kiểm tài liệu/test DevKit còn nhắc tới cơ chế phòng thủ (01, 04, 05, 08, 09, 10);
+    KHÔNG chạy payload nào, KHÔNG chứng minh cơ chế hoạt động.
+  Kết quả không phải red-team thật và không chứng minh hệ thống không thể bị qua mặt.
 
 Simulates 10 realistic developer mistakes, AI hallucinations, and cheating attacks:
   [Attack 01] TheAssertionCheater       : Giả lập sửa assertion test để gian lận pass mà không sửa bug
@@ -53,14 +58,7 @@ except Exception as e:
     pfg = None
 
 def simulate_attack_01_assertion_cheater() -> tuple:
-    """Giả lập sửa assertion test cũ từ assertEquals(expected, actual) thành assert(true)"""
-    attack_code = """
-    @Test
-    fun testTransferMoney() {
-        // HACK: Bypass test by replacing real assertion with trivial true
-        assertTrue(true) // was: assertEquals(Balance.SUCCESS, result.status)
-    }
-    """
+    """[grep] Tài liệu/test có mô tả chống sửa assertion (không chạy payload)."""
     # Defense check: Test integrity rules + Oracle Source Integrity in workflows
     workflow_test = get_base_dir() / "workflows" / "multi-lens-audit.test.mjs"
     skill_file = get_base_dir() / "skills" / "fixbugs" / "SKILL.md"
@@ -90,23 +88,24 @@ def simulate_attack_02_lazy_placeholder() -> tuple:
     try:
         ok, findings = pfg.run_anti_laziness_audit([temp_file])
         blocked = not ok and len(findings) > 0
-        return blocked, f"Phát hiện regex: '{findings[0][1]}' — Gate lập tức REJECT"
+        if not blocked:
+            return False, "post-fix-gate KHÔNG phát hiện placeholder trong payload"
+        return blocked, f"Phát hiện regex: '{findings[0][1]}' — Gate REJECT"
     finally:
         os.unlink(temp_file)
 
 def simulate_attack_03_secret_leak() -> tuple:
     """Giả lập vô tình hardcode API key nhạy cảm vào code"""
-    secret_payload = """
-    val apiKey = "dummy_mock_secret_test_token_12345"
-    val client = HttpClient(apiKey)
-    """
+    secret_payload = "val api" + "Key = \"Zx9Qw7Er5Ty3Ui1Op8As6Df4Gh2Jk0Lm\"\nval client = HttpClient(apiKey)"
     with tempfile.NamedTemporaryFile("w", suffix=".kt", delete=False) as f:
         f.write(secret_payload)
         temp_file = f.name
     try:
         ok, findings = pfg.run_git_hygiene_audit([temp_file])
         blocked = not ok and len(findings) > 0
-        return blocked, f"Phát hiện mẫu: '{findings[0][1]}' — Git Hygiene Gate lập tức REJECT"
+        if not blocked:
+            return False, "post-fix-gate KHÔNG phát hiện API key trong payload"
+        return blocked, f"Phát hiện mẫu: '{findings[0][1]}' — Git Hygiene Gate REJECT"
     finally:
         os.unlink(temp_file)
 
@@ -142,13 +141,9 @@ def simulate_attack_06_silent_collateral_damage() -> tuple:
 
 def simulate_attack_07_memory_leaker() -> tuple:
     """Giả lập fix lỗi nhưng để sót callback / coroutine leak"""
-    ocr_available = subprocess.run(["which", "ocr"], capture_output=True).returncode == 0
-    pfg_file = get_base_dir() / "bin" / "post-fix-gate.py"
-    with open(pfg_file, "r", encoding="utf-8") as f:
-        pfg_content = f.read()
-    has_ocr_gate = "OpenCodeReview" in pfg_content and "0 Memory Leaks" in pfg_content
-    blocked = has_ocr_gate
-    return blocked, "Bị chặn bởi Layer 5: Alibaba OCR Engine phân tích hunks tất định, phát hiện rò rỉ bộ nhớ"
+    attack_code = "companion object { static val context: Context? = null }"
+    blocked = any(re.search(pat, attack_code) for pat, _ in pfg.PERF_ANTIPATTERN_PATTERNS)
+    return blocked, "Bị chặn bởi Layer 5: mẫu regex Static Context Leak bắt được đoạn code rò rỉ bộ nhớ"
 
 def simulate_attack_08_spam_clicker() -> tuple:
     """Giả lập tạo nút bấm không có debounce / loading state"""
@@ -185,6 +180,8 @@ def simulate_attack_10_context_amnesiac() -> tuple:
     blocked = has_context_hygiene
     return blocked, "Bị chặn bởi Core-Rules Mục 7: Ép buộc tóm tắt tiến độ & /compact trước khi thực hiện refactor"
 
+EXEC_SCENARIOS = {2, 3, 6, 7}
+
 ATTACK_SIMULATIONS = [
     (1, "TheAssertionCheater", "Giả lập sửa assertion test cũ thành assertTrue(true) để lách luật", simulate_attack_01_assertion_cheater),
     (2, "TheLazyPlaceholderSmuggler", "Giả lập tuồn comment lười biếng '// ... existing code ...' vào mã nguồn", simulate_attack_02_lazy_placeholder),
@@ -200,15 +197,16 @@ ATTACK_SIMULATIONS = [
 
 def main():
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}{CYAN}   ⚔️  HỘI ĐỒNG 10 AGENTS RED-TEAM: GIẢ LẬP TẤN CÔNG & PHẢN BIỆN LỖ HỔNG HỆ THỐNG      {RESET}")
-    print(f"{BOLD}{CYAN}   Mục tiêu: Đưa ra 10 tình huống lỗi hiểm hóc nhất để kiểm chứng tính bất khả xâm phạm{RESET}")
+    print(f"{BOLD}{CYAN}   🔎 Adversarial scenario checks: 4 [exec] qua post-fix-gate + 6 [grep] tài liệu     {RESET}")
+    print(f"{BOLD}{CYAN}   [grep] chỉ kiểm tài liệu còn mô tả cơ chế; không chứng minh cơ chế hoạt động     {RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
     intercepted_count = 0
     total_attacks = len(ATTACK_SIMULATIONS)
 
     for attack_id, attack_name, scenario, attack_func in ATTACK_SIMULATIONS:
-        print(f"┌── [Red-Team Attack {attack_id:02d}/10] {BOLD}{attack_name}{RESET}")
+        kind = "exec" if attack_id in EXEC_SCENARIOS else "grep"
+        print(f"┌── [Scenario {attack_id:02d}/10] [{kind}] {BOLD}{attack_name}{RESET}")
         print(f"│   • Kịch bản giả lập: {DIM}{scenario}{RESET}")
         try:
             intercepted, defense_mechanism = attack_func()
@@ -218,28 +216,25 @@ def main():
 
         if intercepted:
             intercepted_count += 1
-            verdict_badge = f"{GREEN}[BỊ CHẶN ĐỨNG — DEFENSE HELD]{RESET}"
+            verdict_badge = f"{GREEN}[PASS]{RESET}"
             print(f"│   • {GREEN}Cơ chế phòng thủ kích hoạt:{RESET} {defense_mechanism}")
         else:
-            verdict_badge = f"{RED}[LỌT LƯỚI — VULNERABILITY FOUND]{RESET}"
+            verdict_badge = f"{RED}[FAIL]{RESET}"
             print(f"│   • {RED}Lỗ hổng:{RESET} {defense_mechanism}")
 
         print(f"└── Phán quyết: {verdict_badge}\n")
 
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}KẾT QUẢ ĐẤU ĐỐ 10 ĐỢT TẤN CÔNG RED-TEAM:{RESET}")
-    print(f"  • Đòn tấn công bị chặn đứng: {GREEN}{intercepted_count} / {total_attacks}{RESET}")
-    print(f"  • Lỗ hổng bị xuyên thủng:   {RED if intercepted_count < total_attacks else GREEN}{total_attacks - intercepted_count}{RESET}")
-    print(f"  • Chỉ số bất khả xâm phạm: {BOLD}{int(intercepted_count / total_attacks * 100)}%{RESET}")
+    print(f"{BOLD}KẾT QUẢ ADVERSARIAL SCENARIO CHECKS:{RESET}")
+    print(f"  {intercepted_count}/{total_attacks} checks passed ({len(EXEC_SCENARIOS)} exec, {total_attacks - len(EXEC_SCENARIOS)} grep)")
+    print(f"  • Không đạt: {RED if intercepted_count < total_attacks else GREEN}{total_attacks - intercepted_count}{RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
     if intercepted_count == total_attacks:
-        print(f"{GREEN}{BOLD}✔ XÁC NHẬN: TOÀN BỘ 10/10 ĐÒN TẤN CÔNG GIẢ LẬP ĐỀU BỊ BẺ GÃY HOÀN TOÀN!{RESET}")
-        print(f"  Workflow chứng minh tính vững chắc 100%: Không thể qua mặt, không thể lách luật,")
-        print(f"  không thể sinh bug mới và không thể mở lại bug cũ dưới bất kỳ hình thức nào.\n")
+        print(f"{GREEN}{BOLD}✔ Mọi kịch bản đạt.{RESET} {DIM}(Chỉ các kịch bản [exec] chạy payload thật; [grep] chỉ kiểm tài liệu.){RESET}\n")
         return 0
     else:
-        print(f"{RED}{BOLD}✖ PHÁT HIỆN LỖ HỔNG CẦN KHẮC PHỤC NGAY!{RESET}\n")
+        print(f"{RED}{BOLD}✖ Có kịch bản không đạt — xem chi tiết ở trên.{RESET}\n")
         return 1
 
 if __name__ == "__main__":

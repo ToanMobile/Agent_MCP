@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/hooks/precode_gate.sh
+../../hooks/precode_gate.sh

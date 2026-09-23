@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-10-Agent Zero-Regression & Anti-Reopen Audit Council
+
+SELF-CONSISTENCY CHECK (GREP-BASED) — đọc trước khi tin kết quả:
+  Mỗi "agent"/"council" bên dưới chỉ là MỘT phép tìm chuỗi/regex trong file của chính DevKit
+  (tài liệu, rules, test). Script KHÔNG chạy test, KHÔNG đọc code dự án người dùng và KHÔNG
+  chứng minh hành vi runtime. PASS nghĩa là "tài liệu/mã DevKit còn nhắc tới cơ chế X",
+  không phải "cơ chế X hoạt động". Test hành vi thật: `agent-kit test`.
+Self-consistency (grep-based, 10 checks): Zero-Regression rules
 Universal Agent DevKit — Comprehensive Verification Engine
 
 Audit & stress-test the workflow to answer the user's critical question:
@@ -128,8 +134,8 @@ def get_base_dir() -> Path:
 def main():
     base_dir = get_base_dir()
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}{CYAN}   🛡️  HỘI ĐỒNG 10 AGENTS AUDIT: CAM KẾT ZERO-REGRESSION & CHỐNG MỞ LẠI BUGS CŨ        {RESET}")
-    print(f"{BOLD}{CYAN}   Đánh giá: Khi có bug mới fix xong, liệu 100% không sinh bug mới & không mở lại bug cũ?{RESET}")
+    print(f"{BOLD}{CYAN}   🔎 Self-consistency check (grep-based): quy tắc zero-regression trong DevKit      {RESET}")
+    print(f"{BOLD}{CYAN}   Chỉ kiểm tài liệu/mã DevKit còn mô tả cơ chế — KHÔNG đảm bảo dự án không có regression{RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
     passed_count = 0
@@ -155,7 +161,7 @@ def main():
                 details = f"Lỗi đọc file: {e}"
 
         status_color = f"{GREEN}[PASS]{RESET}" if status == "PASS" else f"{RED}[FAIL]{RESET}"
-        print(f"┌── [Agent {agent_id:02d}/10] {BOLD}{agent_name}{RESET} {status_color}")
+        print(f"┌── [Check {agent_id:02d}/10] {BOLD}{agent_name}{RESET} {status_color}")
         print(f"│   • Nhiệm vụ: {mission}")
         print(f"│   • Tệp kiểm toán: {DIM}{target_file}{RESET}")
         print(f"│   • Cam kết bảo vệ: {CYAN}{guarantee}{RESET}")
@@ -164,19 +170,19 @@ def main():
         print(f"└── Phán quyết: {status_color}\n")
 
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}TỔNG KẾT ĐÁNH GIÁ 10 AGENTS AUDIT ZERO-REGRESSION:{RESET}")
+    print(f"{BOLD}TỔNG KẾT SELF-CONSISTENCY CHECK (GREP-BASED):{RESET}")
+    print(f"  {passed_count}/{total_count} checks passed")
     print(f"  • Đạt chuẩn (PASS): {GREEN}{passed_count} / {total_count}{RESET}")
     print(f"  • Thất bại (FAIL):  {RED if passed_count < total_count else GREEN}{total_count - passed_count}{RESET}")
     print(f"  • Tỷ lệ đáp ứng:     {BOLD}{int(passed_count / total_count * 100)}%{RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
     if passed_count == total_count:
-        print(f"{GREEN}{BOLD}✔ 10/10 AGENTS XÁC NHẬN: QUY TRÌNH ĐẠT CHUẨN 10/10 TUYỆT ĐỐI!{RESET}")
-        print(f"  1. Cam kết 1: 100% KHÔNG TẠO RA BUG KHÁC (Nhờ Paired Oracle, Inbound Caller Audit, TIA Matrix, Surgical Scope).")
-        print(f"  2. Cam kết 2: 100% KHÔNG MỞ LẠI BUGS CŨ (Nhờ Immutable Guards, Instincts Memory, Anti-Flapping Lock, Two-Way Test Integrity).\n")
+        print(f"{GREEN}{BOLD}✔ Tài liệu/mã DevKit còn mô tả đủ các cơ chế chống regression được kiểm.{RESET}")
+        print(f"  {DIM}(grep-based: KHÔNG phải cam kết dự án không có bug mới hay bug cũ mở lại.){RESET}\n")
         return 0
     else:
-        print(f"{RED}{BOLD}✖ CÒN {total_count - passed_count} TIÊU CHÍ CHƯA ĐẠT CẦN HOÀN THIỆN!{RESET}\n")
+        print(f"{RED}{BOLD}✖ {total_count - passed_count} check không tìm thấy chuỗi mong đợi.{RESET}\n")
         return 1
 
 if __name__ == "__main__":

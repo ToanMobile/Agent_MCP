@@ -17,32 +17,43 @@ if [ -z "${DEVICES}" ]; then
   exit 0
 fi
 
-echo "🔍 [TOMBSTONE TRIAGE] Đang quét các tệp tombstone trên thiết bị..."
-LATEST_TOMBSTONE="$(adb shell "ls -t /data/tombstones/tombstone_* 2>/dev/null | head -1" | tr -d '\r\n' || true)"
-
-if [ -z "${LATEST_TOMBSTONE}" ]; then
-  # Fallback: check logcat crash buffer for native crash signals
-  NATIVE_CRASH="$(adb logcat -d -b crash | grep -E "SIGSEGV|SIGABRT|SIGBUS|backtrace:" || true)"
-  if [ -n "${NATIVE_CRASH}" ]; then
-    echo "❌ [NATIVE CRASH DETECTED IN LOGCAT]:"
-    echo "${NATIVE_CRASH}" | head -30
-    exit 1
-  else
-    echo "✔ SẠCH: Không phát hiện sự cố sập Native C/C++ (Tombstones rỗng, Logcat sạch)."
-    exit 0
-  fi
-fi
-
-echo "🚨 [NATIVE CRASH DETECTED] Phát hiện tombstone mới nhất: ${LATEST_TOMBSTONE}"
+echo "🔍 [TOMBSTONE TRIAGE] Đang quét sự cố sập Native C/C++ qua DropBoxManager (hỗ trợ 100% thiết bị không root)..."
 TEMP_DUMP="$(mktemp -t tombstone_XXXXXX.txt)"
 trap 'rm -f "${TEMP_DUMP}"' EXIT
 
-adb shell "cat ${LATEST_TOMBSTONE}" > "${TEMP_DUMP}" 2>/dev/null || true
+# 1. Đọc Native Crash từ DropBoxManager (chuẩn Android không cần root)
+DROPBOX_CRASH="$(adb shell dumpsys dropbox --print data_app_native_crash 2>/dev/null | grep -A 80 "data_app_native_crash" | tail -n +2 || true)"
+
+# 2. Quét /data/tombstones/ nếu thiết bị có quyền root
+LATEST_TOMBSTONE="$(adb shell "ls -t /data/tombstones/tombstone_* 2>/dev/null | head -1" | tr -d '\r\n' || true)"
+
+CRASH_SOURCE=""
+if [ -n "${DROPBOX_CRASH}" ] && ! echo "${DROPBOX_CRASH}" | grep -q "(No entries found.)"; then
+  CRASH_SOURCE="DropBoxManager (data_app_native_crash)"
+  echo "${DROPBOX_CRASH}" > "${TEMP_DUMP}"
+elif [ -n "${LATEST_TOMBSTONE}" ]; then
+  CRASH_SOURCE="Tombstone File (${LATEST_TOMBSTONE})"
+  adb shell "cat ${LATEST_TOMBSTONE}" > "${TEMP_DUMP}" 2>/dev/null || true
+else
+  # 3. Fallback kiểm tra logcat crash buffer
+  NATIVE_CRASH="$(adb logcat -d -b crash 2>/dev/null | grep -E "SIGSEGV|SIGABRT|SIGBUS|backtrace:" || true)"
+  if [ -n "${NATIVE_CRASH}" ]; then
+    CRASH_SOURCE="Logcat Crash Buffer"
+    echo "${NATIVE_CRASH}" > "${TEMP_DUMP}"
+  fi
+fi
+
+if [ -z "${CRASH_SOURCE}" ]; then
+  echo "✔ SẠCH: Không phát hiện sự cố sập Native C/C++ (DropBoxManager sạch, Tombstones rỗng, Logcat sạch)."
+  exit 0
+fi
+
+echo "🚨 [NATIVE CRASH DETECTED] Phát hiện sự cố sập Native C/C++ từ nguồn: ${CRASH_SOURCE}"
 
 # Trích xuất thông tin tín hiệu sập app (Crash Signal & Fault Address)
 SIGNAL="$(grep -E "signal [0-9]+ \([A-Z]+\)" "${TEMP_DUMP}" | head -1 || true)"
 PROCESS="$(grep -E "pid: [0-9]+, tid: [0-9]+, name:" "${TEMP_DUMP}" | head -1 || true)"
-BACKTRACE="$(grep -A 20 "backtrace:" "${TEMP_DUMP}" | head -25 || true)"
+BACKTRACE="$(grep -A 25 "backtrace:" "${TEMP_DUMP}" | head -30 || true)"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

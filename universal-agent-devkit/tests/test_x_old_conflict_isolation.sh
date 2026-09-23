@@ -57,17 +57,16 @@ echo "▶ [Test 2] Installing DevKit on Existing Old Project..."
 bash "$DEVKIT_ROOT/bin/install.sh" -t "$OLD_DIR" -y -p universal
 
 echo "▶ [Test 2] Verifying X_old Preservation..."
-# 1. rules_old
-[ -d "$OLD_DIR/rules_old" ] || { echo "❌ FAIL: rules_old directory was not created!"; exit 1; }
-grep -q "PROPRIETARY TEAM RULE 123" "$OLD_DIR/rules_old/custom_team_rule.md" || { echo "❌ FAIL: User's old rules content was corrupted/lost!"; exit 1; }
-
-# 2. skills_old
-[ -d "$OLD_DIR/skills_old" ] || { echo "❌ FAIL: skills_old directory was not created!"; exit 1; }
-grep -q "CUSTOM BILLING LOGIC 456" "$OLD_DIR/skills_old/custom-billing-skill/SKILL.md" || { echo "❌ FAIL: User's old skills content was corrupted/lost!"; exit 1; }
-
-# 3. commands_old
-[ -d "$OLD_DIR/commands_old" ] || { echo "❌ FAIL: commands_old directory was not created!"; exit 1; }
-grep -q "CUSTOM SLASH COMMAND 789" "$OLD_DIR/commands_old/custom-cmd.md" || { echo "❌ FAIL: User's old commands content was corrupted/lost!"; exit 1; }
+# 1-3. The project's OWN rules/, skills/, commands/ directories are never renamed
+#      (renaming them would break code that imports from them): left in place, untouched.
+for d in rules skills commands; do
+  [ -d "$OLD_DIR/$d" ] && [ ! -L "$OLD_DIR/$d" ] || { echo "❌ FAIL: project's own $d/ was replaced"; exit 1; }
+  [ ! -e "$OLD_DIR/${d}_old" ] || { echo "❌ FAIL: project's own $d/ was renamed to ${d}_old"; exit 1; }
+done
+grep -q "PROPRIETARY TEAM RULE 123" "$OLD_DIR/rules/custom_team_rule.md" || { echo "❌ FAIL: User's rules content was corrupted/lost!"; exit 1; }
+grep -q "CUSTOM BILLING LOGIC 456" "$OLD_DIR/skills/custom-billing-skill/SKILL.md" || { echo "❌ FAIL: User's skills content was corrupted/lost!"; exit 1; }
+grep -q "CUSTOM SLASH COMMAND 789" "$OLD_DIR/commands/custom-cmd.md" || { echo "❌ FAIL: User's commands content was corrupted/lost!"; exit 1; }
+grep -q "LEGACY CLAUDE COMMAND" "$OLD_DIR/.claude/commands/legacy.md" || { echo "❌ FAIL: User's .claude command was lost!"; exit 1; }
 
 # 4. CLAUDE_old.md
 [ -f "$OLD_DIR/CLAUDE_old.md" ] || { echo "❌ FAIL: CLAUDE_old.md was not created!"; exit 1; }
@@ -81,23 +80,22 @@ grep -q "OLD AGENTS ARCHITECTURE" "$OLD_DIR/AGENTS_old.md" || { echo "❌ FAIL: 
 [ -f "$OLD_DIR/.cursorrules_old" ] || { echo "❌ FAIL: .cursorrules_old was not created!"; exit 1; }
 grep -q "OLD CURSOR RULES" "$OLD_DIR/.cursorrules_old" || { echo "❌ FAIL: User's old .cursorrules content was lost!"; exit 1; }
 
-# 7. DevKit new files are also properly initialized in parallel
-[ -e "$OLD_DIR/rules" ] || { echo "❌ FAIL: New rules/ missing"; exit 1; }
-[ -e "$OLD_DIR/skills" ] || { echo "❌ FAIL: New skills/ missing"; exit 1; }
-[ -e "$OLD_DIR/commands" ] || { echo "❌ FAIL: New commands/ missing"; exit 1; }
+# 7. DevKit skills/commands still reach the agents through .claude/ and .agents/skills/
+[ -e "$OLD_DIR/.claude/commands/qc.md" ] || { echo "❌ FAIL: DevKit commands missing in .claude/commands"; exit 1; }
+[ -e "$OLD_DIR/.agents/skills/qc" ] || { echo "❌ FAIL: DevKit skills missing in .agents/skills"; exit 1; }
 
-echo "✔ [Test 2 PASS] Old Project: 100% of user custom skills, rules, commands & configs preserved in *_old!"
+echo "✔ [Test 2 PASS] Old Project: project dirs left in place, user configs preserved in *_old!"
 
 # --- TEST 3: agent-kit list-old Verification ---
 echo "▶ [Test 3] Testing 'agent-kit list-old' command..."
 output="$(bash "$DEVKIT_ROOT/bin/agent-kit" list-old "$OLD_DIR")"
-echo "$output" | grep -q "skills_old" || { echo "❌ FAIL: agent-kit list-old did not find skills_old"; exit 1; }
-echo "$output" | grep -q "rules_old" || { echo "❌ FAIL: agent-kit list-old did not find rules_old"; exit 1; }
+echo "$output" | grep -q "AGENTS_old.md" || { echo "❌ FAIL: agent-kit list-old did not find AGENTS_old.md"; exit 1; }
+echo "$output" | grep -q ".cursorrules_old" || { echo "❌ FAIL: agent-kit list-old did not find .cursorrules_old"; exit 1; }
 echo "$output" | grep -q "CLAUDE_old.md" || { echo "❌ FAIL: agent-kit list-old did not find CLAUDE_old.md"; exit 1; }
 
 echo "✔ [Test 3 PASS] agent-kit list-old successfully detected and reported all *_old items!"
 
 echo
 echo "================================================================="
-echo "  🎉 ALL 3 TESTS PASSED: X_old CONFLICT ISOLATION IS 100% ROCK SOLID!"
+echo "  🎉 ALL 3 TESTS PASSED: X_old conflict isolation"
 echo "================================================================="

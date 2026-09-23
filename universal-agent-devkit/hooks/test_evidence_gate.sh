@@ -35,6 +35,10 @@
 #     best-effort; a message not blocked here is NOT evidence that its claim is
 #     true. The no-fabrication and paired-oracle rules remain authoritative.
 #
+# Non-Gradle repos (no gradlew/build.gradle*): with no XML, a successful test
+# runner call (npm/jest/vitest/pytest/cargo/go/swift/dotnet/… test) after the last
+# source edit, whose output shows no failure, backs the claim (QA K-10).
+#
 # Escape hatch: TEST_EVIDENCE_GATE=0 (logged). Fail-open on internal error.
 # Stop hook protocol: stdin JSON; exit 2 blocks (stderr→Claude); exit 0 allows.
 # bash 3.2 compatible.
@@ -44,11 +48,20 @@ set -u
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOG_DIR="${REPO_ROOT}/.claude/audit-gate"
 mkdir -p "${LOG_DIR}"
+[ -f "${LOG_DIR}/.gitignore" ] || printf '*\n' > "${LOG_DIR}/.gitignore" 2>/dev/null || true
 
 INPUT="$(cat)"
 
-[ "${TEST_EVIDENCE_GATE:-1}" = "0" ] && exit 0
+if [ "${TEST_EVIDENCE_GATE:-1}" = "0" ]; then
+  echo "[$(date +%Y-%m-%dT%H:%M:%S)] TEST_EVIDENCE_GATE=0 — gate bypassed" >> "${LOG_DIR}/test_evidence_gate.log" 2>/dev/null
+  exit 0
+fi
 
+# QA K-4: without python3 this gate cannot run — say so instead of passing silently.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "⚠ test_evidence_gate: python3 không có — gate này KHÔNG chạy, kết quả không được kiểm." >&2
+  exit 0
+fi
 TE_INPUT="${INPUT}" TE_LOG="${LOG_DIR}/test_evidence_gate.log" TE_DIR="${LOG_DIR}" \
 TE_TS="$(date +%Y-%m-%dT%H:%M:%S)" TE_REPO="${REPO_ROOT}" \
 python3 <<'PY'
@@ -74,8 +87,42 @@ except Exception as e:
     logline(f"[{ts}] stdin parse fail: {e!r} — fail-open")
     sys.exit(0)
 
+# Loop guard (QA K-12, 2026-09-23). This is a REMINDER gate, not fail-closed:
+# Claude Code sets stop_hook_active on the Stop that follows a block, and a gate
+# that blocks forever wedges the session. Previously the very first re-Stop was
+# released silently. Now the chain is counted per session: the gate may block
+# TEST_EVIDENCE_GATE_MAX_RESTOPS (default 1) more time(s) on re-Stop, then releases — loudly, to
+# stderr and the log — and the unverified claim becomes the model's duty.
+_sid = re.sub(r"[^A-Za-z0-9_-]", "_", str(d.get("session_id") or "default"))[:64] or "default"
+_chain = os.path.join(os.path.dirname(log) or ".", f"test_evidence_gate_stopchain_{_sid}")
+try:
+    _extra = int(os.environ.get("TEST_EVIDENCE_GATE_MAX_RESTOPS", "1") or "1")
+except ValueError:
+    _extra = 1
+_chain_n = 0
 if d.get("stop_hook_active"):
-    sys.exit(0)
+    try:
+        _chain_n = int(open(_chain).read().strip() or "0") + 1
+    except Exception:
+        _chain_n = 1
+    try:
+        open(_chain, "w").write(str(_chain_n))
+    except Exception:
+        pass
+else:
+    try:
+        os.remove(_chain)
+    except Exception:
+        pass
+_real_exit = sys.exit
+def _guarded_exit(code=0):
+    if code == 2 and _chain_n > _extra:
+        logline(f"[{ts}] RELEASED on re-Stop #{_chain_n} — claim still unverified")
+        sys.stderr.write("⚠ test_evidence_gate: đã nhắc lại {} lần — THẢ Stop để tránh kẹt vòng lặp. "
+                         "Claim ở trên vẫn CHƯA được kiểm chứng.\n".format(_chain_n))
+        _real_exit(0)
+    _real_exit(code)
+sys.exit = _guarded_exit
 
 msg = d.get("last_assistant_message")
 if not isinstance(msg, str):
@@ -333,6 +380,21 @@ structured_fix_proofs = []
 blk_idx = 0
 tool_uses = {}
 tool_results = {}
+# Non-Gradle projects (QA K-10, 2026-09-23): npm/jest/pytest/cargo/go/swift runs
+# write no TEST-*.xml, so the gate also accepts a runner's own tool_result as
+# evidence — only in repos with no Gradle build and no XML at all.
+TEST_RUNNER_RX = re.compile(
+    r"\b(npm|yarn|pnpm|bun)\s+(run\s+)?test|\b(npx\s+)?(jest|vitest|mocha)\b|\bpytest\b|"
+    r"python\S*\s+-m\s+(pytest|unittest)|\b(cargo|go|swift|dotnet|flutter|deno)\s+test\b|"
+    r"\bnode\s+--test\b|\bxcodebuild\b.*\btest\b|\bmvn\s+(test|verify)\b|\bmake\s+(test|check)\b|"
+    r"\bctest\b|\brspec\b|\bphpunit\b", re.I)
+RUNNER_FAIL_RX = re.compile(
+    r"\b[1-9]\d*\s+(failed|failing|failures?|errors?)\b|\bFAIL(ED)?\b|Tests?:\s+\d+\s+failed|"
+    r"test result: FAILED|^not ok\b|\bpanicked\b|\bERRORS?\b", re.I | re.M)
+SRC_EXT = (".kt", ".kts", ".java", ".swift", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".py",
+           ".go", ".rs", ".dart", ".cs", ".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".mm")
+runner_results = []        # (result_idx, use_idx, is_error, text)
+last_src_edit_idx = -1
 no_id_tool_indices = []
 test_edit_idx = {}       # simple class name -> transcript position of its last edit
 red_idx = {}             # suite name -> transcript position where it was seen RED
@@ -416,6 +478,9 @@ if tp and os.path.exists(tp):
                                 "index": blk_idx,
                                 "isError": blk.get("is_error") is True,
                             }
+                        if (use and use["name"] == "Bash"
+                                and TEST_RUNNER_RX.search(str(use["input"].get("command", "")))):
+                            runner_results.append((blk_idx, use["index"], blk.get("is_error") is True, txt))
                         producer_ok = bool(
                             use
                             and (
@@ -473,6 +538,8 @@ if tp and os.path.exists(tp):
                     if nm not in ("Edit", "Write", "NotebookEdit"):
                         continue
                     fp = binp.get("file_path") or ""
+                    if isinstance(fp, str) and fp.endswith(SRC_EXT):
+                        last_src_edit_idx = blk_idx
                     if not (isinstance(fp, str) and fp.endswith((".kt", ".java")) and os.path.exists(fp)):
                         continue
                     mt = os.path.getmtime(fp)
@@ -609,7 +676,17 @@ if new_run:
 # ── check 2 — does the XML back the claim? ──────────────────────────────────
 problems = []
 if claimed:
-    if not mtimes:
+    gradle_repo = any(os.path.exists(os.path.join(repo, f)) for f in
+                      ("gradlew", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"))
+    runner_ok = [r for r in runner_results
+                 if r[1] > last_src_edit_idx and not r[2] and not RUNNER_FAIL_RX.search(r[3])]
+    if not mtimes and not gradle_repo and runner_ok:
+        logline(f"[{ts}] non-Gradle repo: test runner result #{runner_ok[-1][0]} backs the claim")
+    elif not mtimes and not gradle_repo:
+        problems.append(
+            "Không có TEST-*.xml và không có lần chạy test runner (npm/jest/pytest/cargo/go/"
+            "swift test…) nào THÀNH CÔNG sau lần sửa code cuối trong phiên này.")
+    elif not mtimes:
         problems.append("KHÔNG có TEST-*.xml nào trong repo — test chưa từng chạy.")
     elif not fresh:
         problems.append(

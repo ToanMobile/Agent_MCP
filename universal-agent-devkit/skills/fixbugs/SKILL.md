@@ -116,10 +116,12 @@ Phân loại lỗi vào đúng 1 trong 5 cơ chế hỏng hóc thực chiến:
 ### Bước 6: Cổng Kiểm Toán Post-Fix Bắt Buộc (Post-Fix Audit & TIA Gate)
 1. Kích hoạt cổng kiểm toán và checklist đánh dấu tự động:
    ```bash
-   postfix-gate
+   postfix-gate --run-tests
    # hoặc:
-   python3 universal-agent-devkit/bin/post-fix-gate.py
+   python3 universal-agent-devkit/bin/post-fix-gate.py --run-tests
    ```
+   > `--run-tests` bắt buộc để có PASS: gate chạy thật các lệnh test trong `regression_matrix.json`. Exit code: `0` PASS · `1` REJECT · `2` CHƯA XÁC MINH (dry-run, file không đọc được, hoặc không test hồi quy nào khớp — thêm `--allow-no-tests` nếu chấp nhận) · `3` không có thay đổi để kiểm. Chỉ exit `0` mới được coi là đạt.
+
 2. Đảm bảo đạt đủ 8 tiêu chí kiểm toán:
    - [x] Quét secret & API key: SẠCH (0 rò rỉ)
    - [x] Anti-Laziness: Không có placeholder `// ... existing code ...`

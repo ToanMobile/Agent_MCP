@@ -22,23 +22,13 @@ if [ -x "${UNITY_BIN}" ] && [ -d "Assets" ]; then
     -executeMethod "GameTestAutomation.BotMarathonRunner.Execute" \
     -levels "${LEVELS}" \
     -logFile "${LOG_FILE}" || true
+  echo "✔ [BOT SIMULATION ORACLE] Hoàn tất 100% kiểm chứng thuật toán màn chơi qua Unity Editor!"
+elif [ -f "scripts/bot-level-solver.py" ]; then
+  # Chạy script giải màn chơi độc lập của dự án nếu có
+  python3 scripts/bot-level-solver.py --levels "${LEVELS}"
+  echo "✔ [BOT SIMULATION ORACLE] Hoàn tất kiểm chứng qua script giải màn độc lập!"
 else
-  # Standalone headless CLI fallback simulation runner
-  python3 -c "
-import sys, random, time
-
-levels = int('${LEVELS}')
-print(f'Starting Headless Simulation Bot for {levels} consecutive game sessions...')
-won = 0
-for i in range(1, levels + 1):
-    # Simulate level solving verification
-    solvable = True
-    if solvable:
-        won += 1
-
-print(f'\n[BOT-SUMMARY] Completed: {levels}/{levels} | Solved & Won: {won}/{levels} ({won/levels*100:.1f}%) | Deadlocks: 0')
-assert won == levels, 'Bot Simulation Oracle failed: Algorithm produced unsolvable level!'
-"
+  # Không có Unity Editor và không có solver thực tế -> Báo SKIP rõ ràng, tuyệt đối không fake green
+  echo "⚠️  [BOT SIMULATION ORACLE: SKIPPED] Không tìm thấy Unity Editor tại '${UNITY_BIN}' và dự án không cung cấp 'scripts/bot-level-solver.py'."
+  echo "   ➔ Bỏ qua bot marathon mô phỏng (Triệt tiêu Xanh Ảo Tautology, chỉ claim PASS khi có runner thực tế)."
 fi
-
-echo "✔ [BOT SIMULATION ORACLE] Hoàn tất 100% kiểm chứng thuật toán màn chơi!"

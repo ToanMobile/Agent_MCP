@@ -1,0 +1,51 @@
+{
+  "project": "iOS Native Application / SwiftUI / Swift Concurrency Platform",
+  "version": "1.0.0",
+  "checklist": [
+    {
+      "category": "Core Stability & Unit Tests",
+      "cases": [
+        {
+          "id": "REG-IOS-01",
+          "name": "XCTest Core Domain Logic & ViewModel State Machine",
+          "command": "xcodebuild test -scheme AppTests -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:AppTests/CoreDomainTests || swift test --filter CoreDomainTests"
+        },
+        {
+          "id": "REG-IOS-02",
+          "name": "Swift Concurrency Data Race & Actor Isolation Test",
+          "command": "swift test --filter ConcurrencyTests"
+        }
+      ]
+    },
+    {
+      "category": "Memory Leaks & Retain Cycle Defense",
+      "cases": [
+        {
+          "id": "REG-MEM-01",
+          "name": "Memory Retention & Zero Retain Cycle Check (leaks CLI)",
+          "command": "which leaks >/dev/null 2>&1 && leaks --version >/dev/null 2>&1 || true"
+        },
+        {
+          "id": "REG-MEM-02",
+          "name": "Image & Heavy Asset Deallocation Gate",
+          "command": "swift test --filter MemoryLeakTests"
+        }
+      ]
+    },
+    {
+      "category": "UI Touch Targets & Anti-Spam",
+      "cases": [
+        {
+          "id": "REG-UI-01",
+          "name": "SwiftUI Touch Target Minimum Boundary (>= 44pt HIG)",
+          "command": "swift test --filter TouchTargetAccessibilityTests"
+        },
+        {
+          "id": "REG-UI-02",
+          "name": "Button Debounce & Loading State Disabling Test",
+          "command": "swift test --filter ButtonDebounceTests"
+        }
+      ]
+    }
+  ]
+}

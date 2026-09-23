@@ -76,7 +76,9 @@ EMPTY_TR="${SANDBOX}/empty.jsonl"
 LEDGER_DIR="${SANDBOX}/.claude/audit-gate"
 mkdir -p "${LEDGER_DIR}"
 LEDGER="${LEDGER_DIR}/read_ledger.tsv"
-printf 'SESS-A\tSeen.kt\n' > "${LEDGER}"
+# Ledger entries are resolved absolute paths (QA K-9: basename matching let a
+# Read of a/Util.kt unlock an Edit of b/Util.kt).
+python3 -c 'import os,sys; open(sys.argv[1],"w").write("SESS-A\t"+os.path.realpath(sys.argv[2])+"\n")' "${LEDGER}" "${KT_SEEN}"
 
 # transcript: a Read of Seen.kt (satisfies precode_gate box 2)
 SEEN_TR="${SANDBOX}/seen.jsonl"
@@ -436,6 +438,127 @@ run_case "prose mentioning the phrase allowed"    block-dangerous-git.sh 0 \
   '{"tool_name":"Bash","tool_input":{"command":"echo \"đừng bao giờ chạy git reset --hard trên trunk\""}}'
 run_case "commit message mentioning it allowed"   block-dangerous-git.sh 0 \
   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"docs: explain why git reset --hard is banned\""}}'
+# Single-word quoted spans are shell words, not prose — quoting must not hide them.
+run_case "quoted flag reset \"--hard\" blocked"   block-dangerous-git.sh 2 \
+  '{"tool_name":"Bash","tool_input":{"command":"git reset \"--hard\" HEAD~3"}}'
+run_case "quoted subcommand \"reset\" blocked"    block-dangerous-git.sh 2 \
+  '{"tool_name":"Bash","tool_input":{"command":"git \"reset\" --hard"}}'
+run_case "+refspec force push blocked"            block-dangerous-git.sh 2 \
+  '{"tool_name":"Bash","tool_input":{"command":"git push origin +main"}}'
+run_case "checkout -f blocked"                    block-dangerous-git.sh 2 \
+  '{"tool_name":"Bash","tool_input":{"command":"git checkout -f main"}}'
+run_case "switch --discard-changes blocked"       block-dangerous-git.sh 2 \
+  '{"tool_name":"Bash","tool_input":{"command":"git switch --discard-changes main"}}'
+run_case "checkout -b feature-foo allowed"        block-dangerous-git.sh 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"git checkout -b feature-foo"}}'
+run_case "single-word commit message allowed"     block-dangerous-git.sh 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"wip\""}}'
+# 2026-09-23 re-audit: global options, continuations, nested quotes, split flags,
+# remote deletes — and chains that must NOT be blocked.
+run_case "blocked: git -C . clean -fdx" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git -C . clean -fdx"}}'
+run_case "blocked: git -C . checkout -- ." block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git -C . checkout -- ."}}'
+run_case "blocked: git -c a=b clean -fd" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git -c a=b clean -fd"}}'
+run_case "blocked: git reset \  --hard HEAD~3" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git reset \\\n --hard HEAD~3"}}'
+run_case "blocked: echo it's; git reset --hard; echo 'x y'" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "echo \"it'\''s\"; git reset --hard; echo '\''x y'\''"}}'
+run_case "blocked: git push -uf origin main" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git push -uf origin main"}}'
+run_case "blocked: git clean --force" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git clean --force"}}'
+run_case "blocked: git branch -d -f x" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git branch -d -f x"}}'
+run_case "blocked: git push origin --delete x" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git push origin --delete x"}}'
+run_case "blocked: git push origin :x" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git push origin :x"}}'
+run_case "blocked: git stash clear" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git stash clear"}}'
+run_case "blocked: git gc --prune=now" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git gc --prune=now"}}'
+run_case "blocked: xargs git clean -f" block-dangerous-git.sh 2 \
+  '{"tool_name": "Bash", "tool_input": {"command": "xargs git clean -f"}}'
+run_case "allowed: git checkout develop && rm -rf node_modu" block-dangerous-git.sh 0 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git checkout develop && rm -rf node_modules"}}'
+run_case "allowed: git checkout main; ls -f" block-dangerous-git.sh 0 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git checkout main; ls -f"}}'
+run_case "allowed: git push origin main && echo +1" block-dangerous-git.sh 0 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git push origin main && echo +1"}}'
+run_case "allowed: git switch -c fix" block-dangerous-git.sh 0 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git switch -c fix"}}'
+run_case "allowed: git branch -d merged" block-dangerous-git.sh 0 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git branch -d merged"}}'
+run_case "allowed: git diff -- file" block-dangerous-git.sh 0 \
+  '{"tool_name": "Bash", "tool_input": {"command": "git diff -- file"}}'
+# 2026-09-23 QA K-1/K-2: bypasses via subshells, keywords, wrapper option values,
+# variables in command position, aliases, interpreters — and false positives.
+gitcase() {
+  want="$1"; c="$2"
+  run_case "git-guard[${want}]: ${c}" block-dangerous-git.sh "${want}" \
+    "$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "${c}")"
+}
+gitcase 2 '(git reset --hard)'
+gitcase 2 '{ git reset --hard; }'
+gitcase 2 'if true; then git reset --hard; fi'
+gitcase 2 'sudo -u root git reset --hard'
+gitcase 2 'nice -n 5 git clean -fd'
+gitcase 2 'timeout 5 git reset --hard'
+gitcase 2 'watch git reset --hard'
+gitcase 2 'find . -exec git reset --hard \;'
+gitcase 2 'g=git; $g reset --hard'
+gitcase 2 'git -c alias.x="reset --hard" x'
+gitcase 2 'git -c alias.y="!git clean -fdx" y'
+gitcase 2 "python3 -c \"import os;os.system('git reset --hard')\""
+gitcase 2 "python3 -c \"import subprocess;subprocess.run('git clean -fd',shell=True)\""
+gitcase 2 'git rm -rf .'
+gitcase 2 'git switch -C main'
+gitcase 2 'git checkout -B main'
+gitcase 2 'git rebase main'
+gitcase 2 'git restore a.kt'
+gitcase 0 'git restore --staged a.kt'
+gitcase 0 'git rebase --continue'
+gitcase 0 'git rm --cached a.kt'
+gitcase 0 'timeout 5 npm test'
+gitcase 0 'nice -n 5 make build'
+gitcase 0 'find . -name "*.kt" -exec wc -l {} \;'
+gitcase 0 'echo "(git reset --hard)"'
+gitcase 0 'if [ -f a ]; then echo ok; fi'
+gitcase 0 'python3 -c "print(1)"'
+NOJQ_BIN="${SANDBOX}/nojq-bin"; mkdir -p "${NOJQ_BIN}"
+for tool in bash cat; do ln -sf "$(command -v "${tool}")" "${NOJQ_BIN}/${tool}"; done
+run_case "missing python3 fails closed"                block-dangerous-git.sh 2 \
+  '{"tool_name":"Bash","tool_input":{"command":"git status"}}' PATH="${NOJQ_BIN}"
+echo
+
+# ── hardware_safety_gate.sh — PreToolUse Bash (QA K-3) ──────────────────────
+echo "hardware_safety_gate.sh"
+hwcase() {
+  want="$1"; c="$2"
+  run_case "hw-gate[${want}]: ${c}" hardware_safety_gate.sh "${want}" \
+    "$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "${c}")"
+}
+hwcase 2 'adb remount'
+hwcase 2 'adb -s emulator-5554 remount'
+hwcase 2 'adb shell mount -o rw,remount /system'
+hwcase 2 'fastboot -s ABC flash boot boot.img'
+hwcase 2 'fastboot flashall'
+hwcase 2 'fastboot oem unlock'
+hwcase 2 'rm -fr /system'
+hwcase 2 'rm -r -f /vendor'
+hwcase 2 'dd if=x of=/dev/sda'
+hwcase 0 'adb devices'
+hwcase 0 'adb -s X install app.apk'
+hwcase 0 'fastboot devices'
+hwcase 0 'rm -rf build'
+hwcase 0 'dd if=/dev/zero of=out.img bs=1m count=1'
+run_case "hw-gate: malformed JSON fails closed" hardware_safety_gate.sh 2 '{bad'
+run_case "hw-gate: missing python3 fails closed" hardware_safety_gate.sh 2 \
+  '{"tool_name":"Bash","tool_input":{"command":"ls"}}' PATH="${NOJQ_BIN}"
+run_case "hw-gate: override honoured" hardware_safety_gate.sh 0 \
+  '{"tool_name":"Bash","tool_input":{"command":"adb remount"}}' HARDWARE_OVERRIDE=1
 echo
 
 # ── precode_gate.sh — PreToolUse Edit|Write ─────────────────────────────────
@@ -488,8 +611,11 @@ run_case "unsourced file:line citation blocked" claim_check.sh 2 \
   "{\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"Lỗi nằm ở Ghost.kt:4211 trong nhánh cleanup.\"}"
 run_case "message without citations allowed" claim_check.sh 0 \
   "{\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"Đã đọc qua module và chưa thấy vấn đề nào đáng báo.\"}"
-run_case "loop guard releases on 2nd pass" claim_check.sh 0 \
-  "{\"transcript_path\":\"${EMPTY_TR}\",\"stop_hook_active\":true,\"last_assistant_message\":\"Lỗi nằm ở Ghost.kt:4211.\"}"
+# QA K-12: the loop guard is bounded, not a free pass on the first re-Stop.
+run_case "re-Stop #1 still blocks (bounded guard)" claim_check.sh 2 \
+  "{\"session_id\":\"cc-loop\",\"transcript_path\":\"${EMPTY_TR}\",\"stop_hook_active\":true,\"last_assistant_message\":\"Lỗi nằm ở Ghost.kt:4211.\"}"
+run_case "loop guard releases on re-Stop #2" claim_check.sh 0 \
+  "{\"session_id\":\"cc-loop\",\"transcript_path\":\"${EMPTY_TR}\",\"stop_hook_active\":true,\"last_assistant_message\":\"Lỗi nằm ở Ghost.kt:4211.\"}"
 echo
 
 # ── test_evidence_gate.sh — Stop ────────────────────────────────────────────
@@ -914,6 +1040,159 @@ echo
 echo "review_gate.sh"
 run_case "no uncommitted kotlin → nothing to review" review_gate.sh 0 \
   "{\"session_id\":\"rg1\",\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"xong\"}"
+echo
+
+# ── 2026-09-23 QA re-audit (K-4 … K-14) ─────────────────────────────────────
+echo "QA 2026-09-23 regressions"
+# K-4: missing python3 — attack-surface/blind-edit gates fail closed, the rest warn.
+run_case "K-4 precode_gate without python3 fails closed" precode_gate.sh 2 \
+  "{\"tool_name\":\"Edit\",\"transcript_path\":\"${EMPTY_TR}\",\"tool_input\":{\"file_path\":\"${KT_UNSEEN}\",\"old_string\":\"a\",\"new_string\":\"b\"}}" \
+  PATH="${NOJQ_BIN}"
+run_case "K-4 security_gate without python3 fails closed" security_gate.sh 2 \
+  "{\"session_id\":\"k4\",\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"xong\"}" \
+  PATH="${NOJQ_BIN}"
+run_case "K-4 security_gate w/o python3 releases on re-Stop" security_gate.sh 0 \
+  "{\"session_id\":\"k4\",\"stop_hook_active\":true,\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"xong\"}" \
+  PATH="${NOJQ_BIN}"
+for h in claim_check.sh churn_guard.sh comment_claim_guard.sh review_gate.sh test_evidence_gate.sh; do
+  out="$(printf '%s' "{\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"Đã chạy test, 3/3 pass.\"}" \
+        | env CLAUDE_PROJECT_DIR="${SANDBOX}" PATH="${NOJQ_BIN}" bash "${HOOKS}/${h}" 2>&1)"
+  rc=$?
+  if [ "${rc}" -eq 0 ] && printf '%s' "${out}" | grep -q "python3"; then
+    PASS=$((PASS + 1)); printf '  ok   %-46s exit=0 + warning\n' "K-4 ${h} warns without python3"
+  else
+    FAIL=$((FAIL + 1)); FAILED_CASES="${FAILED_CASES}
+  ✗ K-4 ${h} warns without python3 (rc=${rc}, out=$(printf '%s' "${out}" | head -1))"
+    printf '  FAIL %-46s rc=%s\n' "K-4 ${h} warns without python3" "${rc}"
+  fi
+done
+
+# K-5: a Bash `echo security-check` is not a review; shell writes are edits too.
+python3 - "${SANDBOX}" <<'PY'
+import json, os, sys
+sb = sys.argv[1]
+man = os.path.join(sb, "app/src/main/AndroidManifest.xml")
+def w(name, blocks):
+    with open(os.path.join(sb, name), "w") as fh:
+        for b in blocks:
+            fh.write(json.dumps({"message": {"content": [b]}}) + "\n")
+edit = {"type": "tool_use", "name": "Edit", "input": {"file_path": man, "new_string": "<uses-permission android:name=\"x\"/>"}}
+echo = {"type": "tool_use", "name": "Bash", "input": {"command": "echo security-check done"}}
+sed = {"type": "tool_use", "name": "Bash", "input": {"command": "sed -i '' 's/a/b/' app/src/main/AndroidManifest.xml"}}
+skill = {"type": "tool_use", "name": "Skill", "input": {"skill": "security-checklist"}}
+w("k5_echo.jsonl", [edit, echo])
+w("k5_sed.jsonl", [sed])
+w("k5_sed_reviewed.jsonl", [sed, skill])
+PY
+run_case "K-5 'echo security-check' is not a review" security_gate.sh 2 \
+  "{\"session_id\":\"k5a\",\"transcript_path\":\"${SANDBOX}/k5_echo.jsonl\",\"last_assistant_message\":\"xong\"}"
+run_case "K-5 sed -i on AndroidManifest is an edit" security_gate.sh 2 \
+  "{\"session_id\":\"k5b\",\"transcript_path\":\"${SANDBOX}/k5_sed.jsonl\",\"last_assistant_message\":\"xong\"}"
+run_case "K-5 shell edit + real review → pass" security_gate.sh 0 \
+  "{\"session_id\":\"k5c\",\"transcript_path\":\"${SANDBOX}/k5_sed_reviewed.jsonl\",\"last_assistant_message\":\"xong\"}"
+# K-6: a non-numeric attempts knob falls back to the default instead of crashing open.
+run_case "K-6 SECURITY_GATE_MAX_ATTEMPTS=abc still blocks" security_gate.sh 2 \
+  "{\"session_id\":\"k6\",\"transcript_path\":\"${SANDBOX}/sg_manifest.jsonl\",\"last_assistant_message\":\"xong\"}" \
+  SECURITY_GATE_MAX_ATTEMPTS=abc
+
+# K-9: a Read of a/Util.kt does not unlock an Edit of b/Util.kt.
+mkdir -p "${SANDBOX}/a" "${SANDBOX}/b"
+printf 'object UtilA\n' > "${SANDBOX}/a/Util.kt"
+printf 'object UtilB\n' > "${SANDBOX}/b/Util.kt"
+run_case "K-9 Read a/Util.kt recorded" read_ledger.sh 0 \
+  "{\"tool_name\":\"Read\",\"session_id\":\"SESS-K9\",\"tool_input\":{\"file_path\":\"${SANDBOX}/a/Util.kt\"}}"
+run_case "K-9 Edit b/Util.kt still blocked" precode_gate.sh 2 \
+  "{\"tool_name\":\"Edit\",\"session_id\":\"SESS-K9\",\"transcript_path\":\"${EMPTY_TR}\",\"tool_input\":{\"file_path\":\"${SANDBOX}/b/Util.kt\",\"old_string\":\"a\",\"new_string\":\"b\"}}"
+run_case "K-9 Edit a/Util.kt allowed" precode_gate.sh 0 \
+  "{\"tool_name\":\"Edit\",\"session_id\":\"SESS-K9\",\"transcript_path\":\"${EMPTY_TR}\",\"tool_input\":{\"file_path\":\"${SANDBOX}/a/Util.kt\",\"old_string\":\"a\",\"new_string\":\"b\"}}"
+# K-10: blind edits are blind in every language.
+printf 'struct V {}\n' > "${SANDBOX}/V.swift"
+printf 'export const x = 1\n' > "${SANDBOX}/x.ts"
+run_case "K-10 blind edit of .swift blocked" precode_gate.sh 2 \
+  "{\"tool_name\":\"Edit\",\"session_id\":\"SESS-K10\",\"transcript_path\":\"${EMPTY_TR}\",\"tool_input\":{\"file_path\":\"${SANDBOX}/V.swift\",\"old_string\":\"a\",\"new_string\":\"b\"}}"
+run_case "K-10 blind edit of .ts blocked" precode_gate.sh 2 \
+  "{\"tool_name\":\"Edit\",\"session_id\":\"SESS-K10\",\"transcript_path\":\"${EMPTY_TR}\",\"tool_input\":{\"file_path\":\"${SANDBOX}/x.ts\",\"old_string\":\"a\",\"new_string\":\"b\"}}"
+# K-10/K-11: a Node project backs "tests pass" with the runner's own output.
+NODE_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/hooknode.XXXXXX")"
+mkdir -p "${NODE_PROJ}/.claude/audit-gate"
+python3 - "${NODE_PROJ}" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+src = os.path.join(d, "index.js"); open(src, "w").write("module.exports = 1\n")
+def w(name, result_text, is_error=False):
+    blocks = [
+        {"type": "tool_use", "id": "e1", "name": "Edit", "input": {"file_path": src, "old_string": "a", "new_string": "b"}},
+        {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "npm test"}},
+        {"type": "tool_result", "tool_use_id": "t1", "is_error": is_error, "content": result_text},
+    ]
+    with open(os.path.join(d, name), "w") as fh:
+        for b in blocks:
+            fh.write(json.dumps({"message": {"content": [b]}}) + "\n")
+w("green.jsonl", "Tests: 12 passed, 12 total")
+w("red.jsonl", "Tests: 2 failed, 10 passed, 12 total", True)
+PY
+run_case "K-10 npm test green backs claim (no gradle)" test_evidence_gate.sh 0 \
+  "{\"session_id\":\"k10g\",\"transcript_path\":\"${NODE_PROJ}/green.jsonl\",\"last_assistant_message\":\"Đã chạy test, 12/12 test pass.\"}" \
+  CLAUDE_PROJECT_DIR="${NODE_PROJ}"
+run_case "K-10 npm test red does not back claim" test_evidence_gate.sh 2 \
+  "{\"session_id\":\"k10r\",\"transcript_path\":\"${NODE_PROJ}/red.jsonl\",\"last_assistant_message\":\"Đã chạy test, 12/12 test pass.\"}" \
+  CLAUDE_PROJECT_DIR="${NODE_PROJ}"
+run_case "K-11 English claim with no run blocked" claim_check.sh 2 \
+  "{\"session_id\":\"k11a\",\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"I ran the full test suite; all tests pass.\"}"
+run_case "K-11 English claim backed by npm test" claim_check.sh 0 \
+  "{\"session_id\":\"k11b\",\"transcript_path\":\"${NODE_PROJ}/green.jsonl\",\"last_assistant_message\":\"I ran the full test suite; all tests pass.\"}" \
+  CLAUDE_PROJECT_DIR="${NODE_PROJ}"
+run_case "K-11 hypothetical English is not a claim" claim_check.sh 0 \
+  "{\"session_id\":\"k11c\",\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"Once all tests pass we can merge; you should run the tests.\"}"
+rm -rf "${NODE_PROJ}"
+
+# K-7/K-8: testsourceset_gate with a fake gradlew — a module path with a space
+# is found, and one module lacking the task does not PASS the others.
+TS_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/hookgradle.XXXXXX")"
+(
+  cd "${TS_PROJ}" && git init -q . && mkdir -p "my app/src/main" lib/src/main \
+  && touch "my app/build.gradle.kts" lib/build.gradle.kts \
+  && git add . && git -c user.email=t@t -c user.name=t commit -qm init \
+  && printf 'class A\n' > "my app/src/main/A.kt" && printf 'class B\n' > lib/src/main/B.kt
+  cat > gradlew <<'SH'
+#!/bin/bash
+for a in "$@"; do case "$a" in ":lib:"*) echo "Task 'compileDebugUnitTestKotlin' not found in project ':lib'."; exit 1;; esac; done
+for a in "$@"; do case "$a" in ":my app:"*) echo "e: A.kt:1:1 Unresolved reference: nope"; exit 1;; esac; done
+exit 0
+SH
+  chmod +x gradlew
+) >/dev/null 2>&1
+run_case "K-7/K-8 spaced module found, missing task ≠ PASS" testsourceset_gate.sh 2 \
+  "{\"session_id\":\"k78\",\"transcript_path\":\"${EMPTY_TR}\",\"last_assistant_message\":\"xong\"}" \
+  CLAUDE_PROJECT_DIR="${TS_PROJ}"
+rm -rf "${TS_PROJ}"
+
+# K-13: hook state is gitignored in the project.
+if [ "$(cat "${SANDBOX}/.claude/audit-gate/.gitignore" 2>/dev/null)" = "*" ]; then
+  PASS=$((PASS + 1)); printf '  ok   %-46s\n' "K-13 audit-gate/.gitignore written"
+else
+  FAIL=$((FAIL + 1)); FAILED_CASES="${FAILED_CASES}
+  ✗ K-13 audit-gate/.gitignore missing"; printf '  FAIL %-46s\n' "K-13 audit-gate/.gitignore written"
+fi
+# K-14: the (opt-in) bash ledger never stores a raw secret.
+run_case "K-14 bash_write_ledger records" bash_write_ledger.sh 0 \
+  '{"session_id":"k14","tool_input":{"command":"curl -H \"Authorization: Bearer abcdefghijklmnop\" -u me:hunter2 https://me:hunter2@x.io; export GH_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123"}}'
+if grep -qE 'abcdefghijklmnop|hunter2|ghp_' "${SANDBOX}/.claude/audit-gate/bash_ledger.jsonl" 2>/dev/null; then
+  FAIL=$((FAIL + 1)); FAILED_CASES="${FAILED_CASES}
+  ✗ K-14 secret leaked into bash_ledger.jsonl"; printf '  FAIL %-46s\n' "K-14 secrets masked in ledger"
+else
+  PASS=$((PASS + 1)); printf '  ok   %-46s\n' "K-14 secrets masked in ledger"
+fi
+# K-15: escape hatches that say "(logged)" leave a log line.
+run_case "K-15 PRECODE_GATE=0 honoured" precode_gate.sh 0 \
+  "{\"tool_name\":\"Edit\",\"transcript_path\":\"${EMPTY_TR}\",\"tool_input\":{\"file_path\":\"${KT_UNSEEN}\",\"old_string\":\"a\",\"new_string\":\"b\"}}" \
+  PRECODE_GATE=0
+if grep -q "PRECODE_GATE=0" "${SANDBOX}/.claude/audit-gate/precode_gate.log" 2>/dev/null; then
+  PASS=$((PASS + 1)); printf '  ok   %-46s\n' "K-15 PRECODE_GATE=0 is logged"
+else
+  FAIL=$((FAIL + 1)); FAILED_CASES="${FAILED_CASES}
+  ✗ K-15 PRECODE_GATE=0 not logged"; printf '  FAIL %-46s\n' "K-15 PRECODE_GATE=0 is logged"
+fi
 echo
 
 # ── report ──────────────────────────────────────────────────────────────────

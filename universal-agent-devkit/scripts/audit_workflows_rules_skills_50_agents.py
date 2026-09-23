@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-50-Agent Audit & Review Suite for Workflows, Rules, Skills & Multi-Agent Architecture
+
+SELF-CONSISTENCY CHECK (GREP-BASED) — đọc trước khi tin kết quả:
+  Mỗi "agent"/"council" bên dưới chỉ là MỘT phép tìm chuỗi/regex trong file của chính DevKit
+  (tài liệu, rules, test). Script KHÔNG chạy test, KHÔNG đọc code dự án người dùng và KHÔNG
+  chứng minh hành vi runtime. PASS nghĩa là "tài liệu/mã DevKit còn nhắc tới cơ chế X",
+  không phải "cơ chế X hoạt động". Test hành vi thật: `agent-kit test`.
+Self-consistency (grep-based, 50 checks): Audit & Review Suite for Workflows, Rules, Skills & Multi-Agent Architecture
 Universal Agent DevKit — Comprehensive Governance & Quality Ensemble
 
 Audits 50 distinct checkpoints across 10 specialized governance councils:
@@ -191,7 +197,7 @@ def run_agent_audit(agent_id: int, name: str, mission: str, target_file: str, pa
 
 def main():
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}{CYAN}   🕵️  UNIVERSAL AGENT DEVKIT — 50-AGENT WORKFLOW & RULES & SKILLS AUDIT ENSEMBLE    {RESET}")
+    print(f"{BOLD}{CYAN}   🔎 Self-consistency check (grep-based): workflows, rules & skills               {RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
     total_pass = 0
@@ -224,17 +230,18 @@ def main():
 
     score = int((total_pass / len(AGENTS_SPEC)) * 100)
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}TỔNG KẾT KIỂM TOÁN 50 AGENTS REVIEW:{RESET}")
+    print(f"{BOLD}TỔNG KẾT SELF-CONSISTENCY CHECK (GREP-BASED):{RESET}")
+    print(f"  {total_pass}/{len(AGENTS_SPEC)} checks passed")
     print(f"  • Đạt chuẩn (PASS): {GREEN}{BOLD}{total_pass} / {len(AGENTS_SPEC)}{RESET}")
     print(f"  • Thất bại (FAIL):  {RED if total_fail > 0 else GREEN}{BOLD}{total_fail}{RESET}")
     print(f"  • Điểm số chất lượng: {GREEN if score == 100 else YELLOW}{BOLD}{score}%{RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
     if total_fail == 0:
-        print(f"{GREEN}{BOLD}✔ TOÀN BỘ 50/50 AGENTS XÁC NHẬN HỆ THỐNG WORKFLOW, RULES, SKILLS ĐẠT CHUẨN HOÀN HẢO!{RESET}\n")
+        print(f"{GREEN}{BOLD}✔ Mọi chuỗi được tìm đều có mặt (grep-based — không chứng minh hành vi runtime).{RESET}\n")
         return 0
     else:
-        print(f"{RED}{BOLD}✖ CÓ {total_fail} AGENT PHÁT HIỆN LỖI CẦN KHẮC PHỤC.{RESET}\n")
+        print(f"{RED}{BOLD}✖ {total_fail} check không tìm thấy chuỗi mong đợi.{RESET}\n")
         return 1
 
 if __name__ == "__main__":

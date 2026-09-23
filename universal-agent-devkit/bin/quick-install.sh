@@ -14,17 +14,25 @@ echo "================================================================="
 # 1. Clone or update devkit
 if [ -d "$INSTALL_DIR/.git" ]; then
   echo "Updating existing DevKit at $INSTALL_DIR..."
-  git -C "$INSTALL_DIR" fetch --all --prune --quiet
-  git -C "$INSTALL_DIR" reset --hard origin/main --quiet
+  # Never `reset --hard`: local edits (also made through project symlinks) would be lost.
+  if [ -n "$(git -C "$INSTALL_DIR" status --porcelain)" ]; then
+    echo "⚠ $INSTALL_DIR has local changes — skipping update (commit/stash them, then re-run)." >&2
+  else
+    git -C "$INSTALL_DIR" pull --ff-only --quiet origin main \
+      || echo "⚠ Could not fast-forward $INSTALL_DIR to origin/main — left as is." >&2
+  fi
 else
   echo "Cloning Universal Agent DevKit into $INSTALL_DIR..."
   if git ls-remote "$REPO_URL" > /dev/null 2>&1; then
     git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" --quiet
   else
-    # Fallback to local path if available
-    LOCAL_SOURCE="/Volumes/Data/Toan/universal-agent-devkit"
-    if [ -d "$LOCAL_SOURCE" ]; then
-      cp -R "$LOCAL_SOURCE" "$INSTALL_DIR"
+    # Offline fallback: an explicit local checkout (DEVKIT_LOCAL_SOURCE=/path/to/universal-agent-devkit)
+    LOCAL_SOURCE="${DEVKIT_LOCAL_SOURCE:-}"
+    if [ -n "$LOCAL_SOURCE" ] && [ -d "$LOCAL_SOURCE" ]; then
+      cp -RL "$LOCAL_SOURCE" "$INSTALL_DIR"
+    else
+      echo "✖ Cannot reach $REPO_URL and DEVKIT_LOCAL_SOURCE is not set — nothing installed." >&2
+      exit 1
     fi
   fi
 fi

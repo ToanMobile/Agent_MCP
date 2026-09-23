@@ -1,0 +1,59 @@
+name: Universal Agent DevKit CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "universal-agent-devkit/**"
+      - ".github/workflows/devkit-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "universal-agent-devkit/**"
+      - ".github/workflows/devkit-ci.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: universal-agent-devkit
+
+jobs:
+  test-matrix:
+    name: Test Suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Syntax & Compilation Check
+        run: |
+          python3 -m py_compile bin/agent-config.py bin/agent-health.py bin/post-fix-gate.py
+          bash -n bin/install.sh bin/quick-install.sh adapters/*.sh
+
+      - name: Run X_old Conflict Isolation Suite (3/3 Tests)
+        run: bash tests/test_x_old_conflict_isolation.sh
+
+      - name: Run Agent Health & 50-Agent Councils Diagnostic (12/12 Checks)
+        run: python3 bin/agent-health.py
+
+      # post-fix-gate.py is not run bare here: on a clean checkout it has nothing to
+      # audit and exits 3 by design. Its behaviour is covered by tests/test_postfix_gate.sh.
+      - name: Run Hook Contract, Workflow Engine, Installer & Gate Test Suites
+        run: bash bin/agent-kit test

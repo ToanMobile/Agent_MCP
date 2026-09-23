@@ -6,7 +6,8 @@
 # of the turn (Stop), so W0 — the pre-code gate — had zero enforcement: all five
 # of its boxes were prose only.
 #
-# BLOCK (exit 2) when: about to Edit/Write a .kt/.java file that this session has
+# BLOCK (exit 2) when: about to Edit/Write a source file (.kt/.java/.swift/.ts/
+# .tsx/.js/.jsx/.py/.go/.rs/.dart/.cs/.c/.cc/.cpp/.h/.m/.mm) that this session has
 # never looked at — no Read of it, no Edit of it, and its name never appeared in
 # any tool output (Grep hit, graph result, gradle/logcat line). That is editing
 # blind, the crudest form of skipping W0 box 2.
@@ -26,10 +27,15 @@
 # ALLOWED without any prior look:
 #   • creating a genuinely new file (nothing on disk to read)
 #   • a file already edited earlier this session (you have engaged with it)
-#   • anything that is not .kt/.java
+#   • anything that is not a source file (see SRC_EXT)
 #
-# Escape hatch: PRECODE_GATE=0 (logged). Fail-open on any internal error — a bug
-# in this gate must never stop work.
+# Paths are compared as resolved absolute paths (QA K-9, 2026-09-23): reading
+# a/Util.kt no longer unlocks b/Util.kt. A tool_result only counts when it shows
+# the file's absolute or repo-relative path, not just its basename.
+#
+# Escape hatch: PRECODE_GATE=0 (logged to precode_gate.log). Fail-open on any
+# internal error — a bug in this gate must never stop work. Missing python3 is
+# NOT an internal error: it fails closed (exit 2), see below.
 # bash 3.2 compatible.
 # ─────────────────────────────────────────────────────────────────────────────
 set -u
@@ -37,14 +43,29 @@ set -u
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOG_DIR="${REPO_ROOT}/.claude/audit-gate"
 mkdir -p "${LOG_DIR}"
+[ -f "${LOG_DIR}/.gitignore" ] || printf '*\n' > "${LOG_DIR}/.gitignore" 2>/dev/null || true
 
 # Drain stdin before any early exit, otherwise the caller gets EPIPE.
 INPUT="$(cat)"
 
-[ "${PRECODE_GATE:-1}" = "0" ] && exit 0
+if [ "${PRECODE_GATE:-1}" = "0" ]; then
+  echo "[$(date +%Y-%m-%dT%H:%M:%S)] PRECODE_GATE=0 — gate bypassed" >> "${LOG_DIR}/precode_gate.log" 2>/dev/null
+  exit 0
+fi
 
+# QA K-4: without python3 this gate cannot judge anything. Fail CLOSED (it guards
+# an attack surface / blind edits) — except on the Stop loop-guard pass, so a box
+# without python3 is never wedged. Disable with PRECODE_GATE=0.
+if ! command -v python3 >/dev/null 2>&1; then
+  case "${INPUT}" in
+    *'"stop_hook_active":true'*|*'"stop_hook_active": true'*)
+      echo "⚠ precode_gate: python3 không có — gate KHÔNG chạy (lần Stop thứ 2, thả để tránh treo)." >&2; exit 0 ;;
+  esac
+  echo "🛑 precode_gate: cần python3 để kiểm tra — chặn để an toàn. Cài python3 hoặc đặt PRECODE_GATE=0 để tắt gate." >&2
+  exit 2
+fi
 PG_INPUT="${INPUT}" PG_LOG="${LOG_DIR}/precode_gate.log" \
-PG_LEDGER="${LOG_DIR}/read_ledger.tsv" \
+PG_LEDGER="${LOG_DIR}/read_ledger.tsv" PG_REPO="${REPO_ROOT}" \
 PG_TS="$(date +%Y-%m-%dT%H:%M:%S)" \
 python3 <<'PY'
 import os, sys, json
@@ -69,11 +90,27 @@ except Exception as e:
 inp = d.get("tool_input") or {}
 if not isinstance(inp, dict):
     sys.exit(0)
+SRC_EXT = (".kt", ".kts", ".java", ".swift", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".py",
+           ".go", ".rs", ".dart", ".cs", ".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".mm")
 path = inp.get("file_path") or ""
-if not isinstance(path, str) or not path.endswith((".kt", ".java")):
+if not isinstance(path, str) or not path.endswith(SRC_EXT):
     sys.exit(0)
 
 base = os.path.basename(path)
+repo = os.environ.get("PG_REPO", "") or os.getcwd()
+
+def norm(p):
+    if not os.path.isabs(p):
+        p = os.path.join(repo, p)
+    return os.path.realpath(p)
+
+target = norm(path)
+try:
+    rel = os.path.relpath(target, os.path.realpath(repo))
+except ValueError:
+    rel = target
+if rel.startswith(".."):
+    rel = target
 
 # Creating a genuinely new file: nothing exists to have read.
 if not os.path.exists(path):
@@ -94,10 +131,12 @@ ledger = os.environ.get("PG_LEDGER", "")
 session = d.get("session_id") or ""
 if ledger and os.path.exists(ledger):
     try:
-        want = f"{session}\t{base}"
         with open(ledger) as fh:
             for entry in fh:
-                if entry.rstrip("\n") == want:
+                sid, _, fp = entry.rstrip("\n").partition("\t")
+                # Legacy basename-only entries are ignored: they cannot tell
+                # a/Util.kt from b/Util.kt.
+                if sid == session and os.path.isabs(fp) and os.path.realpath(fp) == target:
                     looked = True
                     break
     except Exception as e:
@@ -140,12 +179,12 @@ try:
                         continue
                     binp = blk.get("input") or {}
                     fp = binp.get("file_path") or binp.get("notebook_path") or ""
-                    if isinstance(fp, str) and os.path.basename(fp) == base:
+                    if isinstance(fp, str) and fp and norm(fp) == target:
                         looked = True
                 elif t == "tool_result":
                     c = blk.get("content")
                     text = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
-                    if base in text:
+                    if target in text or path in text or (rel != target and rel in text):
                         looked = True          # surfaced in grep/graph/gradle/logcat output
             if looked:
                 break

@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/hooks/review_gate.sh
+../../hooks/review_gate.sh

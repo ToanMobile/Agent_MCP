@@ -1,15 +1,15 @@
 <div align="center">
 
 # 🚀 Universal AI Agent DevKit & Quality Protocol
-### *A unified, production-grade framework providing Zero-Defect protocols, automated safety gates, 25 curated skills, 5 dynamic domain profiles, 50 audit agents, X_old conflict isolation protection, and an 8-layer Post-Fix Audit Gate across Claude Code, OpenAI Codex, Google Gemini/Antigravity, and Cursor.*
+### *A unified, production-grade framework providing Zero-Defect protocols, automated safety gates, 25 curated skills, 6 dynamic domain profiles, 50 audit agents, X_old conflict isolation protection, and an 8-layer Post-Fix Audit Gate across Claude Code, OpenAI Codex, Google Gemini/Antigravity, and Cursor.*
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-ToanMobile%2Funiversal--agent--devkit-blue.svg?style=for-the-badge&logo=github)](https://github.com/ToanMobile/universal-agent-devkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Tests Passing](https://img.shields.io/badge/Tests-294%20PASS%20(100%25)-success.svg?style=for-the-badge)](./hooks/tests)
+[![Tests Passing](https://img.shields.io/badge/Tests-302%20PASS%20(100%25)-success.svg?style=for-the-badge)](./hooks/tests)
 [![Supported Agents](https://img.shields.io/badge/Agents-4%20Core%20Platforms-orange.svg?style=for-the-badge)](#-universal-multi-agent-matrix)
 [![Rulebook](https://img.shields.io/badge/Rules-AGENTS.md%20(SSOT)-red.svg?style=for-the-badge)](#-complete-rulebook--engineering-standards-single-source-of-truth)
 [![Skills Catalog](https://img.shields.io/badge/Skills-25%20Curated-purple.svg?style=for-the-badge)](#-25-curated-engineering-skills-catalog)
-[![Domain Profiles](https://img.shields.io/badge/Profiles-5%20Domains-cyan.svg?style=for-the-badge)](#-dynamic-domain-profiles-system)
+[![Domain Profiles](https://img.shields.io/badge/Profiles-6%20Domains-cyan.svg?style=for-the-badge)](#-dynamic-domain-profiles-system)
 [![Audit Councils](https://img.shields.io/badge/Audits-10%20Councils%20(50%20Agents)-yellow.svg?style=for-the-badge)](#-10-quality-audit-councils-50-specialized-agents)
 [![MCP Servers](https://img.shields.io/badge/MCP-6%20Integrated-brightgreen.svg?style=for-the-badge)](#-mcp-model-context-protocol-hub)
 
@@ -34,8 +34,8 @@
 It delivers a complete, closed-loop software engineering ecosystem:
 1. **Supreme Engineering Protocols:** Zero-Defect Protocol, Paired Executable Oracle (RED→GREEN), and No-Fabrication Engine (C1–C9 Decision Table).
 2. **Single Source of Truth Rulebook (`AGENTS.md`):** Eliminates rule sprawl and conflicting chapters by unifying all engineering standards, architecture rules, pre-code gates, and quality protocols into a single, authoritative master rule file (`AGENTS.md` / `Agent.md`).
-3. **Dynamic Domain Profiles:** Instant project domain switching between **Automotive** (AAOS/CAN), **Android** (Compose/Vitals/Tombstones), **Game** (Unity 6/Zero-GC), **Voice Assistant** (AAOS Audio Focus/Mic Safety), and **Universal** clean architecture via `agent-kit profile`.
-4. **Post-Fix Quality Shield (8-Layer Audit Gate):** Automated multi-tier verification (`/audit-gate`, `agent-kit gate`, `postfix-gate`) executing structural AST diff checks, DESIGN.md/a11y baseline verification, RED→GREEN oracle confirmation (with `deliberate_red` bypass), 50-agent council review, TIA regression matrix validation with immutable guards, non-destructive secret scanning, error resilience checks, and Alibaba OpenCodeReview diff analysis.
+3. **Dynamic Domain Profiles:** Instant project domain switching between **Android** (Compose/Vitals/Tombstones), **iOS** (Swift 6/SwiftUI/Concurrency), **Automotive** (AAOS/CAN), **Game** (Unity 6/Zero-GC), **Voice Assistant** (AAOS Audio Focus/Mic Safety), and **Universal** clean architecture via `agent-kit profile`.
+4. **Post-Fix Quality Shield (8-Layer Audit Gate):** Automated multi-tier verification (`/audit-gate`, `agent-kit gate`, `postfix-gate`) executing structural AST diff checks, DESIGN.md/a11y baseline verification, RED→GREEN oracle confirmation (with `deliberate_red` bypass), 50-agent council review, TIA regression matrix validation with immutable guards, non-destructive secret scanning, AST machine linters (Compose stability & Unity GC), error resilience checks, and Alibaba OpenCodeReview diff analysis.
 5. **10 Quality Audit Councils (50 Specialized Agents):** Comprehensive governance engine scrutinizing Architecture, Security, Concurrency, Performance, Error Resilience, Memory Leaks, Test Integrity, Adversarial Chaos, Zero-Regression, and State Continuity.
 6. **25 Curated Engineering Skills:** Standardized `SKILL.md` packages across 5 functional suites, including 23 canonical skills + 2 senior domain performance skills (`compose-recomp-audit` and `unity-gc-audit`), alongside direct integration with **Alibaba OpenCodeReview v1.12.9 (`ocr`)** for deterministic AST diff review.
 7. **X_old Conflict Isolation Protection:** Non-destructive installation for existing repositories. Automatically detects colliding user files (`skills`, `rules`, `commands`, `CLAUDE.md`, `AGENTS.md`, `.cursorrules`) and safely preserves them as `*_old` instead of overwriting, allowing users to seamlessly merge custom code via `agent-kit list-old`.
@@ -51,7 +51,7 @@ It delivers a complete, closed-loop software engineering ecosystem:
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                        UNIVERSAL AGENT QUALITY PROTOCOL                                │
 ├────────────────────────────┬────────────────────────────┬──────────────────────────────┤
-│ 🛡️ Zero-Defect Protocol    │ 🚫 No-Fabrication Engine   │ 🔒 160+ Machine Safety Gates │
+│ 🛡️ Zero-Defect Protocol    │ 🚫 No-Fabrication Engine   │ 🔒 13 Hooks · 168 Contract Tests │
 │ Paired Executable Oracle   │ C1–C9 Decision Table       │ Lifecycle Hooks              │
 │ (Mandatory RED → GREEN)    │ Zero hallucinated metrics  │ Pre-Code & Stop Gates        │
 ├────────────────────────────┼────────────────────────────┼──────────────────────────────┤
@@ -74,7 +74,7 @@ It delivers a complete, closed-loop software engineering ecosystem:
 - **Eliminating Hallucinations:** Strict prohibition against guessing file paths, symbol signatures, library versions, benchmark metrics, or test outcomes.
 - **Strict Evidence Classes:** Enforces explicit citations for structural source facts (C1), version measurements (C2), runtime fixes (C3), scope coverage (C4), and terminal completion claims (C5).
 
-### 3. 🔒 160+ Automated Safety Gates (Lifecycle Hooks)
+### 3. 🔒 13 Automated Safety Gates (Lifecycle Hooks, 168 contract tests)
 - **Real-Time Interception:** PreToolUse and Stop hooks intercept every write, shell execution, and subagent handoff.
 - **Automated Rejection:** Automatically blocks destructive git commands (`git push --force`, `git reset --hard`), unvetted file edits, credential leakage, and unverifiable completion claims.
 
@@ -112,7 +112,7 @@ graph TD
         Profiles["📱 5 Dynamic Profiles<br/>(Automotive / Android / Game / Universal / Voice)"]
         PostFixGate["⚡ Post-Fix Quality Shield<br/>(8-Layer Audit Gate / post-fix-gate.py)"]
         AuditCouncils["🏛️ 10 Audit Councils<br/>(50 Specialized Governance Agents)"]
-        Gates["🔒 160+ Safety Gates & Lifecycle Hooks"]
+        Gates["🔒 13 Safety Gates & Lifecycle Hooks"]
         SkillsCatalog["🧰 25 Curated Skills<br/>(23 Canonical + 2 Senior Performance)"]
         DesignMemory["🎨 DESIGN.md & Failure Memory (.agents/instincts.md)"]
         MCPHub["🔌 6-Server MCP Hub (100+ Schemas)"]
@@ -248,6 +248,7 @@ profiles/
 ├── android/          # Mobile App: Jetpack Compose, Coroutines, M3, Android Vitals, Tombstones
 ├── automotive/       # AAOS: CAN Bus, Vehicle HAL, CarPropertyManager, ASIL-B, HMI Safety
 ├── game/             # Game Dev: Unity 6, Zero-GC C#, unity-test.sh, unity-compile-check.sh
+├── ios/              # iOS Native: Swift 6, SwiftUI, Concurrency (@MainActor), Instruments, XCTest
 ├── universal/        # Cross-platform: Clean Architecture, REST/gRPC, Multi-Tenant Platform
 └── voice-assistant/  # Voice Assistant: AAOS Assistant, Audio Focus, Microphone Safety
 ```
@@ -258,11 +259,14 @@ profiles/
 # View active profile:
 agent-kit profile
 
+# Switch to Android Mobile profile (Jetpack Compose / Vitals / Tombstones):
+agent-kit profile android
+
+# Switch to iOS Native profile (Swift 6 / SwiftUI / Swift Concurrency):
+agent-kit profile ios
+
 # Switch to Automotive profile (AAOS / CAN Bus / Vehicle HAL):
 agent-kit profile automotive
-
-# Switch to Android Mobile profile (Jetpack Compose / Vitals):
-agent-kit profile android
 
 # Switch to Game Development profile (Unity / ECS / Performance):
 agent-kit profile game
@@ -287,23 +291,27 @@ Every bug fix or code modification must pass through the automated **8-Layer Qua
 [Layer 2] Design System & Accessibility  ──► DESIGN.md, Touch Target ≥ 48dp, Debounced buttons
 [Layer 3] Zero-Defect Paired Oracle      ──► Verified failing RED → passing GREEN proof
 [Layer 4] TIA Regression Matrix & Guards ──► Checklist [x] PASS & Immutable Guards preserved
-[Layer 5] Performance & Resource Audit  ──► O(1) lookups, non-blocking UI thread, 0 memory leak
+[Layer 5] Performance & Resource Audit  ──► AST Compose stability & Unity Zero-GC linters, non-blocking UI
 [Layer 6] Error Resilience & Crash Trap  ──► Anti-swallowing (0 empty catch), timeouts, circuit breaker
 [Layer 7] Structured Logging & PII Mask ──► Structured logs, masked secrets/credentials/tokens
 [Layer 8] Alibaba OpenCodeReview Gate   ──► AST line resolution (resolver.go), 0 regressions
 ```
 
+### Layer 5 AST Machine Linters
+- **`scripts/lint_compose_stability.py`**: Static AST linter for Kotlin Jetpack Compose detecting unstable parameters (`List<T>`, `Set<T>`, `Map<T>`) without `@Immutable` / `ImmutableList` wrappers, and unremembered heavy object allocations (`SimpleDateFormat`, `Regex`) inside `@Composable`.
+- **`scripts/lint_unity_gc.py`**: Static frame loop linter for C# detecting `new ` heap allocations, costly hierarchy lookups (`GameObject.Find`, `GetComponent`), LINQ queries, and allocating physics methods inside `Update()`, `FixedUpdate()`, `LateUpdate()`.
+
 ### Running the Post-Fix Gate
 
 ```bash
 # Via agent-kit CLI:
-agent-kit gate
+agent-kit gate --run-tests
 
 # Via standalone binary:
-postfix-gate
+postfix-gate --run-tests
 
 # Via Python script:
-python3 bin/post-fix-gate.py
+python3 bin/post-fix-gate.py --run-tests
 
 # In-chat Slash Command:
 /audit-gate
@@ -428,7 +436,7 @@ Standardized under the `SKILL.md` format (YAML frontmatter + Progressive Disclos
 
 ## ⌨️ Complete Slash Commands Catalog
 
-All 23 skills, domain profiles, and safety gates are bound to auto-discovered slash commands with convenient shorthand aliases:
+All 25 skills, domain profiles, and safety gates are bound to auto-discovered slash commands with convenient shorthand aliases:
 
 | Slash Command | Shorthand Aliases | Backing Skill / Target | Key Functionality |
 |---|---|---|---|
@@ -562,12 +570,12 @@ agent-kit profile [automotive | android | game | universal]
 agent-kit health
 
 # 4. Execute post-fix 5-layer quality & regression audit:
-agent-kit gate
+agent-kit gate --run-tests
 
-# 5. Run full 294+ regression test suite:
+# 5. Run full 302+ regression test suite:
 agent-kit test
 
-# 6. List all 16 curated canonical skills:
+# 6. List all 25 curated skills:
 agent-kit list
 
 # 7. List all available slash commands:
@@ -583,7 +591,7 @@ agent-kit sync
 ### 📊 Verified Test Evidence:
 - **Hook Contract Tests:** `160 / 160 PASS (100%)` ✅
 - **Workflow Engine Tests:** `134 / 134 PASS (100%)` ✅
-- **Total Test Points:** `294 / 294 PASS (100%)` ✅
+- **Total Test Points:** `302 / 302 PASS (100%)` (168 hook contract + 134 workflow engine) + installer/gate suites ✅
 - **Post-Fix Quality Gate:** `8 / 8 Layers PASS (100%)` ✅
 - **50-Agent Audit Councils:** `50 / 50 PASS (100%)` ✅
 - **Health Diagnostic Score:** `12 / 12 Checks (100/100 HEALTHY)` ✅
@@ -600,15 +608,18 @@ universal-agent-devkit/
 ├── bin/                         # CLI entrypoints (agent-kit, agent-config.py, agent-health.py, post-fix-gate.py)
 ├── AGENTS.md                    # Universal Master Rules & SSOT (Sole Root Rulebook)
 ├── DESIGN.md                    # Universal Design System & UI/UX Accessibility Baseline
-├── profiles/                    # 5 Dynamic Domain Profiles (automotive, android, game, universal, voice-assistant)
-│   └── android/scripts/qa/      # Native crash triage tools (tombstone-triage.sh)
+├── profiles/                    # 6 Dynamic Domain Profiles (android, ios, automotive, game, universal, voice-assistant)
+│   ├── android/scripts/qa/      # Native crash triage tools (tombstone-triage.sh, adb-fps-measure.sh)
+│   ├── game/scripts/            # Unity test runners and bot marathon
+│   └── ios/                     # iOS Swift 6, SwiftUI, Concurrency rules & matrix
 ├── rules/                       # Core rules & dynamic profile rules symlinks
 ├── skills/                      # 25 Curated Skills (23 Canonical + 2 Senior Domain Performance)
-├── commands/                    # Auto-discovered Slash Commands & Aliases (36 commands)
+├── commands/                    # Auto-discovered Slash Commands & Aliases (45+ commands)
 ├── agents/                      # Specialized Subagents (.md)
-├── hooks/                       # 9+ Lifecycle Safety Gates & 160+ Contract Tests
+├── hooks/                       # 13 Lifecycle Safety Gates & 168 Contract Tests
 ├── workflows/                   # Audit & Test Engines (134+ JS/MJS Tests)
-├── scripts/                     # 50-Agent Councils & Chaos Audit Scripts
+├── scripts/                     # 50-Agent Councils, Chaos Audits & AST Machine Linters (Compose, Unity GC)
+├── .github/workflows/           # CI/CD Multi-OS Pipeline (Ubuntu & macOS Matrix)
 ├── mcp/                         # MCP Hub (.mcp.json, mcp_config.json, schemas)
 ├── setup.sh                     # Root setup entrypoint
 ├── Makefile                     # Build & Global install automation

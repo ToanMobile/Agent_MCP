@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/hooks/churn_guard.sh
+../../hooks/churn_guard.sh

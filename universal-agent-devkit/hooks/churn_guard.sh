@@ -27,12 +27,21 @@ set -u
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOG_DIR="${REPO_ROOT}/.claude/audit-gate"
 mkdir -p "${LOG_DIR}"
+[ -f "${LOG_DIR}/.gitignore" ] || printf '*\n' > "${LOG_DIR}/.gitignore" 2>/dev/null || true
 
 # Drain stdin before any early exit, otherwise the caller gets EPIPE.
 INPUT="$(cat)"
 
-[ "${CHURN_GUARD:-1}" = "0" ] && exit 0
+if [ "${CHURN_GUARD:-1}" = "0" ]; then
+  echo "[$(date +%Y-%m-%dT%H:%M:%S)] CHURN_GUARD=0 — gate bypassed" >> "${LOG_DIR}/churn_guard.log" 2>/dev/null
+  exit 0
+fi
 
+# QA K-4: without python3 this gate cannot run — say so instead of passing silently.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "⚠ churn_guard: python3 không có — gate này KHÔNG chạy, kết quả không được kiểm." >&2
+  exit 0
+fi
 CHURN_INPUT="${INPUT}" CHURN_LOG="${LOG_DIR}/churn_guard.log" \
 CHURN_TS="$(date +%Y-%m-%dT%H:%M:%S)" CHURN_MAX="${CHURN_GUARD_MAX:-3}" \
 python3 <<'PY'

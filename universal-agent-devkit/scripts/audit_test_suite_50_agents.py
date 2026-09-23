@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-50-Agent Audit & Review Engine for Universal Agent DevKit Test Execution Suite
+
+SELF-CONSISTENCY CHECK (GREP-BASED) — đọc trước khi tin kết quả:
+  Mỗi "agent"/"council" bên dưới chỉ là MỘT phép tìm chuỗi/regex trong file của chính DevKit
+  (tài liệu, rules, test). Script KHÔNG chạy test, KHÔNG đọc code dự án người dùng và KHÔNG
+  chứng minh hành vi runtime. PASS nghĩa là "tài liệu/mã DevKit còn nhắc tới cơ chế X",
+  không phải "cơ chế X hoạt động". Test hành vi thật: `agent-kit test`.
+Self-consistency (grep-based, 50 checks): Audit & Review Engine for Universal Agent DevKit Test Execution Suite
 Audits 50 distinct checkpoints across 10 specialized quality councils:
   Council A (Agents 01-05): Paired Executable Oracle & RED-GREEN Boundary
   Council B (Agents 06-10): Multi-Lens Audit & Receipt Verification
@@ -103,12 +109,12 @@ AGENTS_SPEC = [
     (47, "AcceptanceEvidenceOrderAuditor", "Kiểm toán thứ tự thu thập bằng chứng: pre-edit -> edit -> post-edit", "workflows/multi-lens-audit.test.mjs", r"fresh capture order"),
     (48, "ScreenshotVerificationAuditor", "Kiểm toán quy chuẩn bằng chứng hình ảnh với trạng thái PASS xác thực", "AGENTS.md", r"Acceptance Gate|screenshot"),
     (49, "DiffAccountingAuditor", "Kiểm toán tính chính xác từng dòng git diff qua OpenCodeReview", "skills/open-code-review/SKILL.md", r"resolver\.go|open-code-review"),
-    (50, "TerminalStateAuditor", "Kiểm toán đưa toàn bộ quy trình về trạng thái dừng hợp lệ (CLEAN/HEALTHY)", "bin/agent-health.py", r"PASS \(100% HEALTHY\)")
+    (50, "TerminalStateAuditor", "Kiểm toán đưa toàn bộ quy trình về trạng thái dừng hợp lệ (CLEAN/HEALTHY)", "bin/agent-health.py", r"tests: not run")
 ]
 
 def main():
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}{CYAN}    🛡️  50-Agent Quality & Verification Audit: Test Execution Suite    {RESET}")
+    print(f"{BOLD}{CYAN}    🔎 Self-consistency check (grep-based): Test Execution Suite       {RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════{RESET}\n")
 
     base_dir = Path(__file__).resolve().parent.parent
@@ -161,8 +167,8 @@ def main():
 
     score = int((passed_agents / total_agents) * 100)
     print(f"\n{BOLD}{CYAN}──────────────────────────────────────────────────────────────────────{RESET}")
-    print(f"  {BOLD}Kết Quả Kiểm Toán 50 Agents:{RESET} {GREEN}{BOLD}{passed_agents}/{total_agents} AGENTS VERIFIED ({score}% PASS){RESET}")
-    print(f"  {DIM}Bộ thực thi gồm 134 Workflows Tests + 160 Hooks Contract Tests = 294 Test Points đạt chuẩn hoàn hảo.{RESET}")
+    print(f"  {BOLD}Self-consistency (grep-based):{RESET} {passed_agents}/{total_agents} checks passed ({score}%)")
+    print(f"  {DIM}Đây là phép tìm chuỗi trong file DevKit, không phải kết quả chạy test. Chạy test thật: agent-kit test{RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════{RESET}\n")
 
     return 0 if score == 100 else 1

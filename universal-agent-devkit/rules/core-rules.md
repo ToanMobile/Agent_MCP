@@ -145,7 +145,7 @@ Mọi dòng mã sinh ra hoặc sửa đổi BẮT BUỘC phải tuân thủ 5 ng
    - **Khi điều phối Leader PM ↔ Worker:** Tự động kích hoạt `giao` (giao thức 7 giai đoạn có cổng nghiệm thu cứng).
    - **Trước khi hoàn tất:** Tự động chạy `open-code-review` và xuất báo cáo nghiệm thu 4 mục kèm ảnh chụp PASS.
 3. **Bao Phủ Toàn Bộ 23 Kỹ Năng Chuẩn Mực (100% Zero-Touch Automation):**
-   - 100% kỹ năng trong bộ 23 skills chuẩn mực (`skills/`) đã được quy định điều kiện kích hoạt tự động theo 6 giai đoạn vòng đời trong `AGENTS.md` Mục 8.2.
+   - 100% kỹ năng trong bộ 25 skills chuẩn mực (`skills/`) đã được quy định điều kiện kích hoạt tự động theo 6 giai đoạn vòng đời trong `AGENTS.md` Mục 8.2.
    - Senior Developer không cần phải ghi nhớ cú pháp slash command (`/cmd`), không cần can thiệp thủ công bất kỳ bước nào. Mọi rào chắn chất lượng, kiểm toán TIA hồi quy, đo đạc thiết bị thật, chụp ảnh nghiệm thu và xuất báo cáo B10 đều được hệ thống tự giác thực thi 100%.
 
 ## 17. Quy Chuẩn Tối Ưu Hóa Token & Quản Trị Ngân Sách Ngữ Cảnh (Token Economics & Context Budget Management)

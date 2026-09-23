@@ -23,9 +23,31 @@ if [ -z "${DEVICES}" ]; then
   exit 0
 fi
 
-echo "📊 [ADB FPS MEASURE] Đang đo đạc hiệu năng FPS cho ${PACKAGE} trong ${DURATION_SEC} giây..."
+echo "📊 [ADB FPS MEASURE] Đang đo đạc hiệu năng FPS cho ${PACKAGE} trong ${DURATION_SEC} giây (Tự động kích hoạt Touch Injection ép vẽ frame)..."
 adb shell dumpsys gfxinfo "${PACKAGE}" reset > /dev/null 2>&1 || true
+
+AUTO_SWIPE="${AUTO_SWIPE:-1}"
+SWIPE_PID=""
+if [ "${AUTO_SWIPE}" = "1" ]; then
+  # Tự động bơm thao tác cuộn (Touch Injection) để ép Choreographer / SurfaceFlinger render liên tục
+  (
+    END_TIME=$((SECONDS + DURATION_SEC))
+    while [ $SECONDS -lt $END_TIME ]; do
+      adb shell input swipe 500 1400 500 600 300 2>/dev/null || true
+      sleep 0.4
+      adb shell input swipe 500 600 500 1400 300 2>/dev/null || true
+      sleep 0.4
+    done
+  ) &
+  SWIPE_PID=$!
+fi
+
 sleep "${DURATION_SEC}"
+
+if [ -n "${SWIPE_PID}" ]; then
+  kill "${SWIPE_PID}" 2>/dev/null || true
+  wait "${SWIPE_PID}" 2>/dev/null || true
+fi
 
 STATS="$(adb shell dumpsys gfxinfo "${PACKAGE}" 2>/dev/null || true)"
 TOTAL_FRAMES="$(echo "${STATS}" | grep "Total frames rendered" | awk '{print $NF}' || echo "0")"

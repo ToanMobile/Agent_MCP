@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/hooks/block-dangerous-git.sh
+../../hooks/block-dangerous-git.sh

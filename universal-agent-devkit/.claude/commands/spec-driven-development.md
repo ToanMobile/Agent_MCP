@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/commands/spec-driven-development.md
+../../commands/spec-driven-development.md

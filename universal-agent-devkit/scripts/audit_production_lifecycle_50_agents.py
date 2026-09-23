@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-50-Agent Production Real-World Lifecycle Audit Council
+
+SELF-CONSISTENCY CHECK (GREP-BASED) — đọc trước khi tin kết quả:
+  Mỗi "agent"/"council" bên dưới chỉ là MỘT phép tìm chuỗi/regex trong file của chính DevKit
+  (tài liệu, rules, test). Script KHÔNG chạy test, KHÔNG đọc code dự án người dùng và KHÔNG
+  chứng minh hành vi runtime. PASS nghĩa là "tài liệu/mã DevKit còn nhắc tới cơ chế X",
+  không phải "cơ chế X hoạt động". Test hành vi thật: `agent-kit test`.
+Self-consistency (grep-based, 50 checks): Production Real-World Lifecycle Audit Council
 Hội Đồng 50 Agents Kiểm Toán Toàn Diện Vòng Đời Sản Phẩm Thực Chiến
 
 10 Hội đồng Chuyên môn x 5 Agents = 50 Kiểm toán viên Độc lập:
@@ -62,7 +68,7 @@ class ProductionLifecycleAuditor:
             self.failed += 1
 
         self.council_results[council_name].append((agent_name, ok, reason))
-        print(f"┌── [Agent {agent_idx:02d}/50] {BOLD}{agent_name}{RESET} {status_str}")
+        print(f"┌── [Check {agent_idx:02d}/50] {BOLD}{agent_name}{RESET} {status_str}")
         print(f"│   • Nhiệm vụ: {task}")
         print(f"│   • Kết quả: {reason}")
         print(f"└── Phán quyết: {status_str}\n")
@@ -70,8 +76,8 @@ class ProductionLifecycleAuditor:
 
 def main():
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}{CYAN}   🚀 HỘI ĐỒNG 50 AGENTS KIỂM TOÁN VÒNG ĐỜI SẢN PHẨM PRODUCTION THỰC CHIẾN           {RESET}")
-    print(f"{BOLD}{CYAN}   Đánh giá: 10 Hội đồng Chuyên môn x 5 Agents rà soát toàn bộ vòng đời sản phẩm       {RESET}")
+    print(f"{BOLD}{CYAN}   🔎 Self-consistency check (grep-based): quy tắc vòng đời production trong DevKit {RESET}")
+    print(f"{BOLD}{CYAN}   Mỗi mục chỉ tìm chuỗi trong rules/tài liệu DevKit — KHÔNG chạy test, KHÔNG đọc code dự án{RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
     auditor = ProductionLifecycleAuditor()
@@ -385,9 +391,9 @@ def main():
     auditor.run_agent(10, c10, idx, "AntiFlappingRegressionLockAuditor", "Khóa hồi quy vĩnh viễn: Biến bài test thành chốt chặn không thể đảo ngược", test_48); idx += 1
 
     def test_49():
-        ok = "[8/8]" in post_fix_gate and "8-Layer" in post_fix_gate
-        return ok, "Cổng kiểm toán tự động 8 lớp post-fix gate được kích hoạt đầy đủ 100%"
-    auditor.run_agent(10, c10, idx, "EightLayerPostFixGateAuditor", "Bắt buộc vượt qua trọn vẹn 8 lớp kiểm toán tự động trước khi nghiệm thu", test_49); idx += 1
+        ok = "def run_git_hygiene_audit(" in post_fix_gate and "def run_anti_laziness_audit(" in post_fix_gate
+        return ok, "post-fix-gate.py còn các hàm quét tĩnh secret/placeholder (grep — không chứng minh hành vi)"
+    auditor.run_agent(10, c10, idx, "PostFixStaticChecksPresent", "Kiểm tra post-fix-gate còn các hàm quét tĩnh bắt buộc", test_49); idx += 1
 
     def test_50():
         ok = "Báo Cáo Nghiệm Thu 4 Mục" in core_rules and "badge PASS" in core_rules
@@ -398,19 +404,19 @@ def main():
     # TỔNG KẾT
     # =========================================================================
     print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-    print(f"{BOLD}TỔNG KẾT KIỂM TOÁN VÒNG ĐỜI SẢN PHẨM PRODUCTION (50 AGENTS COUNCIL):{RESET}")
-    print(f"  • Đạt chuẩn (PASS): {GREEN}{BOLD}{auditor.passed} / 50{RESET}")
+    print(f"{BOLD}TỔNG KẾT SELF-CONSISTENCY CHECK (GREP-BASED):{RESET}")
+    print(f"  {auditor.passed}/{auditor.passed + auditor.failed} checks passed")
+    print(f"  • Đạt chuẩn (PASS): {GREEN}{BOLD}{auditor.passed} / {auditor.passed + auditor.failed}{RESET}")
     print(f"  • Thất bại (FAIL):  {RED}{BOLD}{auditor.failed}{RESET}")
-    print(f"  • Tỷ lệ đáp ứng:     {GREEN}{BOLD}{(auditor.passed / 50) * 100:.1f}%{RESET}")
+    print(f"  • Tỷ lệ:            {GREEN}{BOLD}{(auditor.passed / max(1, auditor.passed + auditor.failed)) * 100:.1f}%{RESET}")
     print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
     if auditor.failed == 0:
-        print(f"{GREEN}{BOLD}✔ 50/50 AGENTS XÁC NHẬN: TOÀN BỘ VÒNG ĐỜI SẢN PHẨM ĐÃ ĐẠT CHUẨN HOÀN HẢO 10/10!{RESET}")
-        print(f"  Hệ thống vững chắc trên cả 10 phương diện: Kiến trúc, An ninh, Hiệu năng, Chịu lỗi mạng,")
-        print(f"  Di trú CSDL, Miễn dịch sập app, Giám sát PII, Trải nghiệm a11y, Kỷ luật code và Kiểm thử CI/CD.\n")
+        print(f"{GREEN}{BOLD}✔ Mọi quy tắc được tìm đều có mặt trong rules/tài liệu DevKit.{RESET}")
+        print(f"  {DIM}(grep-based: KHÔNG chứng minh dự án tuân thủ các quy tắc này.){RESET}\n")
         return 0
     else:
-        print(f"{RED}{BOLD}✖ PHÁT HIỆN {auditor.failed} TIÊU CHÍ CHƯA ĐẠT! CẦN KHẮC PHỤC NGAY.{RESET}\n")
+        print(f"{RED}{BOLD}✖ {auditor.failed} check không tìm thấy chuỗi mong đợi.{RESET}\n")
         return 1
 
 if __name__ == "__main__":

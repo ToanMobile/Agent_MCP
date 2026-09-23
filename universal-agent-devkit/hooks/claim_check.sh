@@ -24,20 +24,28 @@
 # exit 0 = allow. Reads `last_assistant_message` from stdin (verified reliable;
 # transcript tail can lag at Stop-fire time).
 #
-# Loop guard: if stop_hook_active is true we already forced one correction —
-# exit 0 so Claude can stop (no infinite block loop). bash 3.2 compatible.
+# Loop guard: this is a REMINDER gate, not fail-closed. On re-Stop
+# (stop_hook_active) it may block CLAIM_CHECK_MAX_RESTOPS (default 1) more
+# time(s), then releases with a stderr warning + log line (no infinite loop).
+# bash 3.2 compatible.
 # ─────────────────────────────────────────────────────────────────────────────
 set -u
 
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOG_DIR="${REPO_ROOT}/.claude/audit-gate"
 mkdir -p "${LOG_DIR}"
+[ -f "${LOG_DIR}/.gitignore" ] || printf '*\n' > "${LOG_DIR}/.gitignore" 2>/dev/null || true
 LOG="${LOG_DIR}/claim_check.log"
 
 INPUT="$(cat)"
 
 # All logic in python3 (the macOS system interpreter); emit the block message
 # on fd 2 and signal block via a sentinel exit handled below.
+# QA K-4: without python3 this gate cannot run — say so instead of passing silently.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "⚠ claim_check: python3 không có — gate này KHÔNG chạy, kết quả không được kiểm." >&2
+  exit 0
+fi
 CLAIM_INPUT="${INPUT}" CLAIM_LOG="${LOG}" CLAIM_TS="$(date +%Y-%m-%dT%H:%M:%S)" \
 CLAIM_REPO="${REPO_ROOT}" \
 python3 <<'PY'
@@ -62,9 +70,42 @@ except Exception as e:
     logline(f"[{ts}] stdin parse fail: {e!r} — fail-open")
     sys.exit(0)
 
-# Loop guard: already forced one correction this stop-chain.
+# Loop guard (QA K-12, 2026-09-23). This is a REMINDER gate, not fail-closed:
+# Claude Code sets stop_hook_active on the Stop that follows a block, and a gate
+# that blocks forever wedges the session. Previously the very first re-Stop was
+# released silently. Now the chain is counted per session: the gate may block
+# CLAIM_CHECK_MAX_RESTOPS (default 1) more time(s) on re-Stop, then releases — loudly, to
+# stderr and the log — and the unverified claim becomes the model's duty.
+_sid = re.sub(r"[^A-Za-z0-9_-]", "_", str(d.get("session_id") or "default"))[:64] or "default"
+_chain = os.path.join(os.path.dirname(log_path) or ".", f"claim_check_stopchain_{_sid}")
+try:
+    _extra = int(os.environ.get("CLAIM_CHECK_MAX_RESTOPS", "1") or "1")
+except ValueError:
+    _extra = 1
+_chain_n = 0
 if d.get("stop_hook_active"):
-    sys.exit(0)
+    try:
+        _chain_n = int(open(_chain).read().strip() or "0") + 1
+    except Exception:
+        _chain_n = 1
+    try:
+        open(_chain, "w").write(str(_chain_n))
+    except Exception:
+        pass
+else:
+    try:
+        os.remove(_chain)
+    except Exception:
+        pass
+_real_exit = sys.exit
+def _guarded_exit(code=0):
+    if code == 2 and _chain_n > _extra:
+        logline(f"[{ts}] RELEASED on re-Stop #{_chain_n} — claim still unverified")
+        sys.stderr.write("⚠ claim_check: đã nhắc lại {} lần — THẢ Stop để tránh kẹt vòng lặp. "
+                         "Claim ở trên vẫn CHƯA được kiểm chứng.\n".format(_chain_n))
+        _real_exit(0)
+    _real_exit(code)
+sys.exit = _guarded_exit
 
 msg = d.get("last_assistant_message")
 if not isinstance(msg, str) or not msg.strip():
@@ -99,8 +140,18 @@ PA_CLAIMS = [
     ("grep",   re.compile(r"đã\s+grep\b", re.I)),
     ("logcat", re.compile(r"đã\s+(?:chạy\s+)?(?:check\s+)?logcat\b", re.I)),
     ("detekt", re.compile(r"đã\s+(?:chạy\s+)?(?:detekt|lint)\b", re.I)),
+    # English past-action claims (QA K-11, 2026-09-23): "I ran the full test
+    # suite", "all tests pass", "I built the app" were invisible before.
+    ("build",  re.compile(r"\bI(?:\s+have|'ve)?\s+(?:ran|run|executed|built|compiled)\s+(?:the\s+|a\s+)?"
+                          r"(?:(?:full|clean|release|debug|project|app)\s+)?(?:build|project|app|code)\b", re.I)),
+    ("test",   re.compile(r"\bI(?:\s+have|'ve)?\s+(?:ran|run|executed|re-?ran)\s+(?:the\s+|all\s+(?:the\s+)?)?"
+                          r"(?:(?:full|entire|whole|unit|integration|e2e|targeted)\s+)*(?:test|tests|test\s+suite|suite|specs?)\b", re.I)),
+    ("test",   re.compile(r"\ball\s+(?:\d+\s+)?(?:the\s+)?tests?\s+(?:now\s+)?(?:pass(?:ed|es)?|are\s+(?:passing|green)|green)\b", re.I)),
+    ("grep",   re.compile(r"\bI(?:\s+have|'ve)?\s+(?:grepped|searched\s+the\s+(?:code|codebase|repo))\b", re.I)),
+    ("detekt", re.compile(r"\bI(?:\s+have|'ve)?\s+(?:ran|run)\s+(?:the\s+)?(?:lint(?:er)?|detekt|eslint|ktlint|ruff|clippy)\b", re.I)),
 ]
-PA_HYP = re.compile(r"(nếu|giả sử|bạn nên|\bnên\b|should|\bif\b|\bsẽ\b|\bchưa\b|\bcần\b|\bkhông\b)", re.I)
+PA_HYP = re.compile(r"(nếu|giả sử|bạn nên|\bnên\b|should|\bif\b|\bsẽ\b|\bchưa\b|\bcần\b|\bkhông\b|"
+                    r"\bwill\b|\bwould\b|\bneed(?:s)?\s+to\b|\bnot\b|n't\b|\bonce\b|\bafter\b|\bplease\b|\bwhen\b)", re.I)
 
 # Scrub inline-code and quoted spans for Check C ONLY: quoting the rulebook
 # ("claim `đã chạy test` cần tool call") must not read as a past-action claim.
@@ -183,15 +234,22 @@ if tp and os.path.exists(tp):
                         evidence.add("logcat")
                     if name == "Bash":
                         cmd = str(inp.get("command", ""))
-                        if re.search(r"gradlew?.*\b(assemble|build|compile)", cmd):
+                        if re.search(r"gradlew?.*\b(assemble|build|compile)|\b(npm|yarn|pnpm|bun)\s+(run\s+)?build\b|"
+                                     r"\b(cargo|go|swift|dotnet|flutter)\s+build\b|\bxcodebuild\b|\btsc\b|"
+                                     r"\bmvn\s+(package|compile|install)\b|\bmake\b", cmd):
                             evidence.add("build")
-                        if re.search(r"gradlew?.*test|connectedAndroidTest|\bnode\s+--test\b|\bpytest\b|python\S*\s+-m\s+pytest", cmd):
+                        # Multi-runner (QA K-11): npm/jest/vitest/cargo/go/swift/xcodebuild/… not just gradle.
+                        if re.search(r"gradlew?.*test|connectedAndroidTest|\bnode\s+--test\b|\bpytest\b|python\S*\s+-m\s+(pytest|unittest)|"
+                                     r"\b(npm|yarn|pnpm|bun)\s+(run\s+)?test|\b(npx\s+)?(jest|vitest|mocha)\b|"
+                                     r"\b(cargo|go|swift|dotnet|flutter|deno)\s+test\b|\bxcodebuild\b.*\btest\b|"
+                                     r"\bmvn\s+(test|verify)\b|\bmake\s+(test|check)\b|\bctest\b|\brspec\b|\bphpunit\b|"
+                                     r"\bbash\s+\S*test\S*\.sh\b", cmd):
                             evidence.add("test")
                         if re.search(r"\b(?:grep|rg)\b", cmd):
                             evidence.add("grep")
                         if "logcat" in cmd:
                             evidence.add("logcat")
-                        if re.search(r"\b(detekt|lint)\b", cmd):
+                        if re.search(r"\b(detekt|lint|eslint|ktlint|ruff|flake8|swiftlint|clippy|golangci-lint|mypy)\b", cmd):
                             evidence.add("detekt")
 else:
     logline(f"[{ts}] transcript unreadable ({tp!r}) — fail-open")

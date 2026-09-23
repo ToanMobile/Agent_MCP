@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/hooks/test_evidence_gate.sh
+../../hooks/test_evidence_gate.sh

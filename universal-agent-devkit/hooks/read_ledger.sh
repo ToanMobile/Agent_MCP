@@ -34,13 +34,22 @@ set -u
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOG_DIR="${REPO_ROOT}/.claude/audit-gate"
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
+[ -f "${LOG_DIR}/.gitignore" ] || printf '*\n' > "${LOG_DIR}/.gitignore" 2>/dev/null || true
 
 # Drain stdin before any early exit, otherwise the caller gets EPIPE.
 INPUT="$(cat)"
 
-[ "${READ_LEDGER:-1}" = "0" ] && exit 0
+if [ "${READ_LEDGER:-1}" = "0" ]; then
+  echo "[$(date +%Y-%m-%dT%H:%M:%S)] READ_LEDGER=0 — gate bypassed" >> "${LOG_DIR}/read_ledger.log" 2>/dev/null
+  exit 0
+fi
 
-RL_INPUT="${INPUT}" RL_LEDGER="${LOG_DIR}/read_ledger.tsv" python3 <<'PY' 2>/dev/null || true
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "⚠ read_ledger: python3 không có — không ghi được sổ Read (precode_gate sẽ chặn nhiều hơn)." >&2
+  exit 0
+fi
+
+RL_INPUT="${INPUT}" RL_LEDGER="${LOG_DIR}/read_ledger.tsv" RL_REPO="${REPO_ROOT}" python3 <<'PY' 2>/dev/null || true
 import os, sys, json
 
 raw    = os.environ.get("RL_INPUT", "")
@@ -62,18 +71,25 @@ if not isinstance(path, str) or not path:
     sys.exit(0)
 
 # Only source files matter here; precode_gate ignores everything else anyway.
-if not path.endswith((".kt", ".java")):
+# Keep in sync with SRC_EXT in precode_gate.sh.
+SRC_EXT = (".kt", ".kts", ".java", ".swift", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".py",
+           ".go", ".rs", ".dart", ".cs", ".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".mm")
+if not path.endswith(SRC_EXT):
     sys.exit(0)
 
 session = d.get("session_id") or ""
 if not isinstance(session, str):
     session = ""
 
-base = os.path.basename(path)
+# Resolved absolute path (QA K-9): a basename cannot tell a/Util.kt from b/Util.kt.
+repo = os.environ.get("RL_REPO", "") or os.getcwd()
+full = os.path.realpath(path if os.path.isabs(path) else os.path.join(repo, path))
+if "\t" in full or "\n" in full:
+    sys.exit(0)
 
 try:
     with open(ledger, "a") as fh:
-        fh.write(f"{session}\t{base}\n")
+        fh.write(f"{session}\t{full}\n")
 except Exception:
     sys.exit(0)
 

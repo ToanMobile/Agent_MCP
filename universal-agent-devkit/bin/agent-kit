@@ -9,33 +9,46 @@ CMD="${1:-help}"
 
 case "$CMD" in
   init|setup)
-    TARGET="${2:-$PWD}"
-    shift $(($# > 0 ? 1 : 0)) || true
-    if [ -c /dev/tty ]; then
-      bash "$DEVKIT_ROOT/bin/install.sh" --target="$TARGET" --domain=auto --mode=symlink "$@" < /dev/tty
-    else
-      bash "$DEVKIT_ROOT/bin/install.sh" --target="$TARGET" --domain=auto --mode=symlink "$@"
+    shift
+    # `init [path] [install.sh options]`: an optional leading non-flag argument is the
+    # target; everything else goes to install.sh untouched. install.sh reads its menus
+    # from /dev/tty itself when one can actually be opened, so no stdin redirection
+    # here (a merely *existing* /dev/tty fails to open under CI / agent runners).
+    TARGET="$PWD"
+    if [ $# -gt 0 ] && [[ "$1" != -* ]]; then
+      TARGET="$1"
+      shift
     fi
+    exec bash "$DEVKIT_ROOT/bin/install.sh" --target="$TARGET" --domain=auto --mode=symlink "$@"
     ;;
   install-global)
     INSTALL_DIR="${HOME}/.local/bin"
     mkdir -p "$INSTALL_DIR"
     ln -sf "$DEVKIT_ROOT/bin/agent-kit" "$INSTALL_DIR/agent-kit"
     ln -sf "$DEVKIT_ROOT/bin/install.sh" "$INSTALL_DIR/agent-install"
-    echo "✓ Global CLI installed to $INSTALL_DIR/agent-kit"
+    ln -sf "$DEVKIT_ROOT/bin/post-fix-gate.py" "$INSTALL_DIR/postfix-gate"
+    echo "✓ Global CLI installed to $INSTALL_DIR/agent-kit (+ agent-install, postfix-gate)"
     echo "Ensure '$INSTALL_DIR' is in your PATH."
     echo "You can now run 'agent-kit init' inside any project directory!"
     ;;
   test|check)
     echo "================================================================="
-    echo "  🧪 Running Hook Contract Tests (160 cases)..."
+    echo "  🧪 Running Hook Contract Tests..."
     echo "================================================================="
-    bash "$DEVKIT_ROOT/hooks/tests/hook_contract_test.sh"
+    bash "$DEVKIT_ROOT/hooks/tests/hook_contract_test.sh" || exit 1
     echo
     echo "================================================================="
-    echo "  ⚡ Running Workflow Engine Tests (134 cases)..."
+    echo "  ⚡ Running Workflow Engine Tests..."
     echo "================================================================="
-    node --test "$DEVKIT_ROOT/workflows"/*.test.mjs
+    node --test "$DEVKIT_ROOT/workflows"/*.test.mjs || exit 1
+    echo
+    echo "================================================================="
+    echo "  🧰 Running Installer & Gate Regression Tests..."
+    echo "================================================================="
+    for t in "$DEVKIT_ROOT"/tests/test_*.sh; do
+      echo "▶ $(basename "$t")"
+      bash "$t" || exit 1
+    done
     ;;
   sync)
     echo "Synchronizing commands and skills..."
@@ -87,12 +100,13 @@ Usage:
   agent-kit <command> [arguments]
 
 Commands:
-  init [path]         Initialize AI agents (interactive menu or --agents flag)
-  install-global      Install 'agent-kit' globally into ~/.local/bin
-  profile [name]      Switch or inspect domain profile (automotive, android, game, universal)
-  health              Run comprehensive health & quality audit diagnostic
-  gate                Execute post-fix 5-layer quality & regression audit
-  test                Run 294+ regression tests (160 hooks, 134 workflows)
+  init [path] [opts]  Initialize AI agents in a project (opts are passed to install.sh,
+                      e.g. -y, -p android, -a claude,cursor, -m copy, --lang=vi)
+  install-global      Install 'agent-kit', 'agent-install' and 'postfix-gate' into ~/.local/bin
+  profile [opts]      Switch or inspect domain profile (see: agent-kit profile --help)
+  health              Run the health diagnostic
+  gate                Run the post-fix static diff gate on the current changes
+  test                Run all regression suites (hook contract, workflow engine, installer & gate)
   sync                Resync skills, slash commands, and aliases
   list                List all curated skills
   commands            List all available slash commands
@@ -101,11 +115,12 @@ Commands:
 
 Examples:
   agent-kit init                   # Interactive setup for current project
+  agent-kit init ../my-app -y      # Non-interactive setup of another project
   agent-kit list-old               # Inspect preserved *_old folders and files
-  agent-kit profile automotive     # Switch domain profile to Automotive (AAOS/CAN)
-  agent-kit health                 # Run 100-point diagnostic audit
+  agent-kit profile -p automotive  # Switch domain profile to Automotive (AAOS/CAN)
+  agent-kit health                 # Run the health diagnostic
   agent-kit gate                   # Run post-fix quality gate
-  agent-kit test                   # Run all 294 regression tests
+  agent-kit test                   # Run all regression suites
 HELP_EOF
     ;;
 esac

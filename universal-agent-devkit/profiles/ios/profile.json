@@ -1,0 +1,22 @@
+{
+  "id": "ios",
+  "name": "iOS (Swift / SwiftUI / Swift Concurrency / XCTest)",
+  "description": "Mobile iOS application engineering focusing on Swift 6, SwiftUI, Swift Concurrency (@MainActor), retain cycle elimination ([weak self]), and memory management.",
+  "essential_mcps": [
+    "codebase-memory-mcp",
+    "context7"
+  ],
+  "active_councils": [
+    "01-subsystem-shared-flow.md",
+    "02-architecture-blast-radius.md",
+    "03-zero-defect-tdd.md",
+    "04-deterministic-ocr-review.md",
+    "05-security-vulnerability.md",
+    "07-performance-anr.md",
+    "08-tiered-memory-governance.md",
+    "09-solo-dev-workflow.md",
+    "10-standards-compliance-delivery.md"
+  ],
+  "rules_file": "profiles/ios/rules/ios-rules.md",
+  "regression_matrix": "profiles/ios/regression_matrix.json"
+}

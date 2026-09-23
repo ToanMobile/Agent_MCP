@@ -3,7 +3,8 @@
 set -euo pipefail
 
 TARGET_DIR="${1:-$PWD}"
-DEVKIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd -P || echo "$TARGET_DIR")"
+DEVKIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 MODE="${2:-symlink}" # symlink or copy
 LANGUAGE="${3:-en}"
 SKIP_EXISTING="${SKIP_EXISTING:-0}"
@@ -12,17 +13,14 @@ source "$DEVKIT_ROOT/scripts/backup_conflict.sh"
 
 echo "Configuring Antigravity / Google Gemini for: $TARGET_DIR (mode: $MODE, lang: $LANGUAGE, skip_existing: $SKIP_EXISTING)"
 
-if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
-  backup_dir_if_user_content "$TARGET_DIR/.agents/skills" "$DEVKIT_ROOT"
-fi
 mkdir -p "$TARGET_DIR/.agents/skills"
 
 # 1. Non-Destructive Smart Merge for AGENTS.md, GEMINI.md, and Agent.md
 if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
-  if [ -f "$TARGET_DIR/GEMINI.md" ] && [ ! -f "$TARGET_DIR/GEMINI_old.md" ]; then
+  if [ -f "$TARGET_DIR/GEMINI.md" ] && [ ! -f "$TARGET_DIR/GEMINI_old.md" ] && ! grep -q "universal-agent-devkit" "$TARGET_DIR/GEMINI.md" 2>/dev/null; then
     cp "$TARGET_DIR/GEMINI.md" "$TARGET_DIR/GEMINI_old.md"
   fi
-  if [ -f "$TARGET_DIR/Agent.md" ] && [ ! -f "$TARGET_DIR/Agent_old.md" ]; then
+  if [ -f "$TARGET_DIR/Agent.md" ] && [ ! -f "$TARGET_DIR/Agent_old.md" ] && ! grep -q "universal-agent-devkit" "$TARGET_DIR/Agent.md" 2>/dev/null; then
     cp "$TARGET_DIR/Agent.md" "$TARGET_DIR/Agent_old.md"
   fi
 fi
@@ -34,29 +32,11 @@ if [ -f "$TARGET_DIR/GEMINI.md" ] || [ -f "$TARGET_DIR/Agent.md" ]; then
   python3 "$DEVKIT_ROOT/scripts/merge_markdown.py" "$GEMINI_INJECT" "$GEMINI_TARGET" "universal-agent-devkit"
 fi
 
-if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
-  if [ -f "$TARGET_DIR/AGENTS.md" ] && [ ! -L "$TARGET_DIR/AGENTS.md" ]; then
-    if [ ! -f "$TARGET_DIR/AGENTS_old.md" ]; then
-      cp "$TARGET_DIR/AGENTS.md" "$TARGET_DIR/AGENTS_old.md"
-      echo "  - Preserved original AGENTS.md as AGENTS_old.md"
-    fi
-    AGENTS_INJECT="$DEVKIT_ROOT/templates/agents_injection_block.md"
-    python3 "$DEVKIT_ROOT/scripts/merge_markdown.py" "$AGENTS_INJECT" "$TARGET_DIR/AGENTS.md" "universal-agent-devkit"
-    echo "  - Injected DevKit standards into existing AGENTS.md (Preserved custom architecture)"
-  elif [ ! -f "$TARGET_DIR/AGENTS.md" ]; then
-    if [ "$MODE" = "symlink" ]; then
-      ln -sfn "$DEVKIT_ROOT/AGENTS.md" "$TARGET_DIR/AGENTS.md"
-    else
-      cp "$DEVKIT_ROOT/AGENTS.md" "$TARGET_DIR/AGENTS.md"
-    fi
-    echo "  - Created AGENTS.md link to DevKit SSOT"
-  fi
-fi
+# AGENTS.md: shared logic (devkit link/copy vs the project's own file) — see backup_conflict.sh
+devkit_install_agents_md "$TARGET_DIR" "$MODE"
 
 # 2. Additive Merge for mcp_config.json
-if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ] && [ -f "$TARGET_DIR/mcp_config.json" ] && [ ! -f "$TARGET_DIR/mcp_config_old.json" ]; then
-  cp "$TARGET_DIR/mcp_config.json" "$TARGET_DIR/mcp_config_old.json"
-fi
+# merge_json.py backs up mcp_config.json itself (as mcp_config_old.json) only when the merge changes it.
 python3 "$DEVKIT_ROOT/scripts/merge_json.py" "$DEVKIT_ROOT/mcp/mcp_config.json" "$TARGET_DIR/mcp_config.json"
 echo "  - Merged MCP servers into mcp_config.json (preserved existing custom MCPs)"
 
@@ -69,15 +49,7 @@ for skill in "$DEVKIT_ROOT/skills"/*; do
     echo "  - Preserved custom skill: $skill_name (--skip-existing active)"
     continue
   fi
-  if [ -e "$target_skill_path" ] && [ ! -L "$target_skill_path" ]; then
-    backup_conflict "$target_skill_path" "$DEVKIT_ROOT"
-  fi
-  rm -rf "$target_skill_path"
-  if [ "$MODE" = "symlink" ]; then
-    ln -sfn "$skill" "$target_skill_path"
-  else
-    cp -R "$skill" "$target_skill_path"
-  fi
+  devkit_place "$skill" "$target_skill_path" "$MODE"
 done
 
 # Clean broken symlinks if any

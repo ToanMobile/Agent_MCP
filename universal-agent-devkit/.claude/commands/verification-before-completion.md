@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/commands/verification-before-completion.md
+../../commands/verification-before-completion.md

@@ -83,6 +83,42 @@
 
 ---
 
+### [INSTINCT-V01] Bẫy Lệch Sample Rate & Trôi Buffer Âm Thanh (16kHz vs 48kHz)
+- **Hiện tượng lỗi:** Mô hình nhận diện giọng nói (ASR) hoặc Wake-Word Engine (Porcupine/Snowboy/Sherpa-ONNX) nhận dạng sai lệch, phát sinh tiếng rè rít (Aliasing / Artifacts) hoặc buffer bị tràn sau vài phút ghi âm liên tục.
+- **Nguyên nhân gốc rễ:** Microphone xe hơi AAOS và Audio HAL phần cứng mặc định thu ở tần số 48kHz (hoặc 44.1kHz), trong khi model ASR/Wake-Word được huấn luyện ở 16kHz mono. Sử dụng thuật toán Resampling sơ sài (hoặc bỏ qua resampler) gây biến dạng phổ âm thanh.
+- **Quy tắc bắt buộc:** 
+  1. Sử dụng Polyphase Resampler hoặc thư viện chuẩn (như Oboe / WebRTC Resampler) để chuyển đổi từ 48kHz về 16kHz với anti-aliasing filter.
+  2. Sử dụng Ring Buffer (Circular Buffer) thread-safe có dung lượng cố định (ví dụ: 1000ms audio) để phân tách giữa Audio Record Thread và Processing Thread.
+
+---
+
+### [INSTINCT-V02] Bẫy Mất Audio Focus Tạm Thời (Audio Focus Transient Loss)
+- **Hiện tượng lỗi:** Trợ lý ảo đang nói câu phản hồi (TTS) thì hệ thống phát thông báo dẫn đường (Navigation Turn-by-Turn) hoặc tiếng còi xe cảnh báo khẩn cấp, dẫn đến 2 luồng âm thanh đè lên nhau gây chói tai và vi phạm tiêu chuẩn HMI xe hơi.
+- **Nguyên nhân gốc rễ:** Không đăng ký `AudioManager.OnAudioFocusChangeListener` hoặc bỏ qua sự kiện `AUDIOFOCUS_LOSS_TRANSIENT` / `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`.
+- **Quy tắc bắt buộc:** 
+  1. Khi nhận `AUDIOFOCUS_LOSS_TRANSIENT`: Tạm dừng TTS ngay tức thì, lưu lại vị trí text đang đọc dở để resume khi nhận `AUDIOFOCUS_GAIN`.
+  2. Khi nhận `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK`: Lập tức giảm âm lượng TTS xuống 20–30% để ưu tiên chỉ dẫn an toàn lái xe.
+
+---
+
+### [INSTINCT-V03] Bẫy Giữ Khóa Microphone Chạy Ngầm (Microphone Background Leak)
+- **Hiện tượng lỗi:** Ứng dụng thoát ra màn hình Home hoặc màn hình tắt, nhưng đèn báo quyền riêng tư Microphone (chấm cam/xanh trên thanh trạng thái Android 12+) vẫn sáng liên tục; gây hao pin và bị Google Play / OEM từ chối kiểm duyệt bảo mật.
+- **Nguyên nhân gốc rễ:** Quên gọi `audioRecord.stop()` và `audioRecord.release()` trong `onPause()` / `onStop()` hoặc khi voice session kết thúc.
+- **Quy tắc bắt buộc:** 
+  1. Bắt buộc giải phóng `AudioRecord` ngay khi trạng thái Voice State chuyển sang `IDLE` hoặc ứng dụng rơi vào background (trừ khi có Foreground Service được cấp quyền đặc biệt `FOREGROUND_SERVICE_TYPE_MICROPHONE`).
+  2. Bọc `AudioRecord` lifecycle trong Coroutine Scope gắn liền với `LifecycleOwner`.
+
+---
+
+### [INSTINCT-V04] Bẫy Âm Dội Loa Ngoài Tự Kích Hoạt Trợ Lý Ảo (AEC Self-Triggering)
+- **Hiện tượng lỗi:** Xe hơi đang bật nhạc to từ Spotify/Radio, trợ lý ảo bất ngờ tự kích hoạt ("Ma gọi"), hoặc trợ lý vừa đọc xong một câu thì câu nói đó tự kích hoạt lại chính nó lặp đi lặp lại.
+- **Nguyên nhân gốc rễ:** Thuật toán Acoustic Echo Cancellation (AEC) thiếu kênh Reference Loopback tín hiệu loa ngoài (Far-End reference stream) từ CarAudioService.
+- **Quy tắc bắt buộc:** 
+  1. Yêu cầu Audio HAL hỗ trợ Hardware AEC hoặc kết nối Software AEC với đúng Submix Loopback stream của CarAudioService.
+  2. Tạm thời tắt (mute) ASR buffer input trong suốt khoảng thời gian TTS nội bộ đang phát âm thanh, trừ khi tính năng Barge-in (nói chen ngang) được cấu hình phần cứng chuyên dụng.
+
+---
+
 ## 2. Nhật Ký Bẫy Mã Nguồn Bổ Sung (Dành cho Dev / Agent thêm mới)
 
 <!--

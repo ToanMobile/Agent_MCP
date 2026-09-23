@@ -1,5 +1,5 @@
 ---
-name: exampleapp-code-reviewer
+name: principal-code-reviewer
 description: Review non-trivial Kotlin/Java changes, crash/file/auth/navigation/lifecycle/security fixes, or multi-file diffs in App. Default scope is the task-owned uncommitted diff; report evidence-backed findings without editing.
 model: opus
 color: orange

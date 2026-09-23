@@ -27,11 +27,17 @@ set -u
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOG_DIR="${REPO_ROOT}/.claude/audit-gate"
 mkdir -p "${LOG_DIR}"
+[ -f "${LOG_DIR}/.gitignore" ] || printf '*\n' > "${LOG_DIR}/.gitignore" 2>/dev/null || true
 LOG="${LOG_DIR}/review_gate.log"
 MAX_ATTEMPTS="${REVIEW_GATE_MAX_ATTEMPTS:-3}"
 
 INPUT="$(cat)"
 
+# QA K-4: without python3 this gate cannot run — say so instead of passing silently.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "⚠ review_gate: python3 không có — gate này KHÔNG chạy, kết quả không được kiểm." >&2
+  exit 0
+fi
 CLAIM_INPUT="${INPUT}" CLAIM_LOG="${LOG}" CLAIM_TS="$(date +%Y-%m-%dT%H:%M:%S)" \
 CLAIM_REPO="${REPO_ROOT}" CLAIM_LOGDIR="${LOG_DIR}" CLAIM_MAX="${MAX_ATTEMPTS}" \
 python3 <<'PY'
@@ -42,11 +48,14 @@ log     = os.environ.get("CLAIM_LOG", "/dev/null")
 ts      = os.environ.get("CLAIM_TS", "?")
 repo    = os.environ.get("CLAIM_REPO", ".")
 logdir  = os.environ.get("CLAIM_LOGDIR", ".")
-maxatt  = int(os.environ.get("CLAIM_MAX", "3") or "3")
+try:
+    maxatt = int(os.environ.get("CLAIM_MAX", "3") or "3")
+except ValueError:          # QA K-6: non-numeric env var → default, not a crash
+    maxatt = 3
 
 REVIEW_AGENTS = {
     # App project agents (AGENTS.md / CLAUDE.md)
-    "exampleapp-code-reviewer",
+    "principal-code-reviewer", "exampleapp-code-reviewer",
     "test-architect-seti",
     "android-principal-architect",
     # legacy / optional plugin reviewer agents

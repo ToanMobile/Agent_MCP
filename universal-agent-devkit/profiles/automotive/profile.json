@@ -15,7 +15,7 @@
     "05-security-vulnerability.md",
     "07-performance-anr.md",
     "08-tiered-memory-governance.md",
-    "10-automotive-compliance.md"
+    "02-automotive-compliance.md"
   ],
   "regression_matrix": "profiles/automotive/regression_matrix.json",
   "rules_file": "profiles/automotive/rules/automotive-rules.md"

@@ -3,7 +3,8 @@
 set -euo pipefail
 
 TARGET_DIR="${1:-$PWD}"
-DEVKIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd -P || echo "$TARGET_DIR")"
+DEVKIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 MODE="${2:-symlink}" # symlink or copy
 LANGUAGE="${3:-en}"
 SKIP_EXISTING="${SKIP_EXISTING:-0}"
@@ -25,118 +26,31 @@ fi
 CLAUDE_INJECT="$DEVKIT_ROOT/templates/claude_injection_block.md"
 python3 "$DEVKIT_ROOT/scripts/merge_markdown.py" "$CLAUDE_INJECT" "$TARGET_DIR/CLAUDE.md" "universal-agent-devkit"
 
-if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ]; then
-  if [ -f "$TARGET_DIR/AGENTS.md" ] && [ ! -L "$TARGET_DIR/AGENTS.md" ]; then
-    # Target already has its own custom AGENTS.md -> Preserve as AGENTS_old.md and Inject DevKit block
-    if [ ! -f "$TARGET_DIR/AGENTS_old.md" ]; then
-      cp "$TARGET_DIR/AGENTS.md" "$TARGET_DIR/AGENTS_old.md"
-      echo "  - Preserved original AGENTS.md as AGENTS_old.md"
-    fi
-    AGENTS_INJECT="$DEVKIT_ROOT/templates/agents_injection_block.md"
-    python3 "$DEVKIT_ROOT/scripts/merge_markdown.py" "$AGENTS_INJECT" "$TARGET_DIR/AGENTS.md" "universal-agent-devkit"
-    echo "  - Injected DevKit standards into existing AGENTS.md (Preserved custom architecture)"
-  elif [ ! -f "$TARGET_DIR/AGENTS.md" ]; then
-    if [ "$MODE" = "symlink" ]; then
-      ln -sfn "$DEVKIT_ROOT/AGENTS.md" "$TARGET_DIR/AGENTS.md"
-    else
-      cp "$DEVKIT_ROOT/AGENTS.md" "$TARGET_DIR/AGENTS.md"
-    fi
-    echo "  - Created AGENTS.md link to DevKit SSOT"
-  fi
-fi
+# AGENTS.md: shared logic (devkit link/copy vs the project's own file) — see backup_conflict.sh
+devkit_install_agents_md "$TARGET_DIR" "$MODE"
 
 # 2. Additive Merge for .mcp.json
-if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ] && [ -f "$TARGET_DIR/.mcp.json" ] && [ ! -f "$TARGET_DIR/.mcp_old.json" ]; then
-  cp "$TARGET_DIR/.mcp.json" "$TARGET_DIR/.mcp_old.json"
-fi
+# merge_json.py backs up the file itself (as .mcp_old.json) only when the merge changes it.
 python3 "$DEVKIT_ROOT/scripts/merge_json.py" "$DEVKIT_ROOT/mcp/.mcp.json" "$TARGET_DIR/.mcp.json"
 echo "  - Merged MCP servers into .mcp.json (preserved existing custom MCPs)"
 
 # 3. Additive Merge for .claude/settings.json
-DEFAULT_SETTINGS="$DEVKIT_ROOT/templates/claude_settings.json"
-mkdir -p "$DEVKIT_ROOT/templates"
-cat << 'SETTINGS_EOF' > "$DEFAULT_SETTINGS"
-{
-  "permissions": {
-    "deny": [
-      "Read(**/build/**)",
-      "Read(**/.gradle/**)",
-      "Read(**/node_modules/**)",
-      "Read(**/dist/**)",
-      "Read(**/generated/**)",
-      "Read(**/*.apk)",
-      "Read(**/*.aab)",
-      "Read(**/*.hprof)"
-    ]
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR:-$PWD}\"/.claude/hooks/block-dangerous-git.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/hardware_safety_gate.sh\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/precode_gate.sh\"",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/churn_guard.sh\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/testsourceset_gate.sh\"",
-            "timeout": 60
-          },
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/test_evidence_gate.sh\"",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/security_gate.sh\"",
-            "timeout": 15
-          }
-        ]
-      }
-    ]
-  }
-}
-SETTINGS_EOF
+# Settings template = static base (permissions, env) from templates/claude_settings.json
+# + hooks generated from hooks/hooks.json, the single source of truth also used by the
+# plugin. Built in a temp file: installing must never rewrite files inside the devkit.
+DEFAULT_SETTINGS="$(mktemp "${TMPDIR:-/tmp}/devkit-settings.XXXXXX")"
+trap 'rm -f "$DEFAULT_SETTINGS"' EXIT
+python3 - "$DEVKIT_ROOT/templates/claude_settings.json" "$DEVKIT_ROOT/hooks/hooks.json" > "$DEFAULT_SETTINGS" <<'PY'
+import json, sys
+base = json.load(open(sys.argv[1], encoding="utf-8"))
+plugin = json.load(open(sys.argv[2], encoding="utf-8"))
+hooks = json.dumps(plugin.get("hooks", plugin))
+hooks = hooks.replace("${CLAUDE_PLUGIN_ROOT}/hooks/", "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/hooks/")
+base["hooks"] = json.loads(hooks)
+print(json.dumps(base, indent=2, ensure_ascii=False))
+PY
 
-if [ "$TARGET_DIR" != "$DEVKIT_ROOT" ] && [ -f "$TARGET_DIR/.claude/settings.json" ] && [ ! -f "$TARGET_DIR/.claude/settings_old.json" ]; then
-  cp "$TARGET_DIR/.claude/settings.json" "$TARGET_DIR/.claude/settings_old.json"
-fi
+# merge_json.py backs up settings.json itself (as settings_old.json) only when the merge changes it.
 
 python3 "$DEVKIT_ROOT/scripts/merge_json.py" "$DEFAULT_SETTINGS" "$TARGET_DIR/.claude/settings.json"
 echo "  - Merged safety gates into .claude/settings.json (preserved custom settings)"
@@ -150,15 +64,7 @@ for hook in "$DEVKIT_ROOT/hooks"/*; do
     echo "  - Preserved custom hook: $hook_name (--skip-existing active)"
     continue
   fi
-  if [ -e "$target_hook" ] && [ ! -L "$target_hook" ]; then
-    backup_conflict "$target_hook" "$DEVKIT_ROOT"
-  fi
-  rm -rf "$target_hook"
-  if [ "$MODE" = "symlink" ]; then
-    ln -sfn "$hook" "$target_hook"
-  else
-    cp -R "$hook" "$target_hook"
-  fi
+  devkit_place "$hook" "$target_hook" "$MODE"
 done
 
 # 5. Smart Item-by-Item Link for Commands (Preserving custom user commands)
@@ -170,15 +76,7 @@ for cmd in "$DEVKIT_ROOT/commands"/*; do
     echo "  - Preserved custom command: $cmd_name (--skip-existing active)"
     continue
   fi
-  if [ -e "$target_cmd" ] && [ ! -L "$target_cmd" ]; then
-    backup_conflict "$target_cmd" "$DEVKIT_ROOT"
-  fi
-  rm -rf "$target_cmd"
-  if [ "$MODE" = "symlink" ]; then
-    ln -sfn "$cmd" "$target_cmd"
-  else
-    cp -R "$cmd" "$target_cmd"
-  fi
+  devkit_place "$cmd" "$target_cmd" "$MODE"
 done
 
 # 6. Smart Item-by-Item Link for Agents (Preserving custom user subagents)
@@ -190,15 +88,7 @@ for agent in "$DEVKIT_ROOT/agents"/*; do
     echo "  - Preserved custom agent: $agent_name (--skip-existing active)"
     continue
   fi
-  if [ -e "$target_agent" ] && [ ! -L "$target_agent" ]; then
-    backup_conflict "$target_agent" "$DEVKIT_ROOT"
-  fi
-  rm -rf "$target_agent"
-  if [ "$MODE" = "symlink" ]; then
-    ln -sfn "$agent" "$target_agent"
-  else
-    cp -R "$agent" "$target_agent"
-  fi
+  devkit_place "$agent" "$target_agent" "$MODE"
 done
 
 # Clean broken symlinks if any

@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-50-Agent Council Audit for Universal Agent DevKit Perfection
+
+SELF-CONSISTENCY CHECK (GREP-BASED) — đọc trước khi tin kết quả:
+  Mỗi "agent"/"council" bên dưới chỉ là MỘT phép tìm chuỗi/regex trong file của chính DevKit
+  (tài liệu, rules, test). Script KHÔNG chạy test, KHÔNG đọc code dự án người dùng và KHÔNG
+  chứng minh hành vi runtime. PASS nghĩa là "tài liệu/mã DevKit còn nhắc tới cơ chế X",
+  không phải "cơ chế X hoạt động". Test hành vi thật: `agent-kit test`.
+Self-consistency (grep-based, 50 checks): Council Audit for Universal Agent DevKit Perfection
 Hội Đồng 50 Agents Kiểm Toán Toàn Diện Độ Hoàn Hảo Của Agent System
 
 10 Hội Đồng x 5 Agents = 50 Kiểm Toán Viên Độc Lập:
@@ -73,7 +79,7 @@ class AgentPerfectionAuditor:
 
     def print_report(self):
         print(f"\n{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-        print(f"{BOLD}{CYAN}      🏛️  HỘI ĐỒNG 50 AGENTS KIỂM TOÁN ĐỘ HOÀN HẢO CỦA UNIVERSAL AGENT DEVKIT          {RESET}")
+        print(f"{BOLD}{CYAN}      🔎 Self-consistency check (grep-based): cấu hình & tài liệu DevKit              {RESET}")
         print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
         for c_name, agents in self.council_results.items():
@@ -82,7 +88,7 @@ class AgentPerfectionAuditor:
             c_color = GREEN if c_pass == c_total else RED
             print(f"{BOLD}━━━ {c_name} ({c_color}{c_pass}/{c_total} PASS{RESET}{BOLD}) ━━━{RESET}\n")
             for a in agents:
-                print(f"┌── [Agent {a['idx']:02d}/50] {BOLD}{a['name']}{RESET} {a['status_str']}")
+                print(f"┌── [Check {a['idx']:02d}/50] {BOLD}{a['name']}{RESET} {a['status_str']}")
                 print(f"│   • Nhiệm vụ: {a['task']}")
                 print(f"│   • Kết quả: {a['reason']}")
                 print(f"└── Phán quyết: {a['status_str']}\n")
@@ -92,18 +98,18 @@ class AgentPerfectionAuditor:
         overall_color = GREEN if self.failed == 0 else RED
 
         print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}")
-        print(f"{BOLD}TỔNG KẾT ĐÁNH GIÁ ĐỘ HOÀN HẢO TỪ 50 AGENTS COUNCIL:{RESET}")
+        print(f"{BOLD}TỔNG KẾT SELF-CONSISTENCY CHECK (GREP-BASED):{RESET}")
+        print(f"  {self.passed}/{total} checks passed")
         print(f"  • Đạt chuẩn (PASS): {GREEN}{self.passed} / {total}{RESET}")
         print(f"  • Thất bại (FAIL):  {RED if self.failed > 0 else GREEN}{self.failed}{RESET}")
-        print(f"  • Tỷ lệ hoàn hảo:   {overall_color}{rate:.1f}%{RESET}")
+        print(f"  • Tỷ lệ:            {overall_color}{rate:.1f}%{RESET}")
         print(f"{BOLD}{CYAN}══════════════════════════════════════════════════════════════════════════════════════{RESET}\n")
 
         if self.failed == 0:
-            print(f"{BOLD}{GREEN}✔ 50/50 AGENTS ĐỒNG THUẬN TUYỆT ĐỐI: AGENT SYSTEM ĐÃ ĐẠT CHUẨN HOÀN HẢO 10/10!{RESET}")
-            print(f"{DIM}  Hệ thống sắc bén, tự động hóa zero-touch, catalog 23 skills không redundancy,{RESET}")
-            print(f"{DIM}  tích hợp AST self-healing, Paired Oracle, bảo mật secret và kiểm toán 8 lớp.{RESET}\n")
+            print(f"{BOLD}{GREEN}✔ Mọi chuỗi/cơ chế được tìm đều có mặt trong file DevKit.{RESET}")
+            print(f"{DIM}  (grep-based: không chứng minh hành vi runtime — chạy `agent-kit test` để kiểm hành vi.){RESET}\n")
         else:
-            print(f"{BOLD}{RED}✖ CÒN {self.failed} ĐIỂM NGHẼN CHƯA ĐẠT CHUẨN HOÀN HẢO. VUI LÒNG XỬ LÝ TRƯỚC KHI BÀN GIAO.{RESET}\n")
+            print(f"{BOLD}{RED}✖ {self.failed} check không tìm thấy chuỗi mong đợi — tài liệu/mã DevKit đã lệch.{RESET}\n")
 
 
 def run_full_audit() -> int:
@@ -474,9 +480,10 @@ def run_full_audit() -> int:
 
     def t46():
         gate = auditor.read_file("bin/post-fix-gate.py")
-        ok = "[1/8]" in gate and "[8/8]" in gate and "Kiểm toán" in gate
-        return ok, "Cổng kiểm toán post-fix gate 8 lớp được thiết lập toàn diện từ AST, bảo mật tới a11y"
-    auditor.run_agent(10, C10, 46, "PostFixEightLayerGateAuditor", "Kiểm tra cổng kiểm toán chất lượng hậu sửa lỗi đầy đủ 8 lớp", t46)
+        ok = all(f"def {fn}(" in gate for fn in ("run_git_hygiene_audit", "run_anti_laziness_audit",
+                                                   "run_performance_audit", "run_resilience_audit", "run_logging_audit"))
+        return ok, "post-fix-gate.py còn đủ 5 hàm quét tĩnh (regex) — không chứng minh chúng bắt đúng lỗi"
+    auditor.run_agent(10, C10, 46, "PostFixStaticChecksPresent", "Kiểm tra post-fix-gate.py còn đủ 5 hàm quét tĩnh", t46)
 
     def t47():
         gate = auditor.read_file("bin/post-fix-gate.py")

@@ -1,6 +1,6 @@
 # /profile — Switch or Inspect Project Domain Profile
 
-Switch between or view active domain profiles (`automotive`, `android`, `game`, `universal`).
+Switch between or view active domain profiles (`automotive`, `android`, `game`, `universal`, `voice-assistant`, `ios`).
 
 ## Commands & Aliases
 - `/profile`
@@ -18,4 +18,4 @@ agent-profile --set <profile_name>
 python3 bin/agent-config.py --profile <profile_name>
 ```
 
-Supported profiles: `automotive`, `android`, `game`, `universal`.
+Supported profiles: `automotive`, `android`, `game`, `universal`, `voice-assistant`, `ios`.

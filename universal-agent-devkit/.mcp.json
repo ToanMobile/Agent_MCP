@@ -47,7 +47,7 @@
     "antigravity-pm": {
       "command": "node",
       "args": [
-        "/Volumes/Data/Toan/Agent_MCP/antigravity-pm-mcp/bin/antigravity-pm-mcp.js"
+        "../antigravity-pm-mcp/bin/antigravity-pm-mcp.js"
       ]
     }
   }

@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/agents/test-architect-seti.md
+../../agents/test-architect-seti.md

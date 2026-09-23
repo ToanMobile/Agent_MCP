@@ -1,1 +1,1 @@
-/Volumes/Data/Toan/Agent_MCP/universal-agent-devkit/commands/codebase-memory.md
+../../commands/codebase-memory.md
