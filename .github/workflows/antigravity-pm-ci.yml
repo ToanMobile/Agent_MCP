@@ -1,0 +1,51 @@
+name: antigravity-pm-mcp CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "antigravity-pm-mcp/**"
+      - ".github/workflows/antigravity-pm-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "antigravity-pm-mcp/**"
+      - ".github/workflows/antigravity-pm-ci.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: antigravity-pm-mcp
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ["20", "22"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (node --check)
+        run: npm run lint
+
+      # Offline suite: no Antigravity needed. Tests write PM state under a temp
+      # ANTIGRAVITY_PM_STATE_HOME (see tests/helpers.js), never the runner's HOME.
+      - name: Test
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          npm test
