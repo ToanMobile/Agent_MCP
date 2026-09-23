@@ -106,14 +106,27 @@ corresponding-looking issue in Play Console.
 For remote access or public deployments, run the server with streamable-http transport:
 
 ```bash
+export PLAY_STORE_MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
 play-store-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
+
+> **Security:** every tool (including `deploy_app`, `refund_order`, `delete_user`) runs
+> with the server's service account, so a network-exposed server must authenticate its
+> callers. With `PLAY_STORE_MCP_AUTH_TOKEN` set, every HTTP request (except `/health` and
+> `/credentials`, which has its own check) must send `Authorization: Bearer <token>`.
+> Binding a non-loopback host without a token refuses to start unless you set
+> `PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED=1` (only for use behind an authenticating
+> reverse proxy). The default `127.0.0.1` bind needs neither.
 
 The server exposes a `/health` endpoint for monitoring.
 
 #### Per-Request Credentials (Recommended for Public Instances)
 
-For public deployments where users bring their own credentials, configure your MCP client to pass credentials in headers:
+For public deployments where users bring their own credentials, configure your MCP client to pass credentials in headers.
+Such an instance needs either `PLAY_STORE_MCP_AUTH_TOKEN` or the explicit
+`PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED=1` opt-out to start on a non-loopback host, and must
+then **not** set `GOOGLE_APPLICATION_CREDENTIALS` / `GOOGLE_PLAY_STORE_CREDENTIALS`
+(otherwise unauthenticated callers would fall back to the server's account):
 
 ```json
 {
@@ -145,6 +158,7 @@ For private deployments, set credentials via environment variable at server star
 export GOOGLE_PLAY_STORE_CREDENTIALS='{"type":"service_account",...}'
 # or
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+export PLAY_STORE_MCP_AUTH_TOKEN="$(openssl rand -hex 32)"  # required off-loopback
 
 play-store-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
@@ -341,11 +355,13 @@ Add to `.kiro/settings/mcp.json`:
 | `PLAY_STORE_MCP_LOG_LEVEL` | Log level (DEBUG, INFO, WARNING, ERROR) | No (default: INFO) |
 | `PLAY_STORE_MCP_DISABLE_DNS_REBINDING` | Disable DNS rebinding protection (for cloud/reverse-proxy deployments) | No |
 | `PLAY_STORE_MCP_ADMIN_TOKEN` | Require `Authorization: Bearer <token>` on the `/credentials` endpoint (for deployments behind a reverse proxy) | No |
+| `PLAY_STORE_MCP_AUTH_TOKEN` | Require `Authorization: Bearer <token>` on every HTTP request (MCP endpoint included; only `/health` is exempt). `/credentials` checks `PLAY_STORE_MCP_ADMIN_TOKEN` if set, otherwise this token — a loopback peer alone is not trusted when a token exists. Also `--auth-token` | **Required** for network transports on a non-loopback host |
+| `PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED` | Set to `1` to allow a non-loopback bind without `PLAY_STORE_MCP_AUTH_TOKEN` (only behind an authenticating proxy). Also `--allow-unauthenticated` | No |
 | `PLAY_STORE_MCP_READ_ONLY` | Disable all write operations (deploy, promote, rollout, reply, listing/tester updates) | No (default: off) |
-| `PLAY_STORE_MCP_DOWNLOAD_DIR` | Directory that APK/AAB downloads are confined to (path-traversal / arbitrary-write protection). Downloads are always confined; defaults to the working directory when unset | No for `stdio` (defaults to cwd); **required** for network transports |
+| `PLAY_STORE_MCP_UPLOAD_DIR` | Directory upload tools may read files from (APK/AAB/images/mapping/expansion). **Required for uploads over an HTTP transport** — otherwise a remote caller could make the server read and send any local file; unset under `stdio` means unrestricted | No for `stdio`; required for uploads over HTTP |
+| `PLAY_STORE_MCP_BIGQUERY_MAX_BYTES_BILLED` | Server-side ceiling for `bigquery_execute_query`'s `max_bytes_billed` (the per-call value is caller-controlled) | No (default: 10000000000 = 10 GB) |
 | `PLAY_STORE_MCP_HTTP_TIMEOUT` | Socket read timeout, in seconds, for ordinary Play API calls | No (default: 120) |
 | `PLAY_STORE_MCP_UPLOAD_TIMEOUT` | Socket read timeout, in seconds, for artifact uploads (APK, AAB, mapping, expansion, internal app sharing). Play can take many minutes to answer a large upload; when the client gives up first the real HTTP status is lost and the failure looks like a network fault | No (default: 1200) |
-| `CODE_MODE` | Enable the experimental code-mode transform (opt-in; requires the `play-store-mcp[code-mode]` extra) | No (default: off) |
 | `PLAY_STORE_MCP_DOWNLOAD_DIR` | Directory that APK/AAB downloads are confined to (path-traversal / arbitrary-write protection). Downloads are always confined; defaults to the working directory when unset | No (defaults to cwd); **recommended** for network/hosted deployments — the server warns if unset |
 | `CODE_MODE` | Set to `0` to opt out of the code-mode transform and use the classic tool list | No (default: on) |
 

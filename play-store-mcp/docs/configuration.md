@@ -69,18 +69,22 @@ For HTTP transport with Docker:
 ```bash
 docker run -p 8000:8000 \
   -e GOOGLE_APPLICATION_CREDENTIALS=/creds/key.json \
+  -e PLAY_STORE_MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
   -v /path/to/service-account.json:/creds/key.json:ro \
   ghcr.io/lusky3/play-store-mcp:latest \
   --transport streamable-http --host 0.0.0.0 --port 8000
 ```
 
-> **Warning:** `--host 0.0.0.0` binds the MCP tool-invocation endpoint (`/mcp`) itself,
-> which has **no built-in authentication** — only `/credentials` is gated (see
-> [Per-Request Credentials](#per-request-credentials) below). Exposing this port
-> directly, as above, gives anyone with network access to it full read/write access to
-> the Google Play account configured via `GOOGLE_APPLICATION_CREDENTIALS`. Put a reverse
-> proxy with its own authentication in front before exposing this port beyond
-> localhost/a private network.
+Clients must then send `Authorization: Bearer <token>` on every request.
+
+> **Warning:** `--host 0.0.0.0` exposes the MCP tool-invocation endpoint (`/mcp`), and
+> every tool runs with the Google Play account configured via
+> `GOOGLE_APPLICATION_CREDENTIALS`. On a non-loopback host the server therefore
+> **refuses to start** unless `PLAY_STORE_MCP_AUTH_TOKEN` (or `--auth-token`) is set, in
+> which case every HTTP request except `/health` and `/credentials` (which has its own
+> check, see [Per-Request Credentials](#per-request-credentials)) must carry the bearer
+> token. Set `PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED=1` (or `--allow-unauthenticated`) only
+> when an authenticating reverse proxy fronts the server.
 
 ## Environment Variables
 
@@ -91,6 +95,8 @@ docker run -p 8000:8000 \
 | `PLAY_STORE_MCP_LOG_LEVEL` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` | No | `INFO` |
 | `PLAY_STORE_MCP_DISABLE_DNS_REBINDING` | Disable DNS rebinding protection (for cloud/reverse-proxy deployments) | No | — |
 | `PLAY_STORE_MCP_ADMIN_TOKEN` | Require `Authorization: Bearer <token>` on the `/credentials` endpoint (needed behind a reverse proxy, where the localhost check is insufficient) | No | — |
+| `PLAY_STORE_MCP_AUTH_TOKEN` | Require `Authorization: Bearer <token>` on every HTTP request (`/health` and `/credentials` exempt). CLI: `--auth-token` | **Yes** for `sse`/`streamable-http` on a non-loopback host | — |
+| `PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED` | Set to `1` to allow a non-loopback bind without an auth token (only behind an authenticating proxy). CLI: `--allow-unauthenticated` | No | — |
 | `PLAY_STORE_MCP_READ_ONLY` | Disable all write operations | No | — |
 | `PLAY_STORE_MCP_DOWNLOAD_DIR` | Directory that APK/AAB downloads are confined to (guards against path traversal / arbitrary-file overwrite). Downloads are **always** confined; a destination outside this directory is rejected. **Recommended** for network/hosted deployments (`sse`/`streamable-http`) — the server warns if it is unset and falls back to the working directory, which may be read-only on some hosts (e.g. set it to `/tmp/play-store-downloads` on Render). | No (defaults to cwd) | cwd |
 | `CODE_MODE` | Set to `0` to opt out of the code-mode transform and use the classic tool list | No | on |
@@ -100,8 +106,12 @@ docker run -p 8000:8000 \
 For remote access or public deployments:
 
 ```bash
+export PLAY_STORE_MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
 play-store-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
+
+A non-loopback bind without `PLAY_STORE_MCP_AUTH_TOKEN` refuses to start (see the
+warning above).
 
 The server exposes a `/health` endpoint for monitoring.
 
@@ -239,7 +249,7 @@ When running in Docker, the following additional environment variables control t
 | Variable | Description | Default |
 |---|---|---|
 | `MCP_TRANSPORT` | Transport mode: `stdio`, `sse`, or `streamable-http` | `stdio` |
-| `MCP_HOST` | Host address to bind to | `0.0.0.0` |
+| `MCP_HOST` | Host address to bind to | `127.0.0.1` (the Docker image sets `0.0.0.0`, so an HTTP transport there also needs `PLAY_STORE_MCP_AUTH_TOKEN`) |
 | `MCP_PORT` | Port to listen on | `8000` |
 
 Note: `MCP_HOST` and `MCP_PORT` only apply when using a network transport (`streamable-http` or `sse`). The Dockerfile defaults to `stdio`.

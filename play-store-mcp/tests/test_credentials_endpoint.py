@@ -271,3 +271,27 @@ async def test_update_credentials_invalid_base64():
     data = json.loads(response.body)
     assert data["success"] is False
     assert "base64" in data["error"].lower()
+
+
+def test_non_object_body_is_400() -> None:
+    from play_store_mcp import server
+
+    client, error = server._parse_credentials_request_body(["not", "an", "object"])
+    assert client is None and error is not None and error.status_code == 400
+
+
+def test_revoked_key_is_rejected_before_swap() -> None:
+    """A key Google refuses to mint a token for must not replace working credentials."""
+    import google.auth.exceptions
+
+    from play_store_mcp import server
+    from play_store_mcp.client import PlayStoreClient, PlayStoreClientError
+
+    class RevokedCreds:
+        def refresh(self, _request: object) -> None:
+            raise google.auth.exceptions.RefreshError("invalid_grant")
+
+    client = PlayStoreClient(credentials_json={"type": "service_account"})
+    client._credentials = RevokedCreds()
+    with pytest.raises(PlayStoreClientError, match="rejected"):
+        server._verify_credentials_live(client)

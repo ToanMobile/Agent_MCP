@@ -7,9 +7,12 @@
 #  Hỗ trợ: APK đơn, nhiều APK, XAPK/APKS/APKM (Split APKs + OBB)
 # ==============================
 
-ADB="/Volumes/Data/AndroidSDK/platform-tools/adb"
-TARGET_IP="192.168.1.17"
-TARGET_PORT="5555"
+# Ghi đè bằng biến môi trường; mặc định: adb trong PATH, rồi ANDROID_HOME, rồi đường dẫn máy cũ.
+ADB="${ADB:-$(command -v adb 2>/dev/null || true)}"
+[ -z "$ADB" ] && [ -n "${ANDROID_HOME:-}" ] && ADB="$ANDROID_HOME/platform-tools/adb"
+[ -z "$ADB" ] && ADB="/Volumes/Data/AndroidSDK/platform-tools/adb"
+TARGET_IP="${TARGET_IP:-192.168.1.17}"
+TARGET_PORT="${TARGET_PORT:-5555}"
 TARGET="$TARGET_IP:$TARGET_PORT"
 
 # Các ABI token hợp lệ trong tên split (dùng dấu _ thay cho -)
@@ -209,8 +212,29 @@ is_conflict_error() {
     return 1
 }
 
+# Package name Android hợp lệ. Giá trị này đi vào "adb shell ..." (shell trên
+# thiết bị parse lại chuỗi), nên mọi package name (từ manifest.json, aapt, tên
+# OBB, thông báo lỗi, người dùng nhập) phải qua đây trước khi dùng với adb.
+is_valid_package_name() {
+    local re='^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$'
+    [[ "$1" =~ $re ]]
+}
+
+# Như trên nhưng in lỗi; dùng: require_valid_package_name "$pkg" || return 1
+require_valid_package_name() {
+    if ! is_valid_package_name "$1"; then
+        echo "   ❌ Package name không hợp lệ: '$1' — dừng lại, không chạy lệnh adb." >&2
+        return 1
+    fi
+    return 0
+}
+
 uninstall_pkg() {
     local pkg="$1" out
+    if ! is_valid_package_name "$pkg"; then
+        UNINSTALL_ERROR="Package name không hợp lệ: '$pkg'"
+        return 1
+    fi
     out=$("$ADB" -s "$DEVICE" uninstall "$pkg" 2>&1 | tr -d '\r')
     echo "$out" | grep -q "Success" && return 0
 
@@ -253,6 +277,7 @@ retry_after_uninstall() {
         return 1
     fi
 
+    require_valid_package_name "$pkg" || return 1
     confirm_uninstall "$pkg" || return 1
 
     echo -n "   🗑️  Gỡ bản cũ $pkg ... "
@@ -387,11 +412,18 @@ install_xapk() {
     fi
     echo "✅"
 
+    # Gói độc có thể chứa SYMLINK (unzip tạo lại link): `adb push`/`install` đi theo link và đẩy
+    # file của máy host (vd ~/.ssh/id_rsa) lên /sdcard. Có link bất kỳ => từ chối cả gói.
+    if [ -n "$(find "$temp_dir" -type l -print -quit)" ]; then
+        echo "   ❌ Gói chứa symlink — từ chối cài (nghi gói độc hại)."
+        return 1
+    fi
+
     # Thu thập toàn bộ apk trong gói
     local all_apks=()
     while IFS= read -r apk; do
         [ -n "$apk" ] && all_apks+=("$apk")
-    done < <(find "$temp_dir" -maxdepth 3 -name "*.apk" | sort)
+    done < <(find "$temp_dir" -maxdepth 3 -type f -name "*.apk" | sort)
 
     if [ ${#all_apks[@]} -eq 0 ]; then
         echo "   ❌ Không tìm thấy file APK nào trong gói."
@@ -465,6 +497,9 @@ install_xapk() {
               "$temp_dir/manifest.json" | head -n 1)
     fi
     [ -z "$pkg" ] && pkg=$(get_package_name "${base_apks[0]}")
+    if [ -n "$pkg" ]; then
+        require_valid_package_name "$pkg" || return 1
+    fi
 
     echo -n "   🚀 Đang cài đặt (${#install_list[@]} APKs)... "
     if run_install install-multiple "${install_list[@]}"; then
@@ -479,7 +514,7 @@ install_xapk() {
     local obb_files=()
     while IFS= read -r obb; do
         [ -n "$obb" ] && obb_files+=("$obb")
-    done < <(find "$temp_dir" -name "*.obb")
+    done < <(find "$temp_dir" -type f -name "*.obb")
 
     if [ ${#obb_files[@]} -gt 0 ]; then
         local obb obb_pkg base_name
@@ -488,8 +523,9 @@ install_xapk() {
             obb_pkg="$pkg"
             if [ -z "$obb_pkg" ]; then
                 # main.<version>.<package>.obb
-                obb_pkg=$(echo "${base_name%.obb}" | sed 's/^\(main\|patch\)\.[0-9]*\.//')
+                obb_pkg=$(echo "${base_name%.obb}" | sed -E 's/^(main|patch)\.[0-9]+\.//')
             fi
+            require_valid_package_name "$obb_pkg" || return 1
             echo -n "   📁 OBB $base_name -> $obb_pkg ... "
             "$ADB" -s "$DEVICE" shell mkdir -p "/sdcard/Android/obb/$obb_pkg" </dev/null >/dev/null 2>&1
             local push_out
@@ -629,6 +665,7 @@ while true; do
                 echo "❌ Bạn chưa nhập package name."
                 continue
             fi
+            require_valid_package_name "$PACKAGE" || continue
 
             echo "🗑️  Đang gỡ $PACKAGE ..."
             UNINSTALL_OUT=$("$ADB" -s "$DEVICE" uninstall "$PACKAGE" 2>&1)

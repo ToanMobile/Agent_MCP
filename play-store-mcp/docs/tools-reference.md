@@ -51,6 +51,8 @@ Tools follow one of two conventions, depending on what they return:
 |---|---|
 | `get_crash_rate` | Fetch daily Android Vitals crash rate from Google Play |
 | `get_anr_rate` | Fetch daily Android Vitals ANR rate from Google Play |
+| `get_wakelock_rate` | Fetch stuck background wake lock rate from Android Vitals |
+| `get_wakeup_rate` | Fetch excessive CPU wakeup rate from Android Vitals |
 | `get_vitals_summary` | Summarize crash and ANR rates by version code |
 | `list_error_issues` | List recent Google Play Android Vitals error issues |
 | `get_error_reports` | Fetch Google Play error reports and stack traces |
@@ -80,6 +82,17 @@ read-only mode.
 Google Play's public Developer Reporting API does not expose an issue state
 update method, so `list_error_issues` remains read-only and Firebase issue state
 changes are not mirrored to Play Console.
+
+## BigQuery & Google Analytics Tools
+
+| Tool | Description |
+|---|---|
+| `bigquery_list_datasets` | List BigQuery datasets visible to the service account in a GCP project |
+| `bigquery_list_tables` | List tables in a BigQuery dataset (e.g. Firebase Analytics `events_YYYYMMDD`) |
+| `bigquery_get_table_schema` | Get a table's schema (field names/types) plus row/byte counts |
+| `bigquery_execute_query` | Run a read-only standard-SQL query. `max_bytes_billed` is a per-call cost guardrail, capped server-side by `PLAY_STORE_MCP_BIGQUERY_MAX_BYTES_BILLED` (default 10 GB) |
+| `analytics_run_report` | Run a GA4 aggregated report (e.g. event counts by `eventName` over a date range) |
+| `analytics_run_realtime_report` | Run a GA4 realtime report (active users/events in roughly the last 30 minutes) |
 
 ## Subscription Tools
 

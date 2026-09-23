@@ -60,8 +60,14 @@ def _from_info(
 
 
 def _from_file(path: str, scopes: list[str], api_label: str) -> service_account.Credentials:
-    with Path(path).open(encoding="utf-8") as f:
-        info = json.load(f)
+    try:
+        with Path(path).open(encoding="utf-8") as f:
+            info = json.load(f)
+    except (OSError, ValueError) as e:
+        # Wrapped so a bad key file is a logged startup warning, not a crash.
+        raise PlayStoreClientError(
+            f"Cannot read {api_label} credentials file {path}: {type(e).__name__}"
+        ) from e
     return _from_info(info, scopes, api_label)
 
 

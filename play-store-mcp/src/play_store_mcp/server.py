@@ -14,12 +14,13 @@ import secrets
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
 import structlog
 import uvicorn
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
+from mcp.types import ToolAnnotations
 from starlette.middleware import Middleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
@@ -57,6 +58,20 @@ structlog.configure(
 logger = structlog.get_logger(__name__)
 
 
+def _require_credentials_object(parsed: Any, header: str) -> dict[str, Any]:
+    """A credentials header must decode to a non-empty JSON object.
+
+    A JSON string would otherwise reach the loader as a *server-side file path*
+    (``"/etc/..."``), and a falsy value (``{}``, ``0``, ``[]``) would silently fall
+    back to the server's own ambient credentials.
+    """
+    if not isinstance(parsed, dict) or not parsed:
+        raise PlayStoreClientError(
+            f"{header} header must be a non-empty JSON object (service account key)"
+        )
+    return parsed
+
+
 def _credentials_from_request_headers() -> dict[str, Any] | None:
     """Parse per-request service account credentials from the request headers.
 
@@ -77,7 +92,7 @@ def _credentials_from_request_headers() -> dict[str, Any] | None:
             parsed = json.loads(headers["x-google-credentials"])
         except json.JSONDecodeError as e:
             raise PlayStoreClientError(f"Invalid JSON in X-Google-Credentials header: {e}") from e
-        return cast("dict[str, Any]", parsed)
+        return _require_credentials_object(parsed, "X-Google-Credentials")
 
     if "x-google-credentials-base64" in headers:
         try:
@@ -87,7 +102,7 @@ def _credentials_from_request_headers() -> dict[str, Any] | None:
             raise PlayStoreClientError(
                 f"Invalid base64 or JSON in X-Google-Credentials-Base64 header: {e}"
             ) from e
-        return cast("dict[str, Any]", parsed)
+        return _require_credentials_object(parsed, "X-Google-Credentials-Base64")
 
     return None
 
@@ -256,10 +271,27 @@ def _validate_deploy_file(file_path: str) -> str | None:
     return None
 
 
+_DEFAULT_BIGQUERY_MAX_BYTES_CAP = 10_000_000_000  # 10 GB
+
+
+def _bigquery_max_bytes_cap() -> int:
+    """Operator-set ceiling for bigquery_execute_query's max_bytes_billed.
+
+    The per-call value is caller-controlled, so without a server-side ceiling the
+    "cost guardrail" could be raised to any amount by the model.
+    """
+    raw = os.environ.get("PLAY_STORE_MCP_BIGQUERY_MAX_BYTES_BILLED", "").strip()
+    try:
+        return int(raw) if raw else _DEFAULT_BIGQUERY_MAX_BYTES_CAP
+    except ValueError:
+        return _DEFAULT_BIGQUERY_MAX_BYTES_CAP
+
+
 def _validate_rollout(pct: float) -> str | None:
     """Return error message if rollout percentage is invalid, None if valid."""
-    if not (0.0 <= pct <= 100.0):
-        return "rollout_percentage must be between 0.0 and 100.0"
+    # 0 would send an inProgress release with userFraction 0.0, which Play rejects.
+    if not (0.0 < pct <= 100.0):
+        return "rollout_percentage must be greater than 0.0 and at most 100.0"
     return None
 
 
@@ -313,6 +345,14 @@ def _upload_result(payload: dict[str, Any], *, commit: bool) -> dict[str, Any]:
     return result
 
 
+# Per-tool hints for clients that gate approval on them (and for CodeMode, which
+# otherwise collapses every tool — refunds and deletes included — into one opaque
+# `execute`). A tool is a WRITE tool iff it honours read-only mode via
+# _read_only_block; tests/test_read_only.py keeps that inventory honest.
+_READ_TOOL = ToolAnnotations(read_only_hint=True, open_world_hint=True)
+_WRITE_TOOL = ToolAnnotations(read_only_hint=False, destructive_hint=True, open_world_hint=True)
+
+
 def _code_mode_enabled() -> bool:
     """Return True unless CODE_MODE explicitly opts out of the code-mode transform.
 
@@ -328,7 +368,7 @@ def _build_transforms() -> list[Any]:
     Default: the tool surface is wrapped in the experimental CodeMode transform
     (search/get_schema/execute meta-tools + sandboxed execution), which cuts
     per-request tool-list overhead. Set CODE_MODE=0 to opt out and expose the
-    classic 117-tool surface instead.
+    classic tool surface instead.
     """
     if not _code_mode_enabled():
         return []
@@ -358,7 +398,7 @@ mcp = FastMCP(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def deploy_app(
     package_name: str,
     track: str,
@@ -402,7 +442,7 @@ def deploy_app(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def deploy_app_multilang(
     package_name: str,
     track: str,
@@ -443,7 +483,7 @@ def deploy_app_multilang(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def promote_release(
     package_name: str,
     from_track: str,
@@ -481,7 +521,7 @@ def promote_release(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_releases(package_name: str) -> list[dict[str, Any]]:
     """Get release status for all tracks of an app.
 
@@ -497,7 +537,7 @@ def get_releases(package_name: str) -> list[dict[str, Any]]:
     return [track.model_dump() for track in tracks]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def halt_release(
     package_name: str,
     track: str,
@@ -529,7 +569,7 @@ def halt_release(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def update_rollout(
     package_name: str,
     track: str,
@@ -567,7 +607,7 @@ def update_rollout(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_app_details(
     package_name: str,
     language: str = "en-US",
@@ -592,7 +632,7 @@ def get_app_details(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_reviews(
     package_name: str,
     max_results: int = 50,
@@ -619,7 +659,7 @@ def get_reviews(
     return [review.model_dump() for review in reviews]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def reply_to_review(
     package_name: str,
     review_id: str,
@@ -659,7 +699,7 @@ def reply_to_review(
 # Manager role) and the Reporting API scope/enablement at the GCP project.
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_crash_rate(
     package_name: str,
     days: int = 7,
@@ -687,7 +727,7 @@ def get_crash_rate(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_anr_rate(
     package_name: str,
     days: int = 7,
@@ -715,7 +755,7 @@ def get_anr_rate(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_wakelock_rate(
     package_name: str,
     days: int = 7,
@@ -735,7 +775,7 @@ def get_wakelock_rate(
     return {"packageName": package_name, "periodDays": days, "rows": rows}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_wakeup_rate(
     package_name: str,
     days: int = 7,
@@ -755,7 +795,7 @@ def get_wakeup_rate(
     return {"packageName": package_name, "periodDays": days, "rows": rows}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_vitals_summary(
     package_name: str,
     days: int = 7,
@@ -823,7 +863,7 @@ def get_vitals_summary(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_error_issues(
     package_name: str,
     days: int = 30,
@@ -858,7 +898,7 @@ def list_error_issues(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_error_reports(
     package_name: str,
     issue_id: str = "",
@@ -912,7 +952,7 @@ def get_error_reports(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_crashlytics_issues(
     project_id: str,
     app_id: str,
@@ -960,7 +1000,7 @@ def list_crashlytics_issues(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_crashlytics_issue(
     project_id: str,
     app_id: str,
@@ -985,7 +1025,7 @@ def get_crashlytics_issue(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def close_crashlytics_issue(
     project_id: str,
     app_id: str,
@@ -1022,7 +1062,7 @@ def close_crashlytics_issue(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_review(
     package_name: str,
     review_id: str,
@@ -1054,7 +1094,7 @@ def get_review(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_subscriptions(package_name: str) -> list[dict[str, Any]]:
     """List all subscription products for an app.
 
@@ -1070,7 +1110,7 @@ def list_subscriptions(package_name: str) -> list[dict[str, Any]]:
     return [sub.model_dump() for sub in subscriptions]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_subscription_status(
     package_name: str,
     subscription_id: str,
@@ -1097,7 +1137,7 @@ def get_subscription_status(
     return status.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_voided_purchases(
     package_name: str,
     max_results: int = 100,
@@ -1121,7 +1161,7 @@ def list_voided_purchases(
     return [v.model_dump() for v in voided]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_product_purchase(
     package_name: str,
     product_id: str,
@@ -1148,7 +1188,7 @@ def get_product_purchase(
     return purchase.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def acknowledge_product_purchase(
     package_name: str,
     product_id: str,
@@ -1182,7 +1222,7 @@ def acknowledge_product_purchase(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def consume_product_purchase(
     package_name: str,
     product_id: str,
@@ -1213,7 +1253,7 @@ def consume_product_purchase(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def refund_order(
     package_name: str,
     order_id: str,
@@ -1238,7 +1278,7 @@ def refund_order(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def cancel_subscription_purchase(
     package_name: str,
     purchase_token: str,
@@ -1268,7 +1308,7 @@ def cancel_subscription_purchase(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def defer_subscription_purchase(
     package_name: str,
     purchase_token: str,
@@ -1300,7 +1340,7 @@ def defer_subscription_purchase(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def revoke_subscription_purchase(
     package_name: str,
     purchase_token: str,
@@ -1331,7 +1371,7 @@ def revoke_subscription_purchase(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_product_purchase_v2(
     package_name: str,
     purchase_token: str,
@@ -1360,7 +1400,7 @@ def get_product_purchase_v2(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_in_app_products(package_name: str) -> list[dict[str, Any]]:
     """List all in-app products for an app.
 
@@ -1376,7 +1416,7 @@ def list_in_app_products(package_name: str) -> list[dict[str, Any]]:
     return [product.model_dump() for product in products]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_in_app_product(
     package_name: str,
     sku: str,
@@ -1396,7 +1436,7 @@ def get_in_app_product(
     return product.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_in_app_product(
     package_name: str,
     product: dict[str, Any],
@@ -1421,7 +1461,7 @@ def create_in_app_product(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def update_in_app_product(
     package_name: str,
     sku: str,
@@ -1455,7 +1495,7 @@ def update_in_app_product(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def patch_in_app_product(
     package_name: str,
     sku: str,
@@ -1481,7 +1521,7 @@ def patch_in_app_product(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_in_app_product(
     package_name: str,
     sku: str,
@@ -1505,7 +1545,7 @@ def delete_in_app_product(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def batch_get_in_app_products(
     package_name: str,
     skus: list[str],
@@ -1525,7 +1565,7 @@ def batch_get_in_app_products(
     return [product.model_dump() for product in products]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_delete_in_app_products(
     package_name: str,
     skus: list[str],
@@ -1554,7 +1594,7 @@ def batch_delete_in_app_products(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_one_time_product(
     package_name: str,
     product_id: str,
@@ -1574,7 +1614,7 @@ def get_one_time_product(
     return product.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_one_time_products(
     package_name: str,
 ) -> list[dict[str, Any]]:
@@ -1592,7 +1632,7 @@ def list_one_time_products(
     return [product.model_dump() for product in products]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def batch_get_one_time_products(
     package_name: str,
     product_ids: list[str],
@@ -1614,7 +1654,7 @@ def batch_get_one_time_products(
     return [product.model_dump() for product in products]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def patch_one_time_product(
     package_name: str,
     product_id: str,
@@ -1650,7 +1690,7 @@ def patch_one_time_product(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_one_time_product(
     package_name: str,
     product_id: str,
@@ -1674,7 +1714,7 @@ def delete_one_time_product(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_update_one_time_products(
     package_name: str,
     requests: list[dict[str, Any]],
@@ -1699,7 +1739,7 @@ def batch_update_one_time_products(
     return [product.model_dump() for product in products]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_delete_one_time_products(
     package_name: str,
     requests: list[dict[str, Any]],
@@ -1729,7 +1769,7 @@ def batch_delete_one_time_products(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_delete_purchase_options(
     package_name: str,
     product_id: str,
@@ -1758,7 +1798,7 @@ def batch_delete_purchase_options(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_update_purchase_option_states(
     package_name: str,
     product_id: str,
@@ -1792,7 +1832,7 @@ def batch_update_purchase_option_states(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_purchase_option_offers(
     package_name: str,
     product_id: str,
@@ -1818,7 +1858,7 @@ def list_purchase_option_offers(
     return [offer.model_dump() for offer in offers]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def batch_get_purchase_option_offers(
     package_name: str,
     product_id: str,
@@ -1847,7 +1887,7 @@ def batch_get_purchase_option_offers(
     return [offer.model_dump() for offer in offers]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def activate_purchase_option_offer(
     package_name: str,
     product_id: str,
@@ -1880,7 +1920,7 @@ def activate_purchase_option_offer(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def deactivate_purchase_option_offer(
     package_name: str,
     product_id: str,
@@ -1913,7 +1953,7 @@ def deactivate_purchase_option_offer(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def cancel_purchase_option_offer(
     package_name: str,
     product_id: str,
@@ -1946,7 +1986,7 @@ def cancel_purchase_option_offer(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_update_purchase_option_offers(
     package_name: str,
     product_id: str,
@@ -1980,7 +2020,7 @@ def batch_update_purchase_option_offers(
     return [offer.model_dump() for offer in offers]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_update_purchase_option_offer_states(
     package_name: str,
     product_id: str,
@@ -2014,7 +2054,7 @@ def batch_update_purchase_option_offer_states(
     return [offer.model_dump() for offer in offers]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_delete_purchase_option_offers(
     package_name: str,
     product_id: str,
@@ -2053,7 +2093,7 @@ def batch_delete_purchase_option_offers(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_subscription(
     package_name: str,
     product_id: str,
@@ -2073,7 +2113,7 @@ def get_subscription(
     return subscription.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_subscription(
     package_name: str,
     product_id: str,
@@ -2106,7 +2146,7 @@ def create_subscription(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def patch_subscription(
     package_name: str,
     product_id: str,
@@ -2142,7 +2182,7 @@ def patch_subscription(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_subscription(
     package_name: str,
     product_id: str,
@@ -2166,7 +2206,7 @@ def delete_subscription(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def batch_get_subscriptions(
     package_name: str,
     product_ids: list[str],
@@ -2188,7 +2228,7 @@ def batch_get_subscriptions(
     return [sub.model_dump() for sub in subscriptions]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_update_subscriptions(
     package_name: str,
     requests: list[dict[str, Any]],
@@ -2218,7 +2258,7 @@ def batch_update_subscriptions(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def activate_base_plan(
     package_name: str,
     product_id: str,
@@ -2248,7 +2288,7 @@ def activate_base_plan(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def deactivate_base_plan(
     package_name: str,
     product_id: str,
@@ -2278,7 +2318,7 @@ def deactivate_base_plan(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_base_plan(
     package_name: str,
     product_id: str,
@@ -2309,7 +2349,7 @@ def delete_base_plan(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def migrate_base_plan_prices(
     package_name: str,
     product_id: str,
@@ -2342,7 +2382,7 @@ def migrate_base_plan_prices(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_migrate_base_plan_prices(
     package_name: str,
     product_id: str,
@@ -2372,7 +2412,7 @@ def batch_migrate_base_plan_prices(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_update_base_plan_states(
     package_name: str,
     product_id: str,
@@ -2408,7 +2448,7 @@ def batch_update_base_plan_states(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_subscription_offer(
     package_name: str,
     product_id: str,
@@ -2437,7 +2477,7 @@ def get_subscription_offer(
     return offer.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_subscription_offers(
     package_name: str,
     product_id: str,
@@ -2463,7 +2503,7 @@ def list_subscription_offers(
     return [offer.model_dump() for offer in offers]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_subscription_offer(
     package_name: str,
     product_id: str,
@@ -2502,7 +2542,7 @@ def create_subscription_offer(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def patch_subscription_offer(
     package_name: str,
     product_id: str,
@@ -2544,7 +2584,7 @@ def patch_subscription_offer(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def activate_subscription_offer(
     package_name: str,
     product_id: str,
@@ -2577,7 +2617,7 @@ def activate_subscription_offer(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def deactivate_subscription_offer(
     package_name: str,
     product_id: str,
@@ -2610,7 +2650,7 @@ def deactivate_subscription_offer(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_subscription_offer(
     package_name: str,
     product_id: str,
@@ -2644,7 +2684,7 @@ def delete_subscription_offer(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def batch_get_subscription_offers(
     package_name: str,
     product_id: str,
@@ -2673,7 +2713,7 @@ def batch_get_subscription_offers(
     return [offer.model_dump() for offer in offers]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_update_subscription_offers(
     package_name: str,
     product_id: str,
@@ -2707,7 +2747,7 @@ def batch_update_subscription_offers(
     return [offer.model_dump() for offer in offers]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_update_subscription_offer_states(
     package_name: str,
     product_id: str,
@@ -2746,7 +2786,7 @@ def batch_update_subscription_offer_states(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_listing(
     package_name: str,
     language: str = "en-US",
@@ -2766,7 +2806,7 @@ def get_listing(
     return listing.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def update_listing(
     package_name: str,
     language: str,
@@ -2803,7 +2843,7 @@ def update_listing(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_all_listings(package_name: str) -> list[dict[str, Any]]:
     """List all store listings for all languages.
 
@@ -2824,7 +2864,7 @@ def list_all_listings(package_name: str) -> list[dict[str, Any]]:
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_testers(
     package_name: str,
     track: str,
@@ -2844,7 +2884,7 @@ def get_testers(
     return testers.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def update_testers(
     package_name: str,
     track: str,
@@ -2873,7 +2913,7 @@ def update_testers(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_order(
     package_name: str,
     order_id: str,
@@ -2893,7 +2933,7 @@ def get_order(
     return order.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def batch_get_orders(
     package_name: str,
     order_ids: list[str],
@@ -2918,7 +2958,7 @@ def batch_get_orders(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_external_transaction(
     package_name: str,
     external_transaction_id: str,
@@ -2941,7 +2981,7 @@ def get_external_transaction(
     return transaction.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_external_transaction(
     package_name: str,
     external_transaction_id: str,
@@ -2969,7 +3009,7 @@ def create_external_transaction(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def refund_external_transaction(
     package_name: str,
     external_transaction_id: str,
@@ -3003,7 +3043,7 @@ def refund_external_transaction(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_device_tier_config(
     package_name: str,
     device_tier_config_id: str,
@@ -3026,7 +3066,7 @@ def get_device_tier_config(
     return config.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_device_tier_configs(package_name: str) -> list[dict[str, Any]]:
     """List all device tier configs for an app.
 
@@ -3042,7 +3082,7 @@ def list_device_tier_configs(package_name: str) -> list[dict[str, Any]]:
     return [config.model_dump() for config in configs]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_device_tier_config(
     package_name: str,
     config: dict[str, Any],
@@ -3079,7 +3119,7 @@ def create_device_tier_config(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_users(developer_id: str) -> list[dict[str, Any]]:
     """List users with access to a developer account.
 
@@ -3095,7 +3135,7 @@ def list_users(developer_id: str) -> list[dict[str, Any]]:
     return [user.model_dump() for user in users]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_user(developer_id: str, user: dict[str, Any]) -> dict[str, Any]:
     """Grant a user access to a developer account.
 
@@ -3117,7 +3157,7 @@ def create_user(developer_id: str, user: dict[str, Any]) -> dict[str, Any]:
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def update_user(
     developer_id: str,
     email: str,
@@ -3151,7 +3191,7 @@ def update_user(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_user(developer_id: str, email: str) -> dict[str, Any]:
     """Remove a user's access to a developer account.
 
@@ -3172,7 +3212,7 @@ def delete_user(developer_id: str, email: str) -> dict[str, Any]:
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_grant(developer_id: str, email: str, grant: dict[str, Any]) -> dict[str, Any]:
     """Grant a user app-level access.
 
@@ -3194,7 +3234,7 @@ def create_grant(developer_id: str, email: str, grant: dict[str, Any]) -> dict[s
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def update_grant(
     developer_id: str,
     email: str,
@@ -3231,7 +3271,7 @@ def update_grant(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_grant(developer_id: str, email: str, package_name: str) -> dict[str, Any]:
     """Remove a user's app-level access.
 
@@ -3262,7 +3302,7 @@ def delete_grant(developer_id: str, email: str, package_name: str) -> dict[str, 
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def set_data_safety(
     package_name: str,
     safety_labels: dict[str, Any],
@@ -3295,7 +3335,7 @@ def set_data_safety(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_app_recoveries(package_name: str, version_code: int) -> list[dict[str, Any]]:
     """List all app recovery actions for an app version.
 
@@ -3312,7 +3352,7 @@ def list_app_recoveries(package_name: str, version_code: int) -> list[dict[str, 
     return [recovery.model_dump() for recovery in recoveries]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_app_recovery(
     package_name: str,
     recovery: dict[str, Any],
@@ -3340,7 +3380,7 @@ def create_app_recovery(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def deploy_app_recovery(
     package_name: str,
     app_recovery_id: str,
@@ -3367,7 +3407,7 @@ def deploy_app_recovery(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def cancel_app_recovery(
     package_name: str,
     app_recovery_id: str,
@@ -3394,7 +3434,7 @@ def cancel_app_recovery(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def add_app_recovery_targeting(
     package_name: str,
     app_recovery_id: str,
@@ -3430,7 +3470,7 @@ def add_app_recovery_targeting(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_generated_apks(
     package_name: str,
     version_code: int,
@@ -3457,7 +3497,7 @@ def list_generated_apks(
     return [download.model_dump() for download in downloads]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def download_generated_apk(
     package_name: str,
     version_code: int,
@@ -3491,7 +3531,7 @@ def download_generated_apk(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_system_apk_variant(
     package_name: str,
     version_code: int,
@@ -3517,7 +3557,7 @@ def get_system_apk_variant(
     return variant.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_system_apk_variants(
     package_name: str,
     version_code: int,
@@ -3540,7 +3580,7 @@ def list_system_apk_variants(
     return [variant.model_dump() for variant in variants]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def create_system_apk_variant(
     package_name: str,
     version_code: int,
@@ -3570,7 +3610,7 @@ def create_system_apk_variant(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def download_system_apk_variant(
     package_name: str,
     version_code: int,
@@ -3604,7 +3644,7 @@ def download_system_apk_variant(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def get_expansion_file(
     package_name: str,
     version_code: int,
@@ -3634,7 +3674,7 @@ def get_expansion_file(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_apks(package_name: str) -> list[dict[str, Any]]:
     """List the APKs currently uploaded for an app.
 
@@ -3650,7 +3690,7 @@ def list_apks(package_name: str) -> list[dict[str, Any]]:
     return [apk.model_dump() for apk in apks]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_bundles(package_name: str) -> list[dict[str, Any]]:
     """List the Android App Bundles currently uploaded for an app.
 
@@ -3666,7 +3706,7 @@ def list_bundles(package_name: str) -> list[dict[str, Any]]:
     return [bundle.model_dump() for bundle in bundles]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def upload_apk(package_name: str, apk_path: str, commit: bool = True) -> dict[str, Any]:
     """Upload an APK to a new edit, committing it unless commit=False.
 
@@ -3691,7 +3731,7 @@ def upload_apk(package_name: str, apk_path: str, commit: bool = True) -> dict[st
     return _upload_result(apk.model_dump(), commit=commit)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def upload_bundle(package_name: str, bundle_path: str, commit: bool = True) -> dict[str, Any]:
     """Upload an Android App Bundle (.aab) to a new edit, committing it unless commit=False.
 
@@ -3717,7 +3757,7 @@ def upload_bundle(package_name: str, bundle_path: str, commit: bool = True) -> d
     return _upload_result(bundle.model_dump(), commit=commit)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def upload_deobfuscation_file(
     package_name: str,
     version_code: int,
@@ -3750,7 +3790,7 @@ def upload_deobfuscation_file(
     return deobfuscation_file.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def upload_expansion_file(
     package_name: str,
     version_code: int,
@@ -3788,7 +3828,7 @@ def upload_expansion_file(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def list_images(package_name: str, language: str, image_type: str) -> list[dict[str, Any]]:
     """List the store-listing images for a language and image type.
 
@@ -3808,7 +3848,7 @@ def list_images(package_name: str, language: str, image_type: str) -> list[dict[
     return [image.model_dump() for image in images]
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def upload_image(
     package_name: str, language: str, image_type: str, image_path: str
 ) -> dict[str, Any]:
@@ -3840,7 +3880,7 @@ def upload_image(
     return image.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_image(
     package_name: str, language: str, image_type: str, image_id: str
 ) -> dict[str, Any]:
@@ -3872,7 +3912,7 @@ def delete_image(
     return result.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def delete_all_images(package_name: str, language: str, image_type: str) -> dict[str, Any]:
     """Delete all store-listing images for a language and image type; commit the edit.
 
@@ -3905,7 +3945,7 @@ def delete_all_images(package_name: str, language: str, image_type: str) -> dict
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def validate_package_name(package_name: str) -> dict[str, Any]:
     """Validate package name format before using it in other operations.
 
@@ -3925,7 +3965,7 @@ def validate_package_name(package_name: str) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def validate_track(track: str) -> dict[str, Any]:
     """Validate track name before using it in deployment operations.
 
@@ -3945,7 +3985,7 @@ def validate_track(track: str) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def validate_listing_text(
     title: str | None = None,
     short_description: str | None = None,
@@ -3975,7 +4015,7 @@ def validate_listing_text(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def batch_deploy(
     package_name: str,
     file_path: str,
@@ -4005,9 +4045,9 @@ def batch_deploy(
 
     if rollout_percentages:
         for track_name, pct in rollout_percentages.items():
-            if not (0.0 <= pct <= 100.0):
+            if not (0.0 < pct <= 100.0):
                 return {
-                    "error": f"rollout_percentage for track '{track_name}' must be between 0.0 and 100.0"
+                    "error": f"rollout_percentage for track '{track_name}' must be greater than 0.0 and at most 100.0"
                 }
 
     client = get_client_from_context()
@@ -4027,7 +4067,7 @@ def batch_deploy(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def upload_internal_app_sharing_apk(
     package_name: str,
     apk_path: str,
@@ -4054,7 +4094,7 @@ def upload_internal_app_sharing_apk(
     return artifact.model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_WRITE_TOOL)
 def upload_internal_app_sharing_bundle(
     package_name: str,
     bundle_path: str,
@@ -4087,7 +4127,7 @@ def upload_internal_app_sharing_bundle(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def bigquery_list_datasets(project_id: str) -> dict[str, Any]:
     """List BigQuery datasets visible to the configured service account in a GCP project.
 
@@ -4102,7 +4142,7 @@ def bigquery_list_datasets(project_id: str) -> dict[str, Any]:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def bigquery_list_tables(project_id: str, dataset_id: str, max_results: int = 50) -> dict[str, Any]:
     """List tables in a BigQuery dataset (e.g. Firebase Analytics' daily events_YYYYMMDD tables).
 
@@ -4121,7 +4161,7 @@ def bigquery_list_tables(project_id: str, dataset_id: str, max_results: int = 50
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def bigquery_get_table_schema(project_id: str, dataset_id: str, table_id: str) -> dict[str, Any]:
     """Get a BigQuery table's schema (field names/types) plus row/byte counts.
 
@@ -4134,7 +4174,7 @@ def bigquery_get_table_schema(project_id: str, dataset_id: str, table_id: str) -
     return client.get_table_schema(project_id, dataset_id, table_id)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def bigquery_execute_query(
     project_id: str,
     query: str,
@@ -4157,6 +4197,14 @@ def bigquery_execute_query(
         max_results: Max rows to return (default 100)
         max_bytes_billed: Cost guardrail in bytes (default 1 GB)
     """
+    cap = _bigquery_max_bytes_cap()
+    if max_bytes_billed <= 0 or max_bytes_billed > cap:
+        return {
+            "error": (
+                f"max_bytes_billed must be between 1 and {cap} bytes "
+                "(operator cap: PLAY_STORE_MCP_BIGQUERY_MAX_BYTES_BILLED)"
+            )
+        }
     client = get_bigquery_client_from_context()
     raw = client.execute_query(project_id, query, max_results, max_bytes_billed)
     fields = [f["name"] for f in raw.get("schema", {}).get("fields", [])]
@@ -4179,7 +4227,7 @@ def bigquery_execute_query(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def analytics_run_report(
     property_id: str,
     dimensions: list[str],
@@ -4211,7 +4259,7 @@ def analytics_run_report(
     return {"propertyId": property_id, "rowCount": raw.get("rowCount"), "rows": rows}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_TOOL)
 def analytics_run_realtime_report(
     property_id: str,
     dimensions: list[str],
@@ -4249,6 +4297,28 @@ async def health_check(request: Request) -> JSONResponse:  # noqa: ARG001
     return JSONResponse({"status": "healthy", "service": "play-store-mcp"})
 
 
+def _env_token(name: str) -> str | None:
+    """Read a secret token from the environment, ignoring surrounding whitespace.
+
+    Tokens often come from ``$(cat file)`` or k8s secrets with a trailing newline;
+    an unstripped token could never match and the server would give no hint why.
+    """
+    value = (os.environ.get(name) or "").strip()
+    return value or None
+
+
+def _bearer_matches(header_value: bytes, token: str) -> bool:
+    """Constant-time check of an ``Authorization`` header against ``token``.
+
+    The scheme is case-insensitive (RFC 7235) and surrounding whitespace is
+    ignored. Works on bytes so non-ASCII header bytes give a clean mismatch.
+    """
+    scheme, _, value = header_value.strip().partition(b" ")
+    if scheme.lower() != b"bearer":
+        return False
+    return secrets.compare_digest(value.strip(), token.encode("utf-8"))
+
+
 def _authorize_credentials_request(request: Request) -> JSONResponse | None:
     """Authorize a POST to the /credentials management endpoint.
 
@@ -4258,21 +4328,23 @@ def _authorize_credentials_request(request: Request) -> JSONResponse | None:
     where ``request.client.host`` is the proxy address and cannot be trusted as
     a "localhost" signal.
 
-    If no admin token is configured, the endpoint accepts loopback (localhost)
-    peers only — the historical behavior.
+    If no admin token is configured but PLAY_STORE_MCP_AUTH_TOKEN is, that token
+    is required instead: a loopback peer is NOT proof of a local caller when the
+    server sits behind a same-host tunnel or proxy (cloudflared, ngrok, ssh -R).
+
+    Only when neither token is configured does the endpoint fall back to accepting
+    loopback (localhost) peers only — the historical behavior.
 
     Returns an error ``JSONResponse`` if the request is not authorized, else None.
     """
-    admin_token = os.environ.get("PLAY_STORE_MCP_ADMIN_TOKEN")
-    if admin_token:
-        provided = request.headers.get("authorization", "")
-        expected = f"Bearer {admin_token}"
-        # Compare as bytes: secrets.compare_digest raises TypeError on non-ASCII
-        # str operands, and Starlette decodes header values as latin-1, so a
-        # crafted header could otherwise turn a 401 into an uncaught 500.
-        if not (
-            provided and secrets.compare_digest(provided.encode("utf-8"), expected.encode("utf-8"))
-        ):
+    required_token = _env_token("PLAY_STORE_MCP_ADMIN_TOKEN") or _env_token(
+        "PLAY_STORE_MCP_AUTH_TOKEN"
+    )
+    if required_token:
+        # Compare as bytes: Starlette decodes header values as latin-1, so encode
+        # back to the raw bytes; a crafted header gives a clean 401, never a 500.
+        provided = request.headers.get("authorization", "").encode("latin-1", errors="replace")
+        if not _bearer_matches(provided, required_token):
             return JSONResponse(
                 {"success": False, "error": "Missing or invalid admin token"},
                 status_code=401,
@@ -4349,13 +4421,38 @@ def _parse_inline_credentials_payload(
     )
 
 
+def _verify_credentials_live(client: PlayStoreClient) -> None:
+    """Prove the key works by minting an access token before it replaces the shared clients.
+
+    ``_get_service()`` only runs ``build()`` against the static discovery document —
+    no network call — so a well-formed but revoked / disabled / wrong-project key
+    would otherwise be accepted and swapped in over working credentials.
+    Raises PlayStoreClientError when Google rejects the key.
+    """
+    credentials = client._credentials
+    if credentials is None:  # _get_service was stubbed (unit tests); nothing to refresh
+        return
+    import google.auth.exceptions  # noqa: PLC0415 - local: only needed on this admin path
+    import google.auth.transport.requests  # noqa: PLC0415
+
+    try:
+        credentials.refresh(google.auth.transport.requests.Request())
+    except google.auth.exceptions.GoogleAuthError as e:
+        raise PlayStoreClientError(f"Google rejected the credentials: {type(e).__name__}") from e
+
+
 def _parse_credentials_request_body(
-    body: dict[str, Any],
+    body: Any,
 ) -> tuple[PlayStoreClient | None, JSONResponse | None]:
     """Parse a /credentials POST body into a new ``PlayStoreClient``.
 
     Returns (client, None) on success, or (None, error_response) on failure.
     """
+    if not isinstance(body, dict):
+        return None, JSONResponse(
+            {"success": False, "error": "Request body must be a JSON object"},
+            status_code=400,
+        )
     credentials = body.get("credentials")
     credentials_base64 = body.get("credentials_base64")
 
@@ -4414,6 +4511,7 @@ async def update_credentials(request: Request) -> JSONResponse:
         # blocking network I/O, so run it off the event loop.
         try:
             await asyncio.to_thread(new_client._get_service)
+            await asyncio.to_thread(_verify_credentials_live, new_client)
         except PlayStoreClientError:
             logger.warning("Credential validation failed for /credentials request")
             return JSONResponse(
@@ -4472,10 +4570,84 @@ def _is_wildcard_bind(host: str) -> bool:
         return False
 
 
-def _run_http(transport: str, host: str, port: int) -> None:
-    """Serve a network transport with DNS-rebinding (Host-header) protection.
+def _is_loopback_bind(host: str) -> bool:
+    """Return True if host only binds a loopback interface (reachable from this machine only)."""
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        # Unset, wildcard-like or arbitrary hostnames may resolve to a routable
+        # interface; treat them as network-exposed.
+        return False
 
-    fastmcp v3 has no constructor-level transport security; we attach Starlette
+
+def _allow_unauthenticated() -> bool:
+    """Return True when the operator explicitly opted out of HTTP bearer-token auth."""
+    return os.environ.get("PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+# Paths served without the MCP bearer token: /health for load balancers and the
+# Docker HEALTHCHECK, and /credentials, which enforces its own authorization
+# (PLAY_STORE_MCP_ADMIN_TOKEN in the same Authorization header, else loopback-only).
+_AUTH_EXEMPT_PATHS = frozenset({"/health", "/credentials"})
+
+
+class _BearerTokenAuthMiddleware:
+    """Pure-ASGI middleware requiring ``Authorization: Bearer <token>`` on HTTP requests.
+
+    Pure ASGI (not BaseHTTPMiddleware) so streaming SSE responses are not buffered.
+    The comparison is constant-time and done on bytes, mirroring
+    _authorize_credentials_request.
+    """
+
+    def __init__(self, app: Any, token: str) -> None:
+        self.app = app
+        self._token = token
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        kind = scope["type"]
+        if kind not in ("http", "websocket") or (
+            kind == "http" and scope.get("path", "") in _AUTH_EXEMPT_PATHS
+        ):
+            # lifespan (and any future non-request scope) passes through.
+            await self.app(scope, receive, send)
+            return
+        provided = b""
+        for name, value in scope.get("headers", []):
+            if name.lower() == b"authorization":
+                provided = value
+                break
+        if provided and _bearer_matches(provided, self._token):
+            await self.app(scope, receive, send)
+            return
+        if kind == "websocket":
+            # Fail closed: reject the handshake (policy violation) without a token.
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        response = JSONResponse(
+            {"success": False, "error": "Missing or invalid bearer token"},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        await response(scope, receive, send)
+
+
+def _run_http(transport: str, host: str, port: int) -> None:
+    """Serve a network transport with bearer-token auth and DNS-rebinding protection.
+
+    If PLAY_STORE_MCP_AUTH_TOKEN is set, every HTTP request (except /health and
+    /credentials, see _AUTH_EXEMPT_PATHS) must carry ``Authorization: Bearer
+    <token>``. Binding a non-loopback address without a token refuses to start
+    unless PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED is set, since every tool
+    (refund_order, deploy_app, ...) runs with the server's service account.
+
+    fastmcp has no constructor-level transport security; we attach Starlette
     TrustedHostMiddleware (which is exactly Host-header validation) unless
     PLAY_STORE_MCP_DISABLE_DNS_REBINDING is set.
 
@@ -4493,13 +4665,42 @@ def _run_http(transport: str, host: str, port: int) -> None:
             "downloads are written on a network-exposed deployment.",
             transport=transport,
         )
-    admin_token = os.environ.get("PLAY_STORE_MCP_ADMIN_TOKEN")
+    admin_token = _env_token("PLAY_STORE_MCP_ADMIN_TOKEN")
     if admin_token and len(admin_token) < _MIN_ADMIN_TOKEN_LENGTH:
         logger.warning(
             "PLAY_STORE_MCP_ADMIN_TOKEN is shorter than recommended; a weak token makes "
             "the /credentials endpoint's Bearer-token check easier to brute-force. Use a "
             "long random value, e.g. `openssl rand -hex 32`.",
             token_length=len(admin_token),
+            recommended_minimum=_MIN_ADMIN_TOKEN_LENGTH,
+        )
+    # Marks the process as serving remote callers: uploads then require
+    # PLAY_STORE_MCP_UPLOAD_DIR (see PlayStoreClient._confine_upload_path).
+    os.environ["PLAY_STORE_MCP_HTTP_MODE"] = "1"
+    auth_token = _env_token("PLAY_STORE_MCP_AUTH_TOKEN")
+    if not auth_token and not _is_loopback_bind(host):
+        if not _allow_unauthenticated():
+            message = (
+                f"Refusing to serve {transport} on non-loopback host {host!r} without "
+                "authentication: anyone who can reach the port could call every tool with "
+                "the server's service account. Set PLAY_STORE_MCP_AUTH_TOKEN (e.g. "
+                "`openssl rand -hex 32`) and send 'Authorization: Bearer <token>', or set "
+                "PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED=1 if an authenticating proxy fronts "
+                "this server, or if it holds no server-side credentials and callers supply "
+                "their own via X-Google-Credentials."
+            )
+            logger.error(message, host=host, transport=transport)
+            raise SystemExit(message)
+        logger.warning(
+            "Serving without authentication on a non-loopback host "
+            "(PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED is set)",
+            host=host,
+        )
+    if auth_token and len(auth_token) < _MIN_ADMIN_TOKEN_LENGTH:
+        logger.warning(
+            "PLAY_STORE_MCP_AUTH_TOKEN is shorter than recommended; use a long random "
+            "value, e.g. `openssl rand -hex 32`.",
+            token_length=len(auth_token),
             recommended_minimum=_MIN_ADMIN_TOKEN_LENGTH,
         )
     middleware: list[Middleware] = []
@@ -4517,6 +4718,8 @@ def _run_http(transport: str, host: str, port: int) -> None:
         else:
             allowed.append(host)
         middleware.append(Middleware(TrustedHostMiddleware, allowed_hosts=allowed))
+    if auth_token:
+        middleware.append(Middleware(_BearerTokenAuthMiddleware, token=auth_token))
     # transport is constrained to the non-stdio argparse choices ("sse" /
     # "streamable-http"), both valid http_app transports; argparse types it as str.
     app = mcp.http_app(transport=transport, middleware=middleware)  # type: ignore[arg-type]
@@ -4554,10 +4757,33 @@ def main(argv: list[str] | None = None) -> None:
         default=_env_read_only(),
         help="Disable all write operations (or set PLAY_STORE_MCP_READ_ONLY=1)",
     )
+    parser.add_argument(
+        "--auth-token",
+        default=None,
+        help=(
+            "Require 'Authorization: Bearer <token>' on network transports "
+            "(prefer the PLAY_STORE_MCP_AUTH_TOKEN env var; CLI args are visible in ps)"
+        ),
+    )
+    parser.add_argument(
+        "--allow-unauthenticated",
+        action="store_true",
+        default=False,
+        help=(
+            "Allow a non-loopback bind without an auth token, e.g. behind an "
+            "authenticating proxy (or set PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED=1)"
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.credentials:
         os.environ["GOOGLE_PLAY_STORE_CREDENTIALS"] = args.credentials
+    if args.auth_token is not None:
+        if not args.auth_token.strip():
+            parser.error("--auth-token was given an empty value (auth would silently stay off)")
+        os.environ["PLAY_STORE_MCP_AUTH_TOKEN"] = args.auth_token.strip()
+    if args.allow_unauthenticated:
+        os.environ["PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED"] = "1"
 
     set_read_only(args.read_only)
 

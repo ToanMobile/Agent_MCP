@@ -39,6 +39,14 @@ structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.
 
 
 @pytest.fixture(autouse=True)
+def _no_http_mode_leak(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_run_http() writes PLAY_STORE_MCP_HTTP_MODE into os.environ; start every test
+    without it (monkeypatch restores the absent state afterwards)."""
+    monkeypatch.delenv("PLAY_STORE_MCP_HTTP_MODE", raising=False)
+    monkeypatch.delenv("PLAY_STORE_MCP_UPLOAD_DIR", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_backoff_sleep() -> Generator[None, None, None]:
     """Neutralize retry backoff sleeps so retry paths run instantly in tests."""
     with patch("play_store_mcp.client.time.sleep"):

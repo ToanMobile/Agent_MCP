@@ -519,6 +519,14 @@ WRITE_TOOLS = [
         "delete_grant",
         {"developer_id": "dev123", "email": "a@b.com", "package_name": "com.example.app"},
     ),
+    (
+        "close_crashlytics_issue",
+        {
+            "project_id": "my-project",
+            "app_id": "1:1234567890:android:abcdef",
+            "issue_id": "c07d6e046632025ecd72f628ee1bf2ce",
+        },
+    ),
 ]
 
 
@@ -581,3 +589,34 @@ def test_main_not_read_only_by_default(monkeypatch):
     server.main([])
 
     assert server.READ_ONLY is False
+
+
+async def test_every_tool_declares_read_or_write_annotations() -> None:
+    """Clients (and CodeMode's single `execute`) need per-tool hints: the 74 tools that
+    honour read-only mode must say destructive, every other tool must say read-only."""
+    import ast
+    import inspect
+
+    from play_store_mcp import server
+
+    src = inspect.getsource(server)
+    writes = {
+        node.name
+        for node in ast.parse(src).body
+        if isinstance(node, ast.FunctionDef)
+        and "_read_only_block(" in ast.get_source_segment(src, node)
+        and any("mcp.tool" in ast.unparse(d) for d in node.decorator_list)
+    }
+    assert writes == {t[0] if isinstance(t, tuple) else t for t in WRITE_TOOLS}
+    for node in ast.parse(src).body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        decos = [ast.unparse(d) for d in node.decorator_list if "mcp.tool" in ast.unparse(d)]
+        if not decos:
+            continue
+        expected = "_WRITE_TOOL" if node.name in writes else "_READ_TOOL"
+        assert decos == [f"mcp.tool(annotations={expected})"], (node.name, decos)
+    assert (
+        server._WRITE_TOOL.destructive_hint is True and server._WRITE_TOOL.read_only_hint is False
+    )
+    assert server._READ_TOOL.read_only_hint is True

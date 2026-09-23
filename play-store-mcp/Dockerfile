@@ -39,6 +39,12 @@ WORKDIR /app
 # Copy virtual environment from builder (already at /app/.venv)
 COPY --from=builder /app/.venv /app/.venv
 
+# MCP_HOST=0.0.0.0 is needed to be reachable from outside the container, so a
+# network transport (MCP_TRANSPORT=streamable-http / sse) refuses to start
+# unless PLAY_STORE_MCP_AUTH_TOKEN is provided, e.g.
+#   docker run -e MCP_TRANSPORT=streamable-http \
+#     -e PLAY_STORE_MCP_AUTH_TOKEN="$(openssl rand -hex 32)" -p 8000:8000 ...
+# (or PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED=1 behind an authenticating proxy).
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

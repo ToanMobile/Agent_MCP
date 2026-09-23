@@ -819,19 +819,22 @@ class PlayStoreClient:
             is_bundle = file_path.lower().endswith(".aab")
             content_type = _MIME_TYPE_AAB if is_bundle else _MIME_TYPE_APK
 
+            file_path = self._confine_upload_path(file_path)
             media = MediaFileUpload(file_path, mimetype=content_type, resumable=True)
 
             if is_bundle:
                 upload_response = self._execute(
                     service.edits()
                     .bundles()
-                    .upload(packageName=package_name, editId=edit_id, media_body=media)
+                    .upload(packageName=package_name, editId=edit_id, media_body=media),
+                    upload=True,
                 )
             else:
                 upload_response = self._execute(
                     service.edits()
                     .apks()
-                    .upload(packageName=package_name, editId=edit_id, media_body=media)
+                    .upload(packageName=package_name, editId=edit_id, media_body=media),
+                    upload=True,
                 )
 
             uploaded_version_code = int(upload_response.get("versionCode", 0))
@@ -4550,6 +4553,7 @@ class PlayStoreClient:
         edit_id = self._create_edit(package_name)
 
         try:
+            apk_path = self._confine_upload_path(apk_path)
             media = MediaFileUpload(
                 apk_path,
                 mimetype=_MIME_TYPE_APK,
@@ -4603,6 +4607,7 @@ class PlayStoreClient:
         edit_id = self._create_edit(package_name)
 
         try:
+            bundle_path = self._confine_upload_path(bundle_path)
             media = MediaFileUpload(
                 bundle_path,
                 mimetype=_MIME_TYPE_AAB,
@@ -4676,6 +4681,7 @@ class PlayStoreClient:
         edit_id = self._create_edit(package_name)
 
         try:
+            file_path = self._confine_upload_path(file_path)
             media = MediaFileUpload(file_path, mimetype=_MIME_TYPE_AAB, resumable=True)
             data = self._execute(
                 service.edits()
@@ -4735,6 +4741,7 @@ class PlayStoreClient:
         edit_id = self._create_edit(package_name)
 
         try:
+            file_path = self._confine_upload_path(file_path)
             media = MediaFileUpload(file_path, mimetype=_MIME_TYPE_AAB, resumable=True)
             data = self._execute(
                 service.edits()
@@ -4865,6 +4872,7 @@ class PlayStoreClient:
 
         try:
             mimetype = "image/png" if image_path.lower().endswith(".png") else "image/jpeg"
+            image_path = self._confine_upload_path(image_path)
             media = MediaFileUpload(image_path, mimetype=mimetype, resumable=True)
             data = self._execute(
                 service.edits()
@@ -4875,7 +4883,8 @@ class PlayStoreClient:
                     language=language,
                     imageType=image_type,
                     media_body=media,
-                )
+                ),
+                upload=True,
             )
             self._commit_edit(package_name, edit_id)
             image = data.get("image") or {}
@@ -5839,6 +5848,36 @@ class PlayStoreClient:
             self._logger.exception("Failed to list generated APKs", error=str(e))
             raise PlayStoreClientError(f"Failed to list generated APKs: {e.reason}") from e
 
+    def _confine_upload_path(self, source_path: str) -> str:
+        """Validate a local file the server is asked to READ and send to Google.
+
+        With ``PLAY_STORE_MCP_UPLOAD_DIR`` set, the resolved path must stay inside
+        it. Without it, uploads are allowed anywhere only for local (stdio) use:
+        over an HTTP transport a remote caller could otherwise make the server
+        read and exfiltrate any file it can access (e.g. as an "expansion file"),
+        so HTTP mode requires the upload directory to be configured.
+        """
+        base = os.environ.get("PLAY_STORE_MCP_UPLOAD_DIR", "").strip()
+        src_real = os.path.realpath(source_path)
+        if not base:
+            if os.environ.get("PLAY_STORE_MCP_HTTP_MODE") == "1":
+                raise PlayStoreClientError(
+                    "Uploads over an HTTP transport require PLAY_STORE_MCP_UPLOAD_DIR "
+                    "(the directory the server may read upload files from)"
+                )
+            return source_path
+        base_real = os.path.realpath(base)
+        try:
+            within = os.path.commonpath([base_real, src_real]) == base_real
+        except ValueError:
+            within = False
+        if not within:
+            self._logger.warning(
+                "Blocked upload outside the allowed directory", allowed_dir=base_real
+            )
+            raise PlayStoreClientError("Upload file must be inside PLAY_STORE_MCP_UPLOAD_DIR")
+        return src_real
+
     def _confine_download_path(self, destination_path: str) -> str:
         """Validate and canonicalize a download destination.
 
@@ -6204,6 +6243,7 @@ class PlayStoreClient:
         service = self._get_service()
 
         try:
+            apk_path = self._confine_upload_path(apk_path)
             media = MediaFileUpload(
                 apk_path,
                 mimetype=_MIME_TYPE_APK,
@@ -6250,6 +6290,7 @@ class PlayStoreClient:
         service = self._get_service()
 
         try:
+            bundle_path = self._confine_upload_path(bundle_path)
             media = MediaFileUpload(
                 bundle_path,
                 mimetype=_MIME_TYPE_AAB,

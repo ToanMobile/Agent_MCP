@@ -16,6 +16,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > see three meta-tools (`search`/`get_schema`/`execute`) unless `CODE_MODE=0`
 > is set. See Changed below.
 
+### Security (fork)
+- HTTP transports (`sse`/`streamable-http`) support bearer-token auth via
+  `PLAY_STORE_MCP_AUTH_TOKEN` / `--auth-token` (constant-time check on every
+  request except `/health` and `/credentials`). A non-loopback bind without a
+  token now refuses to start unless `PLAY_STORE_MCP_ALLOW_UNAUTHENTICATED=1` /
+  `--allow-unauthenticated` is set.
+- `apk_manager.sh` validates every package name before it reaches `adb shell`
+  (XAPK manifest / OBB-derived names could inject device shell commands).
+- `/credentials` requires `PLAY_STORE_MCP_ADMIN_TOKEN`, or else
+  `PLAY_STORE_MCP_AUTH_TOKEN`, whenever either is set — a loopback peer is no
+  longer trusted alone (same-host tunnels such as cloudflared/ngrok/ssh -R arrive
+  as 127.0.0.1). The key is now proven live (an access token is minted) before it
+  replaces the shared clients; a non-object body is a 400, not a 500.
+- Bearer scheme is case-insensitive, tokens are whitespace-stripped (env and
+  CLI), `--auth-token ""` is an error, and websocket scopes without a token are
+  closed (1008) instead of passed through.
+- Credential headers must decode to a non-empty JSON object: a JSON string was
+  treated as a server-side key *file path*, and `{}`/`0`/`[]` silently fell back
+  to the server's ambient credentials.
+- Uploads over an HTTP transport read files only from `PLAY_STORE_MCP_UPLOAD_DIR`
+  (a remote caller could otherwise make the server read and send any local file).
+- `bigquery_execute_query`'s `max_bytes_billed` is capped by
+  `PLAY_STORE_MCP_BIGQUERY_MAX_BYTES_BILLED` (default 10 GB).
+- `apk_manager.sh` refuses XAPKs that contain symlinks (`adb push` followed them
+  and copied host files to `/sdcard`), and the OBB package fallback works with
+  BSD sed. `ADB`/`TARGET_IP`/`TARGET_PORT` can be overridden from the environment.
+- Every tool declares MCP `ToolAnnotations`: the 74 write tools
+  `destructiveHint`, the rest `readOnlyHint` (tested against the read-only
+  inventory).
+
+### Fixed (fork)
+- `deploy_app` and `upload_image` use the long upload timeout (was 120 s).
+- `rollout_percentage` must be > 0 (0 produced an `inProgress` release with
+  `userFraction` 0, which Play rejects).
+- A malformed credentials file is a `PlayStoreClientError` (logged at startup)
+  instead of an uncaught exception.
+- Docs: 8 undocumented tools added to `docs/tools-reference.md`; README env
+  table de-duplicated (`CODE_MODE` default is on).
+
 ### Changed (fork)
 - Synced 42 commits from upstream `lusky3/play-store-mcp` (through #161) on
   2026-09-14. Merge notes: the fork's shared credential loader

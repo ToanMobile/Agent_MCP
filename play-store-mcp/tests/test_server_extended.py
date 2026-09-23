@@ -817,6 +817,7 @@ def test_run_http_skips_middleware_when_disabled(
 
     monkeypatch.setenv("PLAY_STORE_MCP_DISABLE_DNS_REBINDING", "1")
     monkeypatch.setenv("PLAY_STORE_MCP_DOWNLOAD_DIR", str(tmp_path))
+    monkeypatch.delenv("PLAY_STORE_MCP_AUTH_TOKEN", raising=False)
     captured: dict[str, Any] = {}
 
     def fake_http_app(**kwargs: Any) -> str:
@@ -842,6 +843,8 @@ def test_run_http_wildcard_bind_stays_localhost_only(
     from play_store_mcp import server
 
     monkeypatch.delenv("PLAY_STORE_MCP_DISABLE_DNS_REBINDING", raising=False)
+    # A non-loopback bind now requires an auth token or the explicit opt-out.
+    monkeypatch.setenv("PLAY_STORE_MCP_AUTH_TOKEN", "t" * 32)
     monkeypatch.setenv("PLAY_STORE_MCP_DOWNLOAD_DIR", str(tmp_path))
     captured: dict[str, Any] = {}
 
@@ -1116,7 +1119,7 @@ class TestToolValidationErrors:
         """deploy_app rejects an out-of-range rollout percentage."""
         result = deploy_app("com.example.app", "internal", tmp_apk, rollout_percentage=150.0)
 
-        assert result["error"] == "rollout_percentage must be between 0.0 and 100.0"
+        assert result["error"] == "rollout_percentage must be greater than 0.0 and at most 100.0"
 
     def test_deploy_app_multilang_bad_extension(self, tmp_path: Any) -> None:
         """deploy_app_multilang rejects a non-apk/aab file."""
@@ -1133,19 +1136,19 @@ class TestToolValidationErrors:
             "com.example.app", "internal", tmp_apk, {"en-US": "notes"}, rollout_percentage=-1.0
         )
 
-        assert result["error"] == "rollout_percentage must be between 0.0 and 100.0"
+        assert result["error"] == "rollout_percentage must be greater than 0.0 and at most 100.0"
 
     def test_promote_release_rollout_out_of_range(self) -> None:
         """promote_release rejects an out-of-range rollout percentage."""
         result = promote_release("com.example.app", "beta", "production", 100, 200.0)
 
-        assert result["error"] == "rollout_percentage must be between 0.0 and 100.0"
+        assert result["error"] == "rollout_percentage must be greater than 0.0 and at most 100.0"
 
     def test_update_rollout_out_of_range(self) -> None:
         """update_rollout rejects an out-of-range rollout percentage."""
         result = update_rollout("com.example.app", "production", 100, 101.0)
 
-        assert result["error"] == "rollout_percentage must be between 0.0 and 100.0"
+        assert result["error"] == "rollout_percentage must be greater than 0.0 and at most 100.0"
 
     def test_batch_deploy_bad_extension(self, tmp_path: Any) -> None:
         """batch_deploy rejects a non-apk/aab file."""
@@ -1166,7 +1169,7 @@ class TestToolValidationErrors:
         )
 
         assert "alpha" in result["error"]
-        assert "between 0.0 and 100.0" in result["error"]
+        assert "greater than 0.0 and at most 100.0" in result["error"]
 
     def test_batch_deploy_per_track_rollout_all_valid(
         self, mock_client: MagicMock, tmp_apk: str
@@ -1533,3 +1536,35 @@ class TestDownloadPathConfinement:
         client = PlayStoreClient()
         with pytest.raises(PlayStoreClientError, match="PLAY_STORE_MCP_DOWNLOAD_DIR"):
             client._confine_download_path("/outside/app.apk")
+
+
+def test_rollout_zero_rejected_at_tool_layer() -> None:
+    from play_store_mcp.server import _validate_rollout
+
+    assert _validate_rollout(0.0) is not None
+    assert _validate_rollout(0.01) is None
+    assert _validate_rollout(100.0) is None
+
+
+def test_bigquery_max_bytes_billed_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    from play_store_mcp import server
+
+    monkeypatch.setenv("PLAY_STORE_MCP_BIGQUERY_MAX_BYTES_BILLED", "2000")
+    called = []
+    monkeypatch.setattr(server, "get_bigquery_client_from_context", lambda: called.append(1))
+    fn = getattr(server.bigquery_execute_query, "fn", server.bigquery_execute_query)
+    result = fn("proj", "SELECT 1", 10, 10_000_000_000_000)
+    assert "error" in result and "2000" in result["error"]
+    assert not called, "query must not reach BigQuery above the operator cap"
+
+
+def test_credentials_file_errors_are_wrapped(tmp_path: Any) -> None:
+    from play_store_mcp.credentials import load_service_account_credentials
+    from play_store_mcp.errors import PlayStoreClientError
+
+    bad = tmp_path / "key.json"
+    bad.write_text("{not json")
+    with pytest.raises(PlayStoreClientError, match="Cannot read"):
+        load_service_account_credentials(
+            credentials_json=None, credentials_path=str(bad), scopes=[], api_label="Test"
+        )
