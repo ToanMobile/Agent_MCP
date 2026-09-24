@@ -143,6 +143,22 @@ test('prompt PHAN BIEN KE HOACH: cam sua code, mang du luat + dinh nghia hoan th
   cleanup(dir);
 });
 
+test('prompt mang file luat luon nap cua DevKit (.agents/context) ke ca khi project tu khai rulesFiles', () => {
+  const dir = tmpProject({ rulesFiles: ['AGENTS.md'] });
+  writeFile(path.join(dir, 'AGENTS.md'), '# luat');
+  writeFile(path.join(dir, '.agents/context/essentials.md'), '# essentials');
+  writeFile(path.join(dir, '.agents/context/rules-index.md'), '# index');
+  const cfg = loadConfig(dir);
+  const task = createTask(cfg, sampleTaskArgs());
+  writeFile(contractPaths(cfg, task).plan, '# Ke hoach');
+  for (const prompt of [buildPlanCritiquePrompt(cfg, task), buildAuditPrompt(cfg, task)]) {
+    assert.ok(prompt.includes(path.join(dir, '.agents/context/essentials.md')), 'phai co essentials cua DevKit');
+    assert.ok(prompt.includes(path.join(dir, '.agents/context/rules-index.md')), 'phai co muc luc luat du an');
+    assert.ok(!prompt.includes('profile-rules.md'), 'file khong ton tai thi khong nhac');
+  }
+  cleanup(dir);
+});
+
 test('prompt PHAN BIEN khong nhac file luat khong ton tai', () => {
   const dir = tmpProject({ rulesFiles: ['KHONG-CO.md'] });
   const cfg = loadConfig(dir);

@@ -237,9 +237,13 @@ export function projectStateKey(root) {
   return `${slug(path.basename(real), 32)}-${createHash('sha256').update(real).digest('hex').slice(0, 16)}`;
 }
 
+// AGENTS.md chi @-import cac file nay; agent doc AGENTS.md nhu van ban thuong co the bo qua import,
+// nen luon dua duong dan truc tiep, ke ca khi project tu khai rulesFiles (mang bi thay the han).
+const DEVKIT_CONTEXT = ['.agents/context/essentials.md', '.agents/context/profile-rules.md', '.agents/context/rules-index.md'];
+
 /** Cac file luat that su ton tai (de nhet vao prompt). */
 export function existingRulesFiles(cfg) {
-  return cfg.rulesFiles
-    .map((r) => path.resolve(cfg.projectRoot, r))
+  return [...new Set([...cfg.rulesFiles, ...DEVKIT_CONTEXT]
+    .map((r) => path.resolve(cfg.projectRoot, r)))]
     .filter((p) => fs.existsSync(p));
 }
