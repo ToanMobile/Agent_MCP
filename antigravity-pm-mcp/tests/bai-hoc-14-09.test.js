@@ -245,13 +245,32 @@ test('#6/DX1 file rac o goc repo: mac dinh BI CHAN (de xuat PM GeelyEx2), strayF
 
 test('DX3a pm_capture_proof: sourceFile THANG defaultProvider (T0024: tool tung chay adb vao xe du da truyen anh)', async () => {
   const { captureProof } = await import('../src/proof.js');
-  const dir = tmpProject({ proof: { defaultProvider: 'xe', providers: { xe: { type: 'adb', serial: 'khong-ton-tai:5555' } } } });
+  const dir = tmpProject({});
+  const adb = writeFile(path.join(dir, 'fake-adb.sh'), `#!/bin/sh
+echo "$@" >> "${dir}/calls"
+if [ "$1" = "devices" ] || [ "$1" = "connect" ]; then
+  echo "List of devices attached"
+  exit 0
+fi
+echo "khong screencap" >&2
+exit 1
+`);
+  fs.chmodSync(adb, 0o755);
+  writeFile(path.join(dir, '.antigravity-pm.json'), JSON.stringify({
+    proof: { defaultProvider: 'xe', providers: { xe: { type: 'adb', serial: 'khong-ton-tai:5555', adb, connectTimeoutMs: 1000 } } },
+  }));
   const cfg = loadConfig(dir);
   const src = writeFile(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'agpm-src-')), 'a.png'), PNG_1PX);
   const shot = await captureProof(cfg, { proofDir: path.join(dir, 'proof'), label: 'anh', sourceFile: src });
   assert.equal(shot.provider, 'file');
   // Truyen ro provider thi provider do van thang (khong doi hanh vi cu).
-  await assert.rejects(captureProof(cfg, { proofDir: path.join(dir, 'proof'), label: 'anh', sourceFile: src, providerName: 'xe' }), /adb|that bai|exit/i);
+  // Serial khong online va khong co avd/web: tu choi, khong screencap vao dia chi chet.
+  await assert.rejects(
+    captureProof(cfg, { proofDir: path.join(dir, 'proof'), label: 'anh', sourceFile: src, providerName: 'xe' }),
+    /Khong co be mat|khong online/,
+  );
+  const calls = fs.readFileSync(path.join(dir, 'calls'), 'utf8');
+  assert.equal(calls.includes('screencap'), false);
   cleanup(dir);
 });
 

@@ -71,6 +71,80 @@ test('chua khai provider nao va khong co sourceFile => huong dan cach khai', asy
   cleanup(dir);
 });
 
+test('adb: serial offline thi mo AVD, khong screencap vao IP chet', async () => {
+  const dir = tmpProject({});
+  const state = path.join(dir, 'state');
+  fs.mkdirSync(state);
+  writeFile(path.join(state, 'shot.png'), PNG_1PX);
+  const adb = writeFile(path.join(dir, 'fake-adb.sh'), `#!/bin/sh
+echo "$@" >> "${dir}/calls"
+if [ "$1" = "devices" ]; then
+  echo "List of devices attached"
+  if [ -f "${state}/booted" ]; then echo "emulator-5554 device"; fi
+  exit 0
+fi
+if [ "$1" = "connect" ]; then exit 0; fi
+if [ "$1" = "-s" ] && [ "$3" = "shell" ]; then echo 1; exit 0; fi
+if [ "$1" = "-s" ] && [ "$3" = "exec-out" ]; then cat "${state}/shot.png"; exit 0; fi
+echo "lenh la: $*" >&2
+exit 1
+`);
+  const emu = writeFile(path.join(dir, 'fake-emu.sh'), `#!/bin/sh
+echo "$@" >> "${dir}/emu-args"
+touch "${state}/booted"
+exit 0
+`);
+  fs.chmodSync(adb, 0o755);
+  fs.chmodSync(emu, 0o755);
+  writeFile(path.join(dir, '.antigravity-pm.json'), JSON.stringify({
+    proof: {
+      providers: {
+        device: {
+          type: 'adb', serial: '192.168.1.20:5555', avd: 'PhoneConnect', adb, emulator: emu,
+          connectTimeoutMs: 1000, bootTimeoutMs: 5000,
+        },
+      },
+    },
+  }));
+  const cfg = loadConfig(dir);
+  const out = await captureProof(cfg, { proofDir: path.join(dir, 'proof'), label: 'may ao', providerName: 'device' });
+  assert.equal(out.mime, 'image/png');
+  assert.match(out.command, /emulator-5554/);
+  assert.equal(out.command.includes('192.168.1.20:5555'), false);
+  assert.ok(out.warnings.some((w) => w.includes('PhoneConnect')));
+  assert.match(fs.readFileSync(path.join(dir, 'emu-args'), 'utf8'), /PhoneConnect/);
+  cleanup(dir);
+});
+
+test('adb: may khac online va nam denylist thi khong screencap may do', async () => {
+  const dir = tmpProject({});
+  const adb = writeFile(path.join(dir, 'fake-adb.sh'), `#!/bin/sh
+echo "$@" >> "${dir}/calls"
+if [ "$1" = "devices" ]; then
+  echo "List of devices attached"
+  echo "RFCWA1KQT1Y device"
+  exit 0
+fi
+if [ "$1" = "connect" ]; then exit 0; fi
+if [ "$1" = "-s" ]; then echo leaked >&2; exit 1; fi
+exit 1
+`);
+  fs.chmodSync(adb, 0o755);
+  writeFile(path.join(dir, '.adb-denylist'), 'RFCWA1KQT1Y\n');
+  writeFile(path.join(dir, '.antigravity-pm.json'), JSON.stringify({
+    proof: { providers: { device: { type: 'adb', serial: '192.168.1.20:5555', adb, connectTimeoutMs: 1000 } } },
+  }));
+  const cfg = loadConfig(dir);
+  await assert.rejects(
+    () => captureProof(cfg, { proofDir: path.join(dir, 'proof'), label: 'x', providerName: 'device' }),
+    /Khong co be mat/,
+  );
+  const calls = fs.readFileSync(path.join(dir, 'calls'), 'utf8');
+  assert.equal(calls.includes('screencap'), false);
+  assert.equal(calls.includes('-s RFCWA1KQT1Y'), false);
+  cleanup(dir);
+});
+
 test('provider qa-visual: can url hop le', async () => {
   const dir = tmpProject({ proof: { providers: { web: { type: 'qa-visual' } } } });
   const cfg = loadConfig(dir);

@@ -15,7 +15,7 @@ import {
   buildPlanCritiquePrompt, buildImplementMessage, buildReworkMessage, buildAuditPrompt,
   buildProofRequestMessage, buildNudgeMessage, planTemplate, kiemTraKeHoach, buildPlanReviewFixMessage,
 } from './prompt.js';
-import { captureProof, describeProviders } from './proof.js';
+import { captureProof, describeProviders, adbReadinessLines } from './proof.js';
 import { renderReport } from './report.js';
 import {
   mustHaveOf, fileRacGocRepo, cungFile, kiemChongLan, PROOF_KINDS, kiemKhuonPlanReview,
@@ -183,7 +183,12 @@ export const TOOLS = [
       L.push(`Lenh audit: ${cfg.auditCommands.length ? cfg.auditCommands.join(' ; ') : '(chua khai)'}`);
       L.push(`File luat se nhet vao prompt: ${existingRulesFiles(cfg).join(', ') || '(khong thay file nao)'}`);
       const provs = describeProviders(cfg);
-      L.push(`Cach chup anh nghiem thu: ${provs.length ? provs.map((p) => `${p.name}(${p.type})`).join(', ') : '(chua khai — van co the dung sourceFile de nhan anh do agent tu chup)'}`);
+      L.push(`Cach chup anh nghiem thu: ${provs.length ? provs.map((p) => `${p.name}(${p.type}${p.detail ? ` ${p.detail}` : ''})`).join(', ') : '(chua khai — van co the dung sourceFile de nhan anh do agent tu chup)'}`);
+      try {
+        for (const line of await adbReadinessLines(cfg)) L.push(line);
+      } catch (e) {
+        L.push(`adb: khong kiem tra duoc — ${e.message}`);
+      }
       L.push(`So anh toi thieu de nghiem thu: ${cfg.proof.require}`);
       const must = mustHaveOf(cfg);
       L.push(`LUAT BAT BUOC — thay doi phai kem file test: ${must.testChange ? 'CO' : 'tat'}`

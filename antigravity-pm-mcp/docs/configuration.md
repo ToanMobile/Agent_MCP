@@ -100,10 +100,18 @@ LUAT BAT BUOC — thay doi phai kem file test: CO · anh phai chup tu: xe hoac m
 ### `adb` — chụp từ thiết bị Android / đầu xe / máy ảo
 
 ```json
-{ "type": "adb", "serial": "192.168.1.16:5555", "adb": "adb", "timeoutMs": 60000 }
+{ "type": "adb", "serial": "192.168.1.20:5555", "avd": "PhoneConnect", "adb": "adb", "connectTimeoutMs": 5000, "bootTimeoutMs": 180000, "timeoutMs": 60000 }
 ```
 
-Chạy `adb exec-out screencap -p`. `serial` bỏ trống ⇒ thiết bị duy nhất đang nối. Ghi đè tại chỗ gọi: `pm_capture_proof { serial: "emulator-5554" }`.
+Chạy `adb devices` trước, rồi `adb exec-out screencap -p` **chỉ khi** serial đang ở trạng thái `device`.
+
+- Serial dạng `ip:cổng` mà chưa có trong danh sách: `adb connect` tối đa `connectTimeoutMs` (mặc định 5 giây). Hết giờ mà vẫn không `device` thì **không** screencap vào địa chỉ đó.
+- Khai `avd` thì mở emulator đó (`-port` trống đầu tiên từ 5554), đợi `sys.boot_completed=1` trong `bootTimeoutMs` (mặc định 180 giây), rồi chụp serial `emulator-<cổng>`. AVD cùng tên đã chạy thì dùng luôn, không mở thêm.
+- Không có `avd`: chuyển sang provider `whenOffline`, hoặc provider `browser` / `qa-visual` / `playwright` nếu có. Web có `start` thì chạy lệnh đó khi cổng chưa nghe.
+- Serial trong denylist (`.adb-denylist`, `~/.config/universal-agent-devkit/adb-denylist`, `ADB_DENY_SERIALS`) không được chụp, kể cả khi đó là máy duy nhất đang cắm.
+- `serial` bỏ trống và đúng một máy `device` không bị cấm ⇒ dùng máy đó. Nhiều máy ⇒ phải khai serial.
+
+Ghi đè tại chỗ gọi: `pm_capture_proof { serial: "emulator-5554" }`. `pm_doctor` in serial nào đang online và serial offline sẽ mở AVD nào.
 
 ### `macos` — chụp màn hình máy
 

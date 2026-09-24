@@ -54,6 +54,7 @@ Claude Code ──MCP stdio──▶ src/server.js ──▶ src/tools.js ─┬
 | `src/dispatch-guard.js` | Cổng trước khi giao triển khai: chồng lấn task song song, cây chưa commit, file rác. |
 | `src/cite-check.js` | Tự kiểm trích dẫn `file:dòng` (+ `snippet`) trong báo cáo agent: `verified` / `line-off` / `not-found`… Chỉ đọc file. |
 | `src/proof.js` | Chụp/nhận ảnh, kiểm magic byte, thu nhỏ. |
+| `src/proof-target.js` | Chọn bề mặt chụp: `adb devices` trước, serial chết thì AVD / web / launch, bỏ qua denylist. |
 | `src/tools.js` | Ghép tool MCP. Không chứa logic nghiệm thu — chỉ gọi `tasks.js`. |
 | `src/config.js` | Cấu hình hai tầng (chung ở `$HOME` → project). Khoá lạ ⇒ cảnh báo, không nổ. |
 

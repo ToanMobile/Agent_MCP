@@ -9,6 +9,14 @@ phiên bản theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Prompt phản biện kế hoạch và prompt audit luôn liệt kê `.agents/context/essentials.md`, `profile-rules.md`, `rules-index.md` của DevKit (khi file tồn tại), kể cả khi project tự khai `rulesFiles`. `AGENTS.md` chỉ `@`-import các file này; Antigravity đọc `AGENTS.md` như văn bản thường nên có thể bỏ qua import.
+
+### Fixed
+
+- **Ảnh nghiệm thu không còn screencap vào serial adb đã chết.** `pm_capture_proof` đọc `adb devices` trước. Serial `ip:cổng` chỉ được `adb connect` ngắn; không online thì mở `provider.avd`, chuyển provider web, hoặc chạy `provider.launch`. Máy trong denylist không bị lấy làm máy thay thế.
+
 ### Security
 
 - **`task.json` ra khỏi repo** (23/09/2026): lưu ở `~/.antigravity-pm/projects/<tên>-<hash gốc>/tasks/<id>/task.json`
